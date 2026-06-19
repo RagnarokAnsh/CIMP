@@ -10,11 +10,13 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
+import { relativeTime } from '@/lib/format';
 
 export function MyIssuesPage() {
   const hasToken = Boolean(getHandoffToken());
@@ -90,22 +92,18 @@ export function MyIssuesPage() {
                   <TableCell>
                     <Link
                       to={`/reporter/issues/${i.id}`}
-                      className="flex items-center gap-2 font-medium hover:underline"
+                      className="flex items-center gap-2 font-mono text-sm font-medium hover:underline"
                     >
+                      {i.referenceNo}
                       {i.hasUpdates && (
-                        <span
-                          className="h-2 w-2 rounded-full bg-primary"
-                          title="Has updates"
-                          aria-label="Has updates"
-                        />
+                        <Badge className="h-5 px-1.5 text-[10px]">New update</Badge>
                       )}
-                      <span className="font-mono text-sm">{i.referenceNo}</span>
                     </Link>
                   </TableCell>
                   <TableCell><StatusBadge status={i.status} /></TableCell>
                   <TableCell><PriorityBadge priority={i.priority} /></TableCell>
                   <TableCell className="text-right text-sm text-muted-foreground">
-                    {new Date(i.updatedAt).toLocaleDateString()}
+                    {relativeTime(i.updatedAt)}
                   </TableCell>
                 </TableRow>
               ))}

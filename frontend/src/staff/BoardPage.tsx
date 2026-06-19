@@ -6,14 +6,16 @@ import {
   useDraggable, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
-import { GripVertical, Inbox, MoveRight, UserCheck } from 'lucide-react';
+import { Inbox, MoveRight, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type { IssueStatus, Paginated, StaffIssueSummary, StaffMe } from '@/api/types';
 import { BOARD_STATUS_ORDER, STATUS_TRANSITIONS, canTransition } from '@/lib/issue-status';
 import { STATUS_META } from '@/lib/issue-meta';
+import { relativeTime, initials } from '@/lib/format';
 import { PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -341,16 +343,25 @@ function IssueCard({
         dragging ? 'rotate-1 cursor-grabbing shadow-lg' : 'hover:shadow-md',
       )}
     >
-      <div className="flex items-center gap-2">
-        <GripVertical className="size-3.5 text-muted-foreground/50" aria-hidden />
-        <span className="font-mono text-xs font-medium">{issue.referenceNo}</span>
-        <PriorityBadge priority={issue.priority} className="ml-auto" />
+      <div className="flex items-start gap-2">
+        <p className="line-clamp-2 flex-1 text-sm font-medium leading-snug">
+          {issue.descriptionPreview || issue.referenceNo}
+        </p>
         {actions}
       </div>
-      <SlaBadge slaState={issue.slaState} dueAt={issue.dueAt} className="mt-2" />
-      <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span className="truncate">{issue.platform?.key ?? '—'}</span>
-        <span className="truncate text-right">{issue.assignee?.name ?? 'Unassigned'}</span>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {issue.referenceNo}{issue.platform?.key ? ` · ${issue.platform.key}` : ''}
+        </span>
+        <PriorityBadge priority={issue.priority} />
+        <SlaBadge slaState={issue.slaState} dueAt={issue.dueAt} />
+      </div>
+      <div className="mt-2.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Avatar className="size-5"><AvatarFallback className="text-[9px]">{initials(issue.assignee?.name)}</AvatarFallback></Avatar>
+          <span className="truncate">{issue.assignee?.name ?? 'Unassigned'}</span>
+        </span>
+        <span className="shrink-0">{relativeTime(issue.updatedAt)}</span>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
+import { firstLine, relativeTime } from '@/lib/format';
 
 export function ReporterIssueDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,9 +43,16 @@ export function ReporterIssueDetailPage() {
       </Button>
 
       <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center gap-3">
-            <CardTitle className="font-mono">{data.referenceNo}</CardTitle>
+        <CardHeader className="gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="font-mono">{data.referenceNo}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>Raised {relativeTime(data.createdAt)}</span>
+          </div>
+          <CardTitle className="leading-snug text-balance">
+            {firstLine(data.description, 120) || data.referenceNo}
+          </CardTitle>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             <StatusBadge status={data.status} />
             <PriorityBadge priority={data.priority} />
           </div>
@@ -82,8 +90,8 @@ export function ReporterIssueDetailPage() {
                 {data.updates.map((u, idx) => (
                   <li key={idx} className="rounded-md border border-border bg-muted/30 p-3">
                     <p className="whitespace-pre-wrap text-sm">{u.body}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {new Date(u.createdAt).toLocaleString()}
+                    <p className="mt-1 text-xs text-muted-foreground" title={new Date(u.createdAt).toLocaleString()}>
+                      {relativeTime(u.createdAt)}
                     </p>
                   </li>
                 ))}

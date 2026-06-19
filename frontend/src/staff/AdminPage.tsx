@@ -20,9 +20,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
+import { initials } from '@/lib/format';
 
 interface StaffWithRoles {
   id: string;
@@ -258,7 +260,12 @@ function StaffTab() {
               <TableBody>
                 {staff?.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-2.5 font-medium">
+                        <Avatar className="size-7"><AvatarFallback className="text-[11px]">{initials(s.name)}</AvatarFallback></Avatar>
+                        {s.name}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{s.email}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1.5">

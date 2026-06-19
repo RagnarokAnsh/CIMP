@@ -23,17 +23,26 @@ The staff management API, all under `/api/staff` and `/api/admin`:
 - **Authorization** — role + platform scope. `ScopeService` + guards enforce that
   a focal point of Portal A gets `403` on a Portal B issue, lists are scoped, and
   admins/global developers are unscoped. (`src/authz/`)
-- **Issues** — `GET /api/staff/issues` (filters, pagination, scoped), `:id` detail,
-  `PATCH .../status|assignment|priority`. Status follows the state machine
+- **Issues** — `GET /api/staff/issues` (full-text + reference search, plus
+  status/priority/platform/assignee/date filters, sort, pagination, scoped) with
+  computed **SLA** state (`slaState`/`dueAt`, targets in `src/issues/sla.ts`) and a
+  description preview; `:id` detail; `PATCH .../status|assignment|priority`;
+  multi-issue `PATCH /api/staff/issues/bulk`; assignable developers
+  `GET .../:id/assignees`; mentionable members `GET .../:id/members`; scoped
+  platform list `GET /api/staff/platforms`. Status follows the state machine
   (`src/issues/status-machine.ts`); optimistic locking via a `version` column
   (`409` on conflict); CSV at `GET /api/staff/issues/export`.
 - **Comments** — `POST /api/staff/issues/:id/comments` (internal or
-  reporter-visible), `PATCH /api/staff/comments/:id`.
-- **Dashboard** — `GET /api/staff/dashboard` (scoped counts + trend).
+  reporter-visible, optional `mentionStaffIds` to @mention staff),
+  `PATCH /api/staff/comments/:id`.
+- **Dashboard** — `GET /api/staff/dashboard` (scoped counts, 14-day trend, and
+  SLA at-risk/overdue tallies).
 - **Admin** — `GET/POST/PATCH /api/admin/platforms`, secret rotation, staff/role
   management. (`src/admin/`)
-- **Notifications** — event-driven staff email (`src/notifications/`); reporters
-  stay in-app only (OD-02).
+- **Notifications** — event-driven staff email plus an in-app feed
+  (`GET /api/staff/notifications`, `POST /api/staff/notifications/read`) covering
+  new issues, assignments, and @mentions; reporters stay in-app only (OD-02).
+  (`src/notifications/`)
 - **Jira** — one-way push on issue creation (`src/jira/`), resilient/retried.
 - **Audit** — every state-changing action records an `AuditEvent` (`src/audit/`).
 
@@ -56,9 +65,12 @@ These run without a database (boundaries are stubbed).
 
 The web client lives in [`frontend/`](frontend/) — a Vite + React + TypeScript
 SPA using shadcn/ui, TanStack Query/Table, and React Router. It serves both the
-reporter surface (hand-off token) and the staff workspace (OIDC). See
-[`frontend/README.md`](frontend/README.md). In dev it proxies `/api` to this
-backend on `:3000`.
+reporter surface (hand-off token) and the staff workspace (OIDC). The staff
+workspace includes a command palette (⌘K), a drag-and-drop Kanban board, an
+issues list with a Jira-style List/Split (master–detail) view, saved filter
+views, bulk actions, an in-app notifications bell, @mention autocomplete in
+comments, and SLA indicators. See [`frontend/README.md`](frontend/README.md).
+In dev it proxies `/api` to this backend on `:3000`.
 
 ## Run locally
 
@@ -93,6 +105,8 @@ are seeded and ready for it.
 
 - **Migrations:** set `DB_SYNCHRONIZE=false`. Generate the baseline schema once
   against a live DB (`npm run migration:generate`), then `npm run migration:run`.
+  The baseline must include the additive `notification_logs.read_at` column (added
+  for the in-app bell). SLA state is computed at read time — no schema needed.
   Search matches the reference number (ILIKE) or Postgres full-text search over
   description + comment bodies, using a prefix `to_tsquery` (`term:*`) so it
   matches as the user types — computed at query time in `IssuesService`. The

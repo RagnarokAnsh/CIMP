@@ -5,9 +5,20 @@ import type { DashboardSummary } from '@/api/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { Reveal } from '@/components/Reveal';
 import { TrendChart } from './TrendChart';
+import { STATUS_META } from '@/lib/issue-meta';
+import { initials } from '@/lib/format';
+import { cn } from '@/lib/utils';
+import type { IssueStatus } from '@/api/types';
+
+type BreakdownKind = 'status' | 'priority' | 'assignee' | 'plain';
+
+const PRIORITY_BAR: Record<string, string> = {
+  LOW: 'bg-slate-400', MEDIUM: 'bg-blue-500', HIGH: 'bg-orange-500', CRITICAL: 'bg-red-500',
+};
 
 export function DashboardPage() {
   const { data, isLoading, isError } = useQuery({
@@ -79,10 +90,10 @@ export function DashboardPage() {
       </Card>
 
       <Reveal className="grid gap-4 md:grid-cols-2">
-        <Breakdown title="By status" rows={data.byStatus} />
-        <Breakdown title="By priority" rows={data.byPriority} />
+        <Breakdown title="By status" rows={data.byStatus} kind="status" />
+        <Breakdown title="By priority" rows={data.byPriority} kind="priority" />
         <Breakdown title="By platform" rows={data.byPlatform} />
-        <Breakdown title="By assignee" rows={data.byAssignee.map((a) => ({ key: a.name, count: a.count }))} />
+        <Breakdown title="By assignee" rows={data.byAssignee.map((a) => ({ key: a.name, count: a.count }))} kind="assignee" />
       </Reveal>
     </div>
   );
@@ -129,8 +140,25 @@ function SlaTile({
   );
 }
 
-function Breakdown({ title, rows }: { title: string; rows: { key: string; count: number }[] }) {
+function Breakdown({
+  title, rows, kind = 'plain',
+}: {
+  title: string;
+  rows: { key: string; count: number }[];
+  kind?: BreakdownKind;
+}) {
   const max = Math.max(1, ...rows.map((r) => r.count));
+  const labelFor = (key: string) => {
+    if (!key) return '—';
+    if (kind === 'status') return STATUS_META[key as IssueStatus]?.label ?? key;
+    if (kind === 'priority') return key.charAt(0) + key.slice(1).toLowerCase();
+    return key;
+  };
+  const barFor = (key: string) => {
+    if (kind === 'status') return STATUS_META[key as IssueStatus]?.dot ?? 'bg-primary/70';
+    if (kind === 'priority') return PRIORITY_BAR[key] ?? 'bg-primary/70';
+    return 'bg-primary/70';
+  };
   return (
     <Card>
       <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
@@ -141,13 +169,18 @@ function Breakdown({ title, rows }: { title: string; rows: { key: string; count:
           <ul className="space-y-2.5">
             {rows.map((r) => (
               <li key={r.key || '—'} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span>{r.key || '—'}</span>
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex min-w-0 items-center gap-2">
+                    {kind === 'assignee' && (
+                      <Avatar className="size-5"><AvatarFallback className="text-[9px]">{initials(r.key)}</AvatarFallback></Avatar>
+                    )}
+                    <span className="truncate">{labelFor(r.key)}</span>
+                  </span>
                   <span className="font-medium tabular-nums">{r.count}</span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-primary/70 transition-[width] duration-500"
+                    className={cn('h-full rounded-full transition-[width] duration-500', barFor(r.key))}
                     style={{ width: `${(r.count / max) * 100}%` }}
                   />
                 </div>
