@@ -1,13 +1,17 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AtSign, Loader2, Lock, MessageSquare, Send, UserCheck, Users } from 'lucide-react';
+import {
+  AtSign, Download, FileText, Loader2, Lock, MessageSquare, Send, UserCheck, Users,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
+import { downloadFile } from '@/lib/download';
 import type {
   AssigneeOption, CommentVisibility, IssueStatus, Priority, StaffIssueDetail, StaffMe,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
+import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
 import { firstLine } from '@/lib/format';
 import { Button } from '@/components/ui/button';
@@ -71,7 +75,17 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['staff', 'issue', id] });
-  const onError = (e: any) => toast.error(e?.response?.data?.message ?? 'Action failed.');
+  const onError = (e: any) => {
+    if (e?.response?.status === 409) {
+      // Stale optimistic-lock version: refetch so the next action uses the
+      // current version instead of looping on the same conflict.
+      refresh();
+      toast.error('This issue changed elsewhere — reloaded, try again.');
+      return;
+    }
+    const msg = e?.response?.data?.message ?? 'Action failed.';
+    toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
+  };
 
   const changeStatus = useMutation({
     mutationFn: (status: IssueStatus) =>
@@ -175,6 +189,14 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
     });
   }
 
+  async function downloadAttachment(attachmentId: string, filename: string) {
+    try {
+      await downloadFile(staffApi, `/staff/attachments/${attachmentId}/download`, filename);
+    } catch {
+      toast.error('Could not download that file.');
+    }
+  }
+
   function onCommentKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (!mention || mentionSuggestions.length === 0) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => (i + 1) % mentionSuggestions.length); }
@@ -241,6 +263,11 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                     <div key={c.id} className="space-y-1">
                       <div className="flex items-center gap-2 text-sm">
                         <span className="font-medium">{c.author?.name ?? 'Unknown'}</span>
+                        {c.authorType === 'REPORTER' && (
+                          <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-400">
+                            Reporter
+                          </Badge>
+                        )}
                         {c.visibility === 'REPORTER_VISIBLE' ? (
                           <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
                             <Users className="mr-1 h-3 w-3" /> Reporter-visible
@@ -346,6 +373,37 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
             </CardContent>
           </Card>
 
+          {data.attachments.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Attachments</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {data.attachments.map((a) => {
+                  const servable = a.scanStatus === 'CLEAN' || a.scanStatus === 'SKIPPED';
+                  return (
+                    <div key={a.id} className="flex items-center gap-2 text-sm">
+                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{a.filename}</span>
+                      {!servable && (
+                        <Badge variant="outline" className="text-muted-foreground">{a.scanStatus}</Badge>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="ml-auto"
+                        disabled={!servable}
+                        title={servable ? 'Download' : `Unavailable (scan: ${a.scanStatus})`}
+                        aria-label={`Download ${a.filename}`}
+                        onClick={() => downloadAttachment(a.id, a.filename)}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader><CardTitle className="text-base">Actions</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -354,7 +412,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                 <div className="flex flex-wrap gap-2">
                   {STATUS_TRANSITIONS[data.status].map((s) => (
                     <Button key={s} size="sm" variant="secondary" disabled={busy} onClick={() => changeStatus.mutate(s)}>
-                      {s.replace(/_/g, ' ')}
+                      {STATUS_META[s].label}
                     </Button>
                   ))}
                 </div>
@@ -364,7 +422,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                 <Select value={data.priority} onValueChange={(v) => changePriority.mutate(v as Priority)} disabled={busy}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

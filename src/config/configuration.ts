@@ -11,6 +11,15 @@ export default () => ({
     name: process.env.DB_NAME ?? 'support_platform',
     synchronize: (process.env.DB_SYNCHRONIZE ?? 'true') === 'true',
   },
+  scan: {
+    // 'noop' (default; marks files SKIPPED) | 'clamav'
+    driver: process.env.SCAN_DRIVER ?? 'noop',
+    clamav: {
+      host: process.env.CLAMAV_HOST ?? '127.0.0.1',
+      port: parseInt(process.env.CLAMAV_PORT ?? '3310', 10),
+      timeoutMs: parseInt(process.env.CLAMAV_TIMEOUT_MS ?? '30000', 10),
+    },
+  },
   storage: {
     // 'local' | 's3'
     driver: process.env.STORAGE_DRIVER ?? 'local',
@@ -32,6 +41,12 @@ export default () => ({
     nameClaim: process.env.OIDC_NAME_CLAIM ?? 'name',
     emailClaim: process.env.OIDC_EMAIL_CLAIM ?? 'email',
   },
+  // Self-issued JWT staff auth (no external IdP). Enabled when JWT_SECRET is set;
+  // the API both mints (POST /api/auth/login) and verifies these HS256 tokens.
+  auth: {
+    jwtSecret: process.env.JWT_SECRET,
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
+  },
   throttle: {
     ttl: parseInt(process.env.THROTTLE_TTL ?? '60', 10),
     limit: parseInt(process.env.THROTTLE_LIMIT ?? '120', 10),
@@ -51,6 +66,9 @@ export default () => ({
     baseUrl: process.env.JIRA_BASE_URL, // https://your-domain.atlassian.net
     email: process.env.JIRA_EMAIL,
     apiToken: process.env.JIRA_API_TOKEN,
+    // Shared secret for the inbound status webhook. Leave blank to disable
+    // inbound sync (the endpoint then rejects everything).
+    webhookSecret: process.env.JIRA_WEBHOOK_SECRET,
   },
   // Authorization policy seam for OD-09: may focal points change issue status?
   focalPointCanTransition:

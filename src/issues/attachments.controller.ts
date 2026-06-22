@@ -6,6 +6,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentStaff } from '../auth/current-staff.decorator';
 import { AuthenticatedStaff } from '../auth/auth.types';
+import { contentDisposition } from '../common/content-disposition';
 import { AttachmentsService } from './attachments.service';
 
 @ApiTags('staff-attachments')
@@ -25,7 +26,7 @@ export class AttachmentsController {
   ) {
     const file = await this.attachments.getForStaff(staff, id);
     res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader('Content-Disposition', contentDisposition(file.filename));
     res.send(file.buffer);
   }
 }

@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ChevronsUp, Equal, type LucideIcon } from 'lucide-react';
-import type { IssueStatus, Priority } from '@/api/types';
+import type { IssueStatus, Priority, Role } from '@/api/types';
 
 // Maps domain enums to vivid, WCAG-AA badge styles (verified in both light and
 // dark) plus a scan-friendly dot/icon, so status and priority never rely on
@@ -66,3 +66,13 @@ export const PRIORITY_META: Record<
     className: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/20',
   },
 };
+
+// Human labels for staff roles — single source of truth so dropdowns, badges,
+// and the dev role picker stay consistent instead of each doing `.replace('_',' ')`.
+export const ROLE_META: Record<Role, { label: string }> = {
+  FOCAL_POINT: { label: 'Focal point' },
+  DEVELOPER: { label: 'Developer' },
+  ADMIN: { label: 'Admin' },
+};
+
+export const roleLabel = (role: Role): string => ROLE_META[role]?.label ?? role;

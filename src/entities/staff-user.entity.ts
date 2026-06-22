@@ -11,7 +11,8 @@ export class StaffUser {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // Subject claim from the identity provider (OIDC). Identity is mastered there.
+  // Subject claim from the identity provider (OIDC), or `local:<email>` for
+  // self-issued (password) login. Identity is keyed on this.
   @Column({ name: 'idp_subject', unique: true })
   idpSubject: string;
 
@@ -20,6 +21,11 @@ export class StaffUser {
 
   @Column({ unique: true })
   email: string;
+
+  // bcrypt hash for self-issued JWT (password) login. Null for OIDC/dev users.
+  // `select: false` keeps it out of normal reads — login fetches it explicitly.
+  @Column({ name: 'password_hash', type: 'varchar', nullable: true, select: false })
+  passwordHash: string | null;
 
   @Column({ type: 'enum', enum: AccountStatus, default: AccountStatus.ACTIVE })
   status: AccountStatus;

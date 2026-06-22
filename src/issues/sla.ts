@@ -1,17 +1,27 @@
 import { IssueStatus, Priority } from '../common/enums';
 
-// Resolution SLA: hours-from-creation target per priority. Global defaults for
-// now; per-platform overrides are a future enhancement. Kept in one place so the
-// per-issue computation (JS) and the dashboard aggregate (SQL) never drift.
+// Resolution SLA: hours-from-creation target per priority. Defaults below, each
+// overridable via env (SLA_HOURS_CRITICAL/HIGH/MEDIUM/LOW) so ops can tune
+// targets without a code change. Kept in one place so the per-issue computation
+// (JS) and the dashboard aggregate (SQL) never drift.
+const hoursFromEnv = (key: string, fallback: number): number => {
+  const raw = process.env[key];
+  const n = raw === undefined ? NaN : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
 export const SLA_TARGET_HOURS: Record<Priority, number> = {
-  CRITICAL: 4,
-  HIGH: 24,
-  MEDIUM: 72,
-  LOW: 168, // 7 days
+  CRITICAL: hoursFromEnv('SLA_HOURS_CRITICAL', 4),
+  HIGH: hoursFromEnv('SLA_HOURS_HIGH', 24),
+  MEDIUM: hoursFromEnv('SLA_HOURS_MEDIUM', 72),
+  LOW: hoursFromEnv('SLA_HOURS_LOW', 168), // 7 days
 };
 
 // Fraction of the window elapsed at which an open issue is flagged "at risk".
-export const SLA_AT_RISK_FRACTION = 0.8;
+export const SLA_AT_RISK_FRACTION = (() => {
+  const n = Number(process.env.SLA_AT_RISK_FRACTION);
+  return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.8;
+})();
 
 export type SlaState = 'on_track' | 'at_risk' | 'breached' | null;
 

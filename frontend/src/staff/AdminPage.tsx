@@ -25,6 +25,7 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { initials } from '@/lib/format';
+import { roleLabel } from '@/lib/issue-meta';
 
 interface StaffWithRoles {
   id: string;
@@ -220,7 +221,7 @@ function StaffTab() {
             <Select value={role} onValueChange={(v) => setRole(v as Role)}>
               <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ROLES.map((r) => <SelectItem key={r} value={r}>{r.replace('_', ' ')}</SelectItem>)}
+                {ROLES.map((r) => <SelectItem key={r} value={r}>{roleLabel(r)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -272,7 +273,7 @@ function StaffTab() {
                         {s.roles.length === 0 && <span className="text-sm text-muted-foreground">None</span>}
                         {s.roles.map((r) => (
                           <Badge key={r.id} variant="secondary" className="gap-1">
-                            {r.role.replace('_', ' ')}
+                            {roleLabel(r.role)}
                             {r.platformKey ? ` · ${r.platformKey}` : ' · global'}
                             <button
                               className="ml-0.5 text-muted-foreground hover:text-destructive"

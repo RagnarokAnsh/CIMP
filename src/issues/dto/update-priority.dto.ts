@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, Min } from 'class-validator';
+import { IsEnum, IsInt, Min } from 'class-validator';
 import { Priority } from '../../common/enums';
 
 export class UpdatePriorityDto {
@@ -7,8 +7,9 @@ export class UpdatePriorityDto {
   @IsEnum(Priority)
   priority: Priority;
 
+  // Required so the optimistic-lock check (issues.service assertVersion) always
+  // runs — otherwise concurrent edits silently overwrite each other.
   @ApiProperty({ description: 'Expected current version (optimistic lock).' })
-  @IsOptional()
   @IsInt()
   @Min(1)
   version: number;

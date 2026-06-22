@@ -4,7 +4,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JiraSyncStatus, ScanStatus } from '../common/enums';
 import { Attachment, Issue } from '../entities';
-import { IssueCreatedEvent, IssueEvents } from '../events/issue-events';
+import {
+  IssueCreatedEvent, IssueEvents, IssueStatusChangedEvent,
+} from '../events/issue-events';
 import { StorageService } from '../storage/storage.service';
 import { JiraService } from './jira.service';
 
@@ -34,6 +36,15 @@ export class JiraListener {
       this.logger.warn('Jira enabled for platform but client not configured; skipping.');
       return;
     }
+    // Idempotency: never create a second Jira issue if this one is already
+    // synced or in flight (a re-delivered event would otherwise duplicate it).
+    if (
+      issue.jiraIssueKey ||
+      issue.jiraSyncStatus === JiraSyncStatus.SYNCED ||
+      issue.jiraSyncStatus === JiraSyncStatus.PENDING
+    ) {
+      return;
+    }
 
     await this.issues.update(issue.id, { jiraSyncStatus: JiraSyncStatus.PENDING });
 
@@ -47,6 +58,28 @@ export class JiraListener {
     } catch (err) {
       this.logger.error(`Jira sync failed for ${issue.referenceNo}: ${(err as Error).message}`);
       await this.issues.update(issue.id, { jiraSyncStatus: JiraSyncStatus.FAILED });
+    }
+  }
+
+  // Outbound status echo: when an issue with a linked Jira key transitions, add
+  // a comment to the Jira issue. (Inbound webhook updates do NOT emit this event,
+  // so there's no sync loop.)
+  @OnEvent(IssueEvents.STATUS_CHANGED, { async: true })
+  async onStatusChanged(evt: IssueStatusChangedEvent): Promise<void> {
+    const issue = await this.issues.findOne({
+      where: { id: evt.issueId },
+      relations: { platform: true },
+    });
+    if (!issue?.jiraIssueKey || !issue.platform.jiraEnabled || !this.jira.isConfigured()) return;
+    try {
+      await this.withRetry(() =>
+        this.jira.addComment(
+          issue.jiraIssueKey!,
+          `Status changed in the support platform: ${evt.from} → ${evt.to}.`,
+        ),
+      );
+    } catch (err) {
+      this.logger.error(`Jira status echo failed for ${issue.referenceNo}: ${(err as Error).message}`);
     }
   }
 

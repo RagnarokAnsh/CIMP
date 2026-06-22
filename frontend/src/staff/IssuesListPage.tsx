@@ -8,9 +8,11 @@ import {
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
-  BulkResult, Paginated, PlatformItem, StaffIssueSummary, StaffMe,
+  BulkResult, IssueStatus, Paginated, PlatformItem, Priority, SavedViewDto,
+  StaffIssueSummary, StaffMe,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
+import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { SlaBadge } from '@/components/SlaBadge';
 import { IssueDetailPanel } from './IssueDetailPanel';
 import { relativeTime, initials } from '@/lib/format';
@@ -41,15 +43,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
-const STATUSES = ['NEW', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED', 'REOPENED'];
-const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+const STATUSES: IssueStatus[] = ['NEW', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED', 'REOPENED'];
+const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const ALL = '__all__';
 
 type ViewMode = 'list' | 'split';
 type SortField = 'createdAt' | 'updatedAt' | 'priority' | 'status';
 type Order = 'ASC' | 'DESC';
 const VIEW_KEY = 'cimp_issue_view';
-const VIEWS_KEY = 'cimp_saved_views';
 
 interface Filters {
   status: string;
@@ -62,16 +63,10 @@ interface Filters {
   sort: SortField;
   order: Order;
 }
-interface SavedView { name: string; filters: Filters; }
-
 const DEFAULT_FILTERS: Filters = {
   status: '', priority: '', q: '', assignedToMe: false,
   platformId: '', from: '', to: '', sort: 'createdAt', order: 'DESC',
 };
-
-function loadViews(): SavedView[] {
-  try { return JSON.parse(localStorage.getItem(VIEWS_KEY) ?? '[]'); } catch { return []; }
-}
 
 export function IssuesListPage() {
   const queryClient = useQueryClient();
@@ -79,7 +74,6 @@ export function IssuesListPage() {
   const [qInput, setQInput] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [views, setViews] = useState<SavedView[]>(loadViews);
   const [saveOpen, setSaveOpen] = useState(false);
   const [viewName, setViewName] = useState('');
   const [view, setView] = useState<ViewMode>(
@@ -87,7 +81,22 @@ export function IssuesListPage() {
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => { localStorage.setItem(VIEW_KEY, view); }, [view]);
-  useEffect(() => { localStorage.setItem(VIEWS_KEY, JSON.stringify(views)); }, [views]);
+
+  // Saved views are persisted server-side so they follow the user across devices.
+  const { data: views = [] } = useQuery({
+    queryKey: ['staff', 'saved-views'],
+    queryFn: async () => (await staffApi.get<SavedViewDto[]>('/staff/saved-views')).data,
+    staleTime: 5 * 60 * 1000,
+  });
+  const saveViewMutation = useMutation({
+    mutationFn: (body: { name: string; filters: Filters }) =>
+      staffApi.put('/staff/saved-views', body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff', 'saved-views'] }),
+  });
+  const deleteViewMutation = useMutation({
+    mutationFn: (id: string) => staffApi.delete(`/staff/saved-views/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff', 'saved-views'] }),
+  });
 
   const patch = (p: Partial<Filters>) => { setFilters((f) => ({ ...f, ...p })); setPage(1); };
 
@@ -147,7 +156,17 @@ export function IssuesListPage() {
     onSuccess: (res) => {
       const r = res.data;
       const skipped = r.skipped.length ? `, ${r.skipped.length} skipped` : '';
-      toast.success(`Updated ${r.updated} issue${r.updated === 1 ? '' : 's'}${skipped}.`);
+      const summary = `Updated ${r.updated} issue${r.updated === 1 ? '' : 's'}${skipped}.`;
+      if (r.skipped.length) {
+        // Surface *why* issues were skipped (out of scope, invalid transition,
+        // version conflict…) rather than a bare count.
+        const reasons = [...new Set(r.skipped.map((s) => s.reason))];
+        toast.warning(summary, {
+          description: reasons.join(' · '),
+        });
+      } else {
+        toast.success(summary);
+      }
       setSelected(new Set());
       queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
       queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
@@ -166,13 +185,23 @@ export function IssuesListPage() {
     setSelected(allOnPageSelected ? new Set() : new Set(rows.map((r) => r.id)));
   }
 
-  function applyView(v: SavedView) { setFilters(v.filters); setQInput(v.filters.q); setPage(1); }
+  function applyView(v: SavedViewDto) {
+    const f = v.filters as unknown as Filters;
+    setFilters(f); setQInput(f.q ?? ''); setPage(1);
+  }
   function saveView() {
     const name = viewName.trim();
     if (!name) return;
-    setViews((vs) => [...vs.filter((v) => v.name !== name), { name, filters }]);
-    setViewName(''); setSaveOpen(false);
-    toast.success(`Saved view “${name}”.`);
+    saveViewMutation.mutate(
+      { name, filters },
+      {
+        onSuccess: () => {
+          setViewName(''); setSaveOpen(false);
+          toast.success(`Saved view “${name}”.`);
+        },
+        onError: () => toast.error('Could not save the view.'),
+      },
+    );
   }
 
   const activeFilterCount =
@@ -208,7 +237,7 @@ export function IssuesListPage() {
           <SavedViewsMenu
             views={views}
             onApply={applyView}
-            onDelete={(name) => setViews((vs) => vs.filter((v) => v.name !== name))}
+            onDelete={(id) => deleteViewMutation.mutate(id)}
             onSaveClick={() => setSaveOpen(true)}
             canSave={activeFilterCount > 0}
           />
@@ -248,7 +277,7 @@ export function IssuesListPage() {
             <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All statuses</SelectItem>
-              {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}
+              {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -256,7 +285,7 @@ export function IssuesListPage() {
             <SelectTrigger className="w-36"><SelectValue placeholder="Priority" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All priorities</SelectItem>
-              {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -316,13 +345,13 @@ export function IssuesListPage() {
             <Select onValueChange={(v) => runBulk('status', v)}>
               <SelectTrigger size="sm" className="w-36"><SelectValue placeholder="Set status…" /></SelectTrigger>
               <SelectContent>
-                {STATUSES.map((s) => <SelectItem key={s} value={s}>{s.replace('_', ' ')}</SelectItem>)}
+                {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select onValueChange={(v) => runBulk('priority', v)}>
               <SelectTrigger size="sm" className="w-36"><SelectValue placeholder="Set priority…" /></SelectTrigger>
               <SelectContent>
-                {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>)}
               </SelectContent>
             </Select>
             {me && (
@@ -613,9 +642,9 @@ function SortableHead({
 function SavedViewsMenu({
   views, onApply, onDelete, onSaveClick, canSave,
 }: {
-  views: SavedView[];
-  onApply: (v: SavedView) => void;
-  onDelete: (name: string) => void;
+  views: SavedViewDto[];
+  onApply: (v: SavedViewDto) => void;
+  onDelete: (id: string) => void;
   onSaveClick: () => void;
   canSave: boolean;
 }) {
@@ -631,7 +660,7 @@ function SavedViewsMenu({
         )}
         {views.map((v) => (
           <DropdownMenuItem
-            key={v.name}
+            key={v.id}
             onSelect={() => onApply(v)}
             className="group flex items-center justify-between gap-2"
           >
@@ -639,7 +668,7 @@ function SavedViewsMenu({
             <button
               className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
               aria-label={`Delete ${v.name}`}
-              onClick={(e) => { e.stopPropagation(); onDelete(v.name); }}
+              onClick={(e) => { e.stopPropagation(); onDelete(v.id); }}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>

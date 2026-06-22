@@ -5,6 +5,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
+import { validate } from './config/env.validation';
 import { ALL_ENTITIES } from './entities';
 import { StorageModule } from './storage/storage.module';
 import { ScanningModule } from './scanning/scanning.module';
@@ -19,10 +20,13 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AdminModule } from './admin/admin.module';
 import { JiraModule } from './jira/jira.module';
+import { HealthModule } from './health/health.module';
+import { SavedViewsModule } from './saved-views/saved-views.module';
+import { RealtimeModule } from './realtime/realtime.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [configuration], validate }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -60,6 +64,9 @@ import { JiraModule } from './jira/jira.module';
     DashboardModule,
     AdminModule,
     JiraModule,
+    HealthModule,
+    SavedViewsModule,
+    RealtimeModule,
   ],
   providers: [
     // Global rate limiting; intake route tightens this further.

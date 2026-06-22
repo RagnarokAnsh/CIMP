@@ -4,6 +4,7 @@ import { StaffIssueDetailPage } from './StaffIssueDetailPage';
 import { BoardPage } from './BoardPage';
 import { DashboardPage } from './DashboardPage';
 import { AdminPage } from './AdminPage';
+import { AuditPage } from './AuditPage';
 
 // Shared by the OIDC and dev-auth gates so the workspace routes stay in one place.
 export function StaffWorkspaceRoutes() {
@@ -15,6 +16,7 @@ export function StaffWorkspaceRoutes() {
       <Route path="board" element={<BoardPage />} />
       <Route path="dashboard" element={<DashboardPage />} />
       <Route path="admin" element={<AdminPage />} />
+      <Route path="audit" element={<AuditPage />} />
     </Routes>
   );
 }

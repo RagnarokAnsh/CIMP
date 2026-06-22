@@ -5,6 +5,7 @@ import { IssueStatus, Priority } from '../common/enums';
 export const IssueEvents = {
   CREATED: 'issue.created',
   STATUS_CHANGED: 'issue.status_changed',
+  PRIORITY_CHANGED: 'issue.priority_changed',
   ASSIGNED: 'issue.assigned',
   COMMENT_ADDED: 'comment.added',
 } as const;

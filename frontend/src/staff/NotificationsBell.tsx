@@ -32,10 +32,10 @@ export function NotificationsBell() {
   const { data } = useQuery({
     queryKey: ['staff', 'notifications'],
     queryFn: async () => (await staffApi.get<NotificationFeed>('/staff/notifications')).data,
-    // Lean idle poll (paused automatically while the tab is hidden), but refetch
-    // the moment the user returns to the tab or the network reconnects so the
-    // bell feels fresh without hammering the API every minute.
-    refetchInterval: 180_000,
+    // SSE drives live freshness (see useStaffRealtime); this long poll is just a
+    // backstop in case an event is missed during a reconnect. Still refetches on
+    // focus/reconnect.
+    refetchInterval: 600_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
@@ -44,7 +44,16 @@ export function NotificationsBell() {
 
   const markRead = useMutation({
     mutationFn: () => staffApi.post('/staff/notifications/read'),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff', 'notifications'] }),
+    // Optimistically clear the unread dot/badge so it doesn't linger until the
+    // refetch settles.
+    onMutate: () => {
+      queryClient.setQueryData<NotificationFeed>(['staff', 'notifications'], (prev) =>
+        prev
+          ? { unread: 0, items: prev.items.map((i) => ({ ...i, readAt: i.readAt ?? new Date().toISOString() })) }
+          : prev,
+      );
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['staff', 'notifications'] }),
   });
 
   const unread = data?.unread ?? 0;

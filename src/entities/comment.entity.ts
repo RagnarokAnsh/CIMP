@@ -1,7 +1,7 @@
 import {
   Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn,
 } from 'typeorm';
-import { CommentVisibility } from '../common/enums';
+import { ActorType, CommentVisibility } from '../common/enums';
 import { Issue } from './issue.entity';
 import { StaffUser } from './staff-user.entity';
 
@@ -14,9 +14,19 @@ export class Comment {
   @JoinColumn({ name: 'issue_id' })
   issue: Issue;
 
-  @ManyToOne(() => StaffUser, (u) => u.comments, { onDelete: 'SET NULL' })
+  // Staff author (null for reporter-authored comments — see authorType).
+  @ManyToOne(() => StaffUser, (u) => u.comments, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'author_id' })
-  author: StaffUser;
+  author: StaffUser | null;
+
+  // Who wrote this — STAFF (default) or REPORTER. Lets reporters reply via the
+  // portal without a StaffUser row.
+  @Column({ name: 'author_type', type: 'enum', enum: ActorType, default: ActorType.STAFF })
+  authorType: ActorType;
+
+  // Snapshot of the reporter's display name (only set for REPORTER comments).
+  @Column({ name: 'author_name', type: 'varchar', nullable: true })
+  authorName: string | null;
 
   @Column({ type: 'text' })
   body: string;

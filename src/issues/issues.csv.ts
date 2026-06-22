@@ -1,8 +1,14 @@
 import { Issue } from '../entities';
 
-// Minimal RFC-4180-ish CSV: quote fields, double embedded quotes.
+// Minimal RFC-4180-ish CSV: quote fields, double embedded quotes. We also
+// neutralise spreadsheet formula injection: a field that a spreadsheet would
+// interpret as a formula (leading = + - @, tab, or CR) is prefixed with a single
+// quote so Excel/Sheets render it as text instead of executing it. Names here are
+// partly portal-controlled (reporter name from the hand-off token), so this is a
+// real export-time risk.
 function cell(value: unknown): string {
-  const s = value === null || value === undefined ? '' : String(value);
+  let s = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return `"${s.replace(/"/g, '""')}"`;
 }
 

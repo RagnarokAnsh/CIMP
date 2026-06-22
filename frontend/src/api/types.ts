@@ -26,8 +26,10 @@ export interface ReporterIssueDetail {
   description: string;
   createdAt: string;
   updatedAt: string;
-  attachments: { filename: string; contentType: string; sizeBytes: number }[];
-  updates: { body: string; createdAt: string }[];
+  attachments: {
+    id: string; filename: string; contentType: string; sizeBytes: number; downloadable: boolean;
+  }[];
+  updates: { body: string; createdAt: string; author: string; fromReporter: boolean }[];
 }
 
 export interface StaffMe {
@@ -72,7 +74,8 @@ export interface StaffIssueDetail extends StaffIssueSummary {
     id: string;
     body: string;
     visibility: CommentVisibility;
-    author: { id: string; name: string } | null;
+    authorType?: 'STAFF' | 'REPORTER' | 'SYSTEM';
+    author: { id: string | null; name: string } | null;
     createdAt: string;
     editedAt: string | null;
   }[];
@@ -127,4 +130,23 @@ export interface PlatformItem {
   jiraProjectKey: string | null;
   jiraEnabled: boolean;
   createdAt: string;
+}
+
+export interface SavedViewDto {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  actorType: string;
+  actorId: string | null;
+  action: string;
+  field: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  createdAt: string;
+  issue: { id: string; referenceNo: string } | null;
 }

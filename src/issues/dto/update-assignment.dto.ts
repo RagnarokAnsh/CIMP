@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsUUID, Min, ValidateIf } from 'class-validator';
+import { IsInt, IsUUID, Min, ValidateIf } from 'class-validator';
 
 export class UpdateAssignmentDto {
   @ApiProperty({
@@ -10,8 +10,9 @@ export class UpdateAssignmentDto {
   @IsUUID()
   assigneeId: string | null;
 
+  // Required so the optimistic-lock check (issues.service assertVersion) always
+  // runs — otherwise concurrent edits silently overwrite each other.
   @ApiProperty({ description: 'Expected current version (optimistic lock).' })
-  @IsOptional()
   @IsInt()
   @Min(1)
   version: number;

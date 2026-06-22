@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { LifeBuoy, Loader2, ShieldAlert } from 'lucide-react';
-import { setStaffTokenGetter } from '@/api/client';
+import { setStaffTokenGetter, setStaffUnauthorizedHandler } from '@/api/client';
 import type { Role } from '@/api/types';
+import { roleLabel as roleName } from '@/lib/issue-meta';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -34,6 +35,12 @@ export function DevStaffApp() {
     setToken(t);
   };
 
+  // Drop the dev session when the API rejects the token, returning to the picker.
+  useEffect(() => {
+    setStaffUnauthorizedHandler(() => setSession(null));
+    return () => setStaffUnauthorizedHandler(() => {});
+  }, []);
+
   if (!token) return <DevLogin onLogin={setSession} />;
 
   return (
@@ -56,7 +63,7 @@ function DevModeBanner() {
 function roleLabel(roles: DevStaffUser['roles']): string {
   if (roles.length === 0) return 'No roles';
   return roles
-    .map((r) => `${r.role.replace('_', ' ')}${r.platformId ? '' : ' (global)'}`)
+    .map((r) => `${roleName(r.role)}${r.platformId ? '' : ' (global)'}`)
     .join(', ');
 }
 
@@ -140,7 +147,7 @@ function DevLogin({ onLogin }: { onLogin: (token: string) => void }) {
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 ) : (
                   <Badge variant="outline" className={ROLE_BADGE[role]}>
-                    {role.replace('_', ' ')}
+                    {role === 'NONE' ? 'None' : roleName(role)}
                   </Badge>
                 )}
               </button>

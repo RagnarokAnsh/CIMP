@@ -7,10 +7,13 @@ import { randomBytes } from 'crypto';
 import { ActorType, Role } from '../common/enums';
 import { Platform, StaffUser, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
+import { LocalAuthService } from '../auth/local-auth.service';
 import { AuditService } from '../audit/audit.service';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { UpdatePlatformDto } from './dto/update-platform.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { CreateStaffDto } from './dto/create-staff.dto';
+import { SetPasswordDto } from './dto/set-password.dto';
 
 @Injectable()
 export class AdminService {
@@ -106,6 +109,49 @@ export class AdminService {
         platformKey: r.platform?.key ?? null,
       })),
     }));
+  }
+
+  // Create a staff user with a password for self-issued JWT login. idpSubject is
+  // keyed as `local:<email>` so the login token's `sub` resolves back here.
+  async createStaff(admin: AuthenticatedStaff, dto: CreateStaffDto) {
+    const email = dto.email.toLowerCase();
+    const idpSubject = `local:${email}`;
+    const existing = await this.staff.findOne({
+      where: [{ email }, { idpSubject }],
+    });
+    if (existing) throw new ConflictException('A staff user with that email already exists.');
+
+    const user = await this.staff.save(
+      this.staff.create({
+        idpSubject,
+        name: dto.name,
+        email,
+        passwordHash: await LocalAuthService.hashPassword(dto.password),
+      }),
+    );
+    await this.audit.record({
+      actorType: ActorType.STAFF,
+      actorId: admin.id,
+      action: 'STAFF_CREATED',
+      newValue: email,
+      metadata: { staffUserId: user.id },
+    });
+    return { id: user.id, name: user.name, email: user.email, status: user.status };
+  }
+
+  // Set or reset a staff member's password (admin-initiated).
+  async setStaffPassword(admin: AuthenticatedStaff, id: string, dto: SetPasswordDto) {
+    const user = await this.staff.findOne({ where: { id } });
+    if (!user) throw new NotFoundException('Staff user not found');
+    user.passwordHash = await LocalAuthService.hashPassword(dto.password);
+    await this.staff.save(user);
+    await this.audit.record({
+      actorType: ActorType.STAFF,
+      actorId: admin.id,
+      action: 'STAFF_PASSWORD_SET',
+      metadata: { staffUserId: id },
+    });
+    return { ok: true };
   }
 
   async assignRole(admin: AuthenticatedStaff, dto: AssignRoleDto) {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from 'next-themes';
 import {
-  LayoutDashboard, ListChecks, Monitor, Moon, Settings, Sun, Trello,
+  LayoutDashboard, ListChecks, Monitor, Moon, ScrollText, Settings, Sun, Trello,
 } from 'lucide-react';
 import { staffApi } from '@/api/client';
 import type { Paginated, StaffIssueSummary } from '@/api/types';
@@ -119,6 +119,11 @@ export function CommandPalette({ isAdmin }: { isAdmin: boolean }) {
           <CommandItem value="nav dashboard" onSelect={() => run(() => navigate('/staff/dashboard'))}>
             <LayoutDashboard /> Dashboard
           </CommandItem>
+          {isAdmin && (
+            <CommandItem value="nav audit" onSelect={() => run(() => navigate('/staff/audit'))}>
+              <ScrollText /> Audit log
+            </CommandItem>
+          )}
           {isAdmin && (
             <CommandItem value="nav admin" onSelect={() => run(() => navigate('/staff/admin'))}>
               <Settings /> Admin

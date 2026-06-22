@@ -66,6 +66,66 @@ export class NotificationsService {
     });
   }
 
+  // Notify the assignee and the platform's focal points when an issue's status
+  // changes (e.g. RESOLVED/REOPENED). The actor is never notified of their own
+  // action. Email + NotificationLog so it also appears in the bell.
+  async notifyStatusChange(
+    issueId: string,
+    from: string,
+    to: string,
+    actorStaffId: string,
+  ): Promise<void> {
+    const issue = await this.issues.findOne({
+      where: { id: issueId },
+      relations: { platform: true, assignee: true },
+    });
+    if (!issue) return;
+
+    const focalGrants = await this.roles.find({
+      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
+      relations: { staffUser: true },
+    });
+    const candidates = [issue.assignee, ...focalGrants.map((g) => g.staffUser)];
+    const recipients = this.activeRecipients(candidates).filter((r) => r.id !== actorStaffId);
+    if (recipients.length === 0) return;
+
+    const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
+    for (const r of recipients) {
+      await this.dispatch(issueId, r, 'issue.status_changed', {
+        subject: `[${issue.platform.key}] ${issue.referenceNo} → ${to}`,
+        text:
+          `Issue ${issue.referenceNo} on ${issue.platform.name} moved from ${from} to ${to}.\n\n` +
+          `Open it: ${url}`,
+      });
+    }
+  }
+
+  // Notify the assignee and focal points when a reporter replies on their issue.
+  async notifyReporterReply(issueId: string): Promise<void> {
+    const issue = await this.issues.findOne({
+      where: { id: issueId },
+      relations: { platform: true, assignee: true },
+    });
+    if (!issue) return;
+
+    const focalGrants = await this.roles.find({
+      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
+      relations: { staffUser: true },
+    });
+    const recipients = this.activeRecipients([issue.assignee, ...focalGrants.map((g) => g.staffUser)]);
+    if (recipients.length === 0) return;
+
+    const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
+    for (const r of recipients) {
+      await this.dispatch(issueId, r, 'comment.reporter_reply', {
+        subject: `[${issue.platform.key}] Reporter replied on ${issue.referenceNo}`,
+        text:
+          `The reporter added a reply on ${issue.referenceNo} (${issue.platform.name}).\n\n` +
+          `Open it: ${url}`,
+      });
+    }
+  }
+
   // FR-NOT (collaboration): record an in-app notification for each staff member
   // @mentioned in a comment. In-app only — no email — so it surfaces in the bell.
   async notifyMentions(issueId: string, staffIds: string[], actorStaffId: string): Promise<void> {

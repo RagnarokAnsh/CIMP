@@ -4,6 +4,7 @@ import { StaffAuthProvider, oidcConfigured, useBindStaffToken } from './auth';
 import { StaffLayout } from './StaffLayout';
 import { StaffWorkspaceRoutes } from './routes';
 import { DevStaffApp, devAuthEnabled } from './dev-auth';
+import { LocalStaffApp, localAuthEnabled } from './local-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -19,6 +20,9 @@ function CenteredCard({ children }: { children: React.ReactNode }) {
 export function StaffApp() {
   // Dev shim takes precedence for local testing without an IdP.
   if (devAuthEnabled) return <DevStaffApp />;
+
+  // Self-issued JWT (password) login — no external IdP.
+  if (localAuthEnabled) return <LocalStaffApp />;
 
   if (!oidcConfigured) {
     return (

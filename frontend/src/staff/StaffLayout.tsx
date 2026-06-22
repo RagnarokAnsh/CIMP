@@ -3,12 +3,13 @@ import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronsLeft, LayoutDashboard, LifeBuoy, ListChecks, LogOut,
-  Menu, Search, Settings, Trello,
+  Menu, ScrollText, Search, Settings, Trello,
 } from 'lucide-react';
 import { staffApi } from '@/api/client';
 import type { StaffMe } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { openCommandPalette } from '@/lib/motion';
+import { useStaffRealtime } from '@/lib/realtime';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -39,6 +40,9 @@ export function StaffLayout({
     queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
     staleTime: 5 * 60 * 1000,
   });
+
+  // Live updates over SSE — keeps the board, lists, detail and bell fresh.
+  useStaffRealtime();
 
   const isAdmin = me?.roles.some((r) => r.role === 'ADMIN') ?? false;
   const [collapsed, setCollapsed] = useState(
@@ -156,6 +160,7 @@ function SidebarNav({ isAdmin, collapsed }: { isAdmin: boolean; collapsed: boole
         {NAV_ITEMS.map((item) => (
           <SidebarLink key={item.to} {...item} collapsed={collapsed} />
         ))}
+        {isAdmin && <SidebarLink to="/staff/audit" icon={ScrollText} label="Audit log" collapsed={collapsed} />}
         {isAdmin && <SidebarLink to="/staff/admin" icon={Settings} label="Admin" collapsed={collapsed} />}
       </nav>
     </>

@@ -131,7 +131,12 @@ export class IssuesService {
           id: c.id,
           body: c.body,
           visibility: c.visibility,
-          author: c.author ? { id: c.author.id, name: c.author.name } : null,
+          authorType: c.authorType,
+          author: c.author
+            ? { id: c.author.id, name: c.author.name }
+            : c.authorType === ActorType.REPORTER
+              ? { id: null, name: c.authorName ?? 'Reporter' }
+              : null,
           createdAt: c.createdAt,
           editedAt: c.editedAt,
         })),
@@ -222,8 +227,30 @@ export class IssuesService {
 
   // ---- Mutations -----------------------------------------------------------
 
+  // Public single-issue handlers return the refreshed detail. The actual
+  // write/audit/emit work lives in the `apply*` cores so the bulk loop can reuse
+  // it on an already-loaded issue without the per-issue detail round-trip.
+
   async changeStatus(staff: AuthenticatedStaff, issueId: string, dto: UpdateStatusDto) {
     const issue = await this.loadForWrite(issueId);
+    await this.applyStatus(staff, issue, dto);
+    return this.getDetail(issueId);
+  }
+
+  async changeAssignment(staff: AuthenticatedStaff, issueId: string, dto: UpdateAssignmentDto) {
+    const issue = await this.loadForWrite(issueId);
+    await this.applyAssignment(staff, issue, dto);
+    return this.getDetail(issueId);
+  }
+
+  async changePriority(staff: AuthenticatedStaff, issueId: string, dto: UpdatePriorityDto) {
+    const issue = await this.loadForWrite(issueId);
+    await this.applyPriority(staff, issue, dto);
+    return this.getDetail(issueId);
+  }
+
+  private async applyStatus(staff: AuthenticatedStaff, issue: Issue, dto: UpdateStatusDto) {
+    const issueId = issue.id;
     this.assertVersion(issue, dto.version);
     this.assertCanTransition(staff, issue.platform.id);
 
@@ -263,12 +290,14 @@ export class IssuesService {
       to: dto.status,
       actorStaffId: staff.id,
     } satisfies IssueStatusChangedEvent);
-
-    return this.getDetail(issueId);
   }
 
-  async changeAssignment(staff: AuthenticatedStaff, issueId: string, dto: UpdateAssignmentDto) {
-    const issue = await this.loadForWrite(issueId);
+  private async applyAssignment(
+    staff: AuthenticatedStaff,
+    issue: Issue,
+    dto: UpdateAssignmentDto,
+  ) {
+    const issueId = issue.id;
     this.assertVersion(issue, dto.version);
 
     const oldAssigneeId = issue.assignee?.id ?? null;
@@ -314,16 +343,14 @@ export class IssuesService {
       assigneeId: newAssignee?.id ?? null,
       actorStaffId: staff.id,
     } satisfies IssueAssignedEvent);
-
-    return this.getDetail(issueId);
   }
 
-  async changePriority(staff: AuthenticatedStaff, issueId: string, dto: UpdatePriorityDto) {
-    const issue = await this.loadForWrite(issueId);
+  private async applyPriority(staff: AuthenticatedStaff, issue: Issue, dto: UpdatePriorityDto) {
+    const issueId = issue.id;
     this.assertVersion(issue, dto.version);
 
     const from = issue.priority;
-    if (from === dto.priority) return this.getDetail(issueId);
+    if (from === dto.priority) return;
     issue.priority = dto.priority;
 
     await this.dataSource.transaction(async (em) => {
@@ -342,15 +369,13 @@ export class IssuesService {
       );
     });
 
-    this.events.emit('issue.priority_changed', {
+    this.events.emit(IssueEvents.PRIORITY_CHANGED, {
       issueId,
       platformId: issue.platform.id,
       from,
       to: dto.priority,
       actorStaffId: staff.id,
     } satisfies IssuePriorityChangedEvent);
-
-    return this.getDetail(issueId);
   }
 
   // Apply one change to many issues. Each issue is validated and written through
@@ -380,12 +405,14 @@ export class IssuesService {
           skipped.push({ id, reason: 'Out of scope' });
           continue;
         }
+        // Reuse the loaded issue and skip the per-issue getDetail round-trip
+        // that the public single-issue handlers do.
         if (dto.op === BulkOp.STATUS) {
-          await this.changeStatus(staff, id, { status: dto.value as IssueStatus, version: issue.version });
+          await this.applyStatus(staff, issue, { status: dto.value as IssueStatus, version: issue.version });
         } else if (dto.op === BulkOp.PRIORITY) {
-          await this.changePriority(staff, id, { priority: dto.value as Priority, version: issue.version });
+          await this.applyPriority(staff, issue, { priority: dto.value as Priority, version: issue.version });
         } else {
-          await this.changeAssignment(staff, id, { assigneeId: dto.value || null, version: issue.version });
+          await this.applyAssignment(staff, issue, { assigneeId: dto.value || null, version: issue.version });
         }
         updated += 1;
       } catch (e) {

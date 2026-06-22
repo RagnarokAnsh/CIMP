@@ -16,10 +16,29 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // The two-field intake: description + attachments (OD-04: ≤5 files, ≤10MB,
-// png/jpeg/webp/pdf).
+// png/jpeg/webp/pdf). Mirrors the backend limits in src/common/constants.ts.
+const MAX_FILES = 5;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
+
+function validateFiles(files: FileList | null): string | null {
+  if (!files || files.length === 0) return null;
+  if (files.length > MAX_FILES) return `At most ${MAX_FILES} files may be attached.`;
+  for (const f of Array.from(files)) {
+    if (!ALLOWED_MIME_TYPES.includes(f.type)) {
+      return `"${f.name}" is not a supported type (PNG, JPEG, WEBP, PDF).`;
+    }
+    if (f.size > MAX_FILE_BYTES) {
+      return `"${f.name}" is larger than 10 MB.`;
+    }
+  }
+  return null;
+}
+
 export function NewIssuePage() {
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<FileList | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -90,13 +109,17 @@ export function NewIssuePage() {
               type="file"
               multiple
               accept="image/png,image/jpeg,image/webp,application/pdf"
-              onChange={(e) => setFiles(e.target.files)}
+              onChange={(e) => {
+                setFiles(e.target.files);
+                setFileError(validateFiles(e.target.files));
+              }}
             />
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Paperclip className="h-3 w-3" />
               Up to 5 files, 10&nbsp;MB each. PNG, JPEG, WEBP, PDF.
               {fileCount > 0 && <span className="text-foreground">· {fileCount} selected</span>}
             </p>
+            {fileError && <p className="text-xs text-destructive">{fileError}</p>}
           </div>
 
           {mutation.isError && (
@@ -105,7 +128,7 @@ export function NewIssuePage() {
             </Alert>
           )}
 
-          <Button type="submit" disabled={mutation.isPending || description.length < 10}>
+          <Button type="submit" disabled={mutation.isPending || description.length < 10 || Boolean(fileError)}>
             {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             {mutation.isPending ? 'Submitting…' : 'Submit issue'}
           </Button>

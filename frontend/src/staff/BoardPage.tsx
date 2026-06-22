@@ -103,9 +103,13 @@ export function BoardPage() {
         onError: (err: any) => {
           // Roll back the optimistic move and explain.
           setItems((prev) => prev.map((i) => (i.id === issue.id ? { ...i, status: from } : i)));
-          const msg = err?.response?.status === 409
-            ? `${issue.referenceNo} changed elsewhere — refresh and retry.`
-            : err?.response?.data?.message ?? 'Move failed.';
+          if (err?.response?.status === 409) {
+            // Pull fresh rows + versions so the retry doesn't conflict again.
+            queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
+            toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
+            return;
+          }
+          const msg = err?.response?.data?.message ?? 'Move failed.';
           toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
         },
       },
@@ -145,6 +149,11 @@ export function BoardPage() {
       })
       .catch((err: any) => {
         setItems((list) => list.map((i) => (i.id === issue.id ? { ...i, assignee: prev } : i)));
+        if (err?.response?.status === 409) {
+          queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
+          toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
+          return;
+        }
         toast.error(err?.response?.data?.message ?? 'Could not assign.');
       });
   }

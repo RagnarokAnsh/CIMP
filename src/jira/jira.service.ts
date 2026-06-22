@@ -9,6 +9,8 @@ import { Issue, Platform } from '../entities';
 // model and rate limits before going live — Atlassian changes them. This uses
 // Basic auth with an account email + API token, which is the current
 // documented approach for server-to-server calls.
+const REQUEST_TIMEOUT_MS = 15_000;
+
 @Injectable()
 export class JiraService {
   private readonly logger = new Logger(JiraService.name);
@@ -59,10 +61,23 @@ export class JiraService {
         method: 'POST',
         headers: { Authorization: this.authHeader(), 'X-Atlassian-Token': 'no-check' },
         body: form,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       },
     );
     if (!res.ok) {
       throw new Error(`Jira attachment failed (${res.status}) for ${jiraKey}`);
+    }
+  }
+
+  // Posts a comment to an existing Jira issue (used for one-way status echoes —
+  // safer than attempting workflow transitions, which need project-specific
+  // transition ids).
+  async addComment(jiraKey: string, text: string): Promise<void> {
+    const res = await this.request('POST', `/rest/api/3/issue/${jiraKey}/comment`, {
+      body: this.toAdf(text),
+    });
+    if (!res.ok) {
+      throw new Error(`Jira comment failed (${res.status}) for ${jiraKey}`);
     }
   }
 
@@ -75,6 +90,7 @@ export class JiraService {
         Accept: 'application/json',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   }
 
