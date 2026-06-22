@@ -29,10 +29,19 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
+        {/* Hero with the three headline stats. */}
+        <Skeleton className="h-44 rounded-2xl sm:h-40" />
+        {/* SLA tiles. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
         </div>
+        {/* Trend chart. */}
         <Skeleton className="h-72" />
+        {/* Breakdown grid. */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-44" />)}
+        </div>
       </div>
     );
   }

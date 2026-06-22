@@ -1,4 +1,5 @@
 import * as jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcryptjs';
 import { AppDataSource } from '../src/data-source';
 import {
   AuditEvent, Comment, Issue, NotificationLog, Platform, Reporter,
@@ -55,6 +56,9 @@ const DESCRIPTIONS = [
   'Time zone on shipment timestamps is off by one hour since the daylight-saving change.',
   'Bulk edit silently drops changes when more than 50 rows are selected at once.',
 ];
+
+// Shared dev password for every seeded staff account (printed at the end).
+const DEV_PASSWORD = 'Password123!';
 
 const STAFF = [
   { sub: 'oidc|priya', name: 'Priya Nair', email: 'priya.nair@cimp.dev', roles: [{ role: Role.ADMIN, platform: null }] },
@@ -130,9 +134,17 @@ async function main() {
   const staffRepo = ds.getRepository(StaffUser);
   const roleRepo = ds.getRepository(UserPlatformRole);
   const staffBySub = new Map<string, StaffUser>();
+  const passwordHash = await bcrypt.hash(DEV_PASSWORD, 10);
   for (const s of STAFF) {
     const user = await staffRepo.save(
-      staffRepo.create({ idpSubject: s.sub, name: s.name, email: s.email, status: AccountStatus.ACTIVE }),
+      staffRepo.create({
+        // Self-issued JWT login keys identity on `local:<email>`.
+        idpSubject: `local:${s.email}`,
+        name: s.name,
+        email: s.email,
+        status: AccountStatus.ACTIVE,
+        passwordHash,
+      }),
     );
     staffBySub.set(s.sub, user);
     for (const r of s.roles) {
@@ -343,7 +355,8 @@ async function main() {
   console.log('\n──────────────────────────────────────────────────────────');
   console.log('Reporter login (valid 2h) — open the reporter UI with:');
   console.log(`  http://localhost:5173/reporter/issues?handoff=${token}`);
-  console.log('\nStaff sign-in is via OIDC. Seeded staff (idpSubject → role):');
+  console.log(`\nStaff sign-in (email + password). All accounts share the password: ${DEV_PASSWORD}`);
+  console.log(`  ${'EMAIL'.padEnd(28)} ROLE / SCOPE`);
   for (const s of STAFF) {
     const scope = s.roles.map((r) => `${r.role}${r.platform ? `@${r.platform}` : ' (global)'}`).join(', ');
     console.log(`  ${s.email.padEnd(28)} ${scope}`);

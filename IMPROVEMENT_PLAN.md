@@ -13,7 +13,8 @@
 - Env-configurable SLA targets (`SLA_HOURS_*`, `SLA_AT_RISK_FRACTION`).
 - Real ClamAV `ScanService` (`SCAN_DRIVER=clamav`, INSTREAM over TCP) with a non-fatal prod warning when scanning is the no-op.
 - Two-way Jira: outbound status-echo comment on transition (idempotent create + timeouts from the prior pass) and inbound status webhook `POST /api/integrations/jira/webhook` (shared-secret gated, no sync loop).
-- **Self-issued JWT staff auth** (no external IdP): `POST /api/auth/login` (bcrypt + HS256), `JwtAuthGuard` verifies it alongside dev/OIDC, admin `POST /api/admin/staff` + `/:id/password`, frontend email/password login via `VITE_AUTH_MODE=local`. RBAC stays in the DB (roles never in the token). Smoke-tested end-to-end (create → login → `/staff/me` 200; wrong password / no token → 401).
+- **Single self-issued JWT staff auth** (no external IdP; dev shim + OIDC removed): `POST /api/auth/login` (bcrypt + HS256), `JwtAuthGuard` verifies it, admin `POST /api/admin/staff` + `/:id/password`, frontend email/password login. RBAC stays in the DB (roles never in the token). Seeds create staff with printed credentials. Smoke-tested end-to-end (login → `/staff/me` 200; wrong password → 401; removed dev endpoint → 404).
+- **Concurrency/atomicity fixes**: Jira attachment sync race (scan-complete event + `jira_synced` claim), reporter upsert retry on 23505, atomic admin audit (transactions), atomic Jira webhook write. `data-source.ts` now loads `.env` so seeds/migrations hit the right DB.
 - **SSE live updates**: `GET /api/staff/events` (auth via `?access_token=`, scope-filtered per staff, 25s heartbeat). The board, issue lists, detail, and notification bell now update live via `useStaffRealtime`; the bell poll is now a 10-min backstop. Smoke-tested end-to-end (401 without token, `text/event-stream` with, and a real `issue.status_changed` event delivered to a connected admin).
 
 **Deferred (intentional):**

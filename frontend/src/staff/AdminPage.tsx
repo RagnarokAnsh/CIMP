@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Boxes, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type { PlatformItem, Role } from '@/api/types';
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/empty';
 import { initials } from '@/lib/format';
 import { roleLabel } from '@/lib/issue-meta';
+import { Spinner } from '@/components/ui/spinner';
 
 interface StaffWithRoles {
   id: string;
@@ -106,7 +107,7 @@ function PlatformsTab() {
               </div>
               <DialogFooter>
                 <Button onClick={() => create.mutate()} disabled={!key || !name || create.isPending}>
-                  {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Create
+                  {create.isPending && <Spinner />} Create
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -240,7 +241,7 @@ function StaffTab() {
             </Select>
           </div>
           <Button onClick={() => assign.mutate()} disabled={!staffUserId || assign.isPending}>
-            {assign.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Assign role
+            {assign.isPending && <Spinner />} Assign role
           </Button>
         </CardContent>
       </Card>

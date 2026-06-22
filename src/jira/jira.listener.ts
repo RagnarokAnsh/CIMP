@@ -5,10 +5,12 @@ import { Repository } from 'typeorm';
 import { JiraSyncStatus, ScanStatus } from '../common/enums';
 import { Attachment, Issue } from '../entities';
 import {
-  IssueCreatedEvent, IssueEvents, IssueStatusChangedEvent,
+  AttachmentsScannedEvent, IssueCreatedEvent, IssueEvents, IssueStatusChangedEvent,
 } from '../events/issue-events';
 import { StorageService } from '../storage/storage.service';
 import { JiraService } from './jira.service';
+
+const SERVABLE_SCAN = [ScanStatus.CLEAN, ScanStatus.SKIPPED];
 
 const MAX_ATTEMPTS = 3;
 
@@ -54,11 +56,26 @@ export class JiraListener {
         jiraIssueKey: key,
         jiraSyncStatus: JiraSyncStatus.SYNCED,
       });
-      await this.pushAttachments(evt.issueId, key);
+      // Push any attachments already scanned by now; the rest are pushed when the
+      // ATTACHMENTS_SCANNED event fires (scanning runs concurrently with this).
+      await this.syncAttachments(evt.issueId, key);
     } catch (err) {
       this.logger.error(`Jira sync failed for ${issue.referenceNo}: ${(err as Error).message}`);
       await this.issues.update(issue.id, { jiraSyncStatus: JiraSyncStatus.FAILED });
     }
+  }
+
+  // Once scanning finishes, push the now-servable attachments to the linked Jira
+  // issue (if it exists yet). Handles the common case where scanning completes
+  // after the Jira issue was created.
+  @OnEvent(IssueEvents.ATTACHMENTS_SCANNED, { async: true })
+  async onAttachmentsScanned(evt: AttachmentsScannedEvent): Promise<void> {
+    const issue = await this.issues.findOne({
+      where: { id: evt.issueId },
+      relations: { platform: true },
+    });
+    if (!issue?.jiraIssueKey || !issue.platform.jiraEnabled || !this.jira.isConfigured()) return;
+    await this.syncAttachments(evt.issueId, issue.jiraIssueKey);
   }
 
   // Outbound status echo: when an issue with a linked Jira key transitions, add
@@ -83,11 +100,22 @@ export class JiraListener {
     }
   }
 
-  private async pushAttachments(issueId: string, jiraKey: string): Promise<void> {
-    // Only push files that passed (or skipped) scanning.
+  // Pushes each servable (CLEAN/SKIPPED), not-yet-synced attachment to Jira.
+  // Callable from both the create-path and the scan-complete path; an atomic
+  // claim (`update WHERE jira_synced=false`) ensures each file is pushed once
+  // even if both paths run concurrently.
+  private async syncAttachments(issueId: string, jiraKey: string): Promise<void> {
     const files = await this.attachments.find({ where: { issue: { id: issueId } } });
     for (const a of files) {
-      if (a.scanStatus === ScanStatus.INFECTED || a.scanStatus === ScanStatus.PENDING) continue;
+      if (a.jiraSynced || !SERVABLE_SCAN.includes(a.scanStatus)) continue;
+
+      // Claim the file; skip if another path already claimed it.
+      const claim = await this.attachments.update(
+        { id: a.id, jiraSynced: false },
+        { jiraSynced: true },
+      );
+      if (!claim.affected) continue;
+
       try {
         const buffer = await this.storage.read(a.storageKey);
         await this.withRetry(() =>
@@ -98,6 +126,8 @@ export class JiraListener {
           }),
         );
       } catch (err) {
+        // Release the claim so a later retry can push it.
+        await this.attachments.update(a.id, { jiraSynced: false });
         this.logger.error(`Jira attachment push failed for ${a.filename}: ${(err as Error).message}`);
       }
     }

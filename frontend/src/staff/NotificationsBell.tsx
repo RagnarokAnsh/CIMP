@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { CenteredSpinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 const TRIGGER_META: Record<string, { label: string; icon: typeof Bell }> = {
@@ -29,7 +30,7 @@ export function NotificationsBell() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['staff', 'notifications'],
     queryFn: async () => (await staffApi.get<NotificationFeed>('/staff/notifications')).data,
     // SSE drives live freshness (see useStaffRealtime); this long poll is just a
@@ -94,7 +95,9 @@ export function NotificationsBell() {
         </div>
 
         <div className="max-h-96 overflow-y-auto">
-          {items.length === 0 ? (
+          {isLoading && items.length === 0 ? (
+            <CenteredSpinner label="Loading…" className="min-h-32" />
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
               <div className="rounded-full bg-muted p-3 text-muted-foreground">
                 <Bell className="size-5" />

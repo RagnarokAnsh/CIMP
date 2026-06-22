@@ -2,7 +2,7 @@ import {
   BadRequestException, ConflictException, Injectable, NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { DataSource, IsNull, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { ActorType, Role } from '../common/enums';
 import { Platform, StaffUser, UserPlatformRole } from '../entities';
@@ -21,6 +21,7 @@ export class AdminService {
     @InjectRepository(Platform) private readonly platforms: Repository<Platform>,
     @InjectRepository(StaffUser) private readonly staff: Repository<StaffUser>,
     @InjectRepository(UserPlatformRole) private readonly roles: Repository<UserPlatformRole>,
+    private readonly dataSource: DataSource,
     private readonly audit: AuditService,
   ) {}
 
@@ -35,22 +36,25 @@ export class AdminService {
     const existing = await this.platforms.findOne({ where: { key: dto.key } });
     if (existing) throw new ConflictException(`Platform key "${dto.key}" already exists.`);
 
-    const platform = await this.platforms.save(
-      this.platforms.create({
-        key: dto.key,
-        name: dto.name,
-        status: dto.status,
-        jiraProjectKey: dto.jiraProjectKey ?? null,
-        jiraEnabled: dto.jiraEnabled ?? false,
-        handoffSecret: dto.handoffSecret ?? this.newSecret(),
-      }),
-    );
-    await this.audit.record({
-      actorType: ActorType.STAFF,
-      actorId: admin.id,
-      action: 'PLATFORM_CREATED',
-      newValue: platform.key,
-      metadata: { platformId: platform.id },
+    const platform = await this.dataSource.transaction(async (em) => {
+      const saved = await em.save(
+        this.platforms.create({
+          key: dto.key,
+          name: dto.name,
+          status: dto.status,
+          jiraProjectKey: dto.jiraProjectKey ?? null,
+          jiraEnabled: dto.jiraEnabled ?? false,
+          handoffSecret: dto.handoffSecret ?? this.newSecret(),
+        }),
+      );
+      await this.audit.record({
+        actorType: ActorType.STAFF,
+        actorId: admin.id,
+        action: 'PLATFORM_CREATED',
+        newValue: saved.key,
+        metadata: { platformId: saved.id },
+      }, em);
+      return saved;
     });
     return this.toPlatform(platform);
   }
@@ -64,12 +68,14 @@ export class AdminService {
     if (dto.jiraProjectKey !== undefined) platform.jiraProjectKey = dto.jiraProjectKey;
     if (dto.jiraEnabled !== undefined) platform.jiraEnabled = dto.jiraEnabled;
 
-    await this.platforms.save(platform);
-    await this.audit.record({
-      actorType: ActorType.STAFF,
-      actorId: admin.id,
-      action: 'PLATFORM_UPDATED',
-      metadata: { platformId: id },
+    await this.dataSource.transaction(async (em) => {
+      await em.save(platform);
+      await this.audit.record({
+        actorType: ActorType.STAFF,
+        actorId: admin.id,
+        action: 'PLATFORM_UPDATED',
+        metadata: { platformId: id },
+      }, em);
     });
     return this.toPlatform(platform);
   }
@@ -80,12 +86,14 @@ export class AdminService {
     const platform = await this.platforms.findOne({ where: { id } });
     if (!platform) throw new NotFoundException('Platform not found');
     platform.handoffSecret = this.newSecret();
-    await this.platforms.save(platform);
-    await this.audit.record({
-      actorType: ActorType.STAFF,
-      actorId: admin.id,
-      action: 'PLATFORM_SECRET_ROTATED',
-      metadata: { platformId: id },
+    await this.dataSource.transaction(async (em) => {
+      await em.save(platform);
+      await this.audit.record({
+        actorType: ActorType.STAFF,
+        actorId: admin.id,
+        action: 'PLATFORM_SECRET_ROTATED',
+        metadata: { platformId: id },
+      }, em);
     });
     return { id: platform.id, key: platform.key, handoffSecret: platform.handoffSecret };
   }
@@ -121,20 +129,19 @@ export class AdminService {
     });
     if (existing) throw new ConflictException('A staff user with that email already exists.');
 
-    const user = await this.staff.save(
-      this.staff.create({
-        idpSubject,
-        name: dto.name,
-        email,
-        passwordHash: await LocalAuthService.hashPassword(dto.password),
-      }),
-    );
-    await this.audit.record({
-      actorType: ActorType.STAFF,
-      actorId: admin.id,
-      action: 'STAFF_CREATED',
-      newValue: email,
-      metadata: { staffUserId: user.id },
+    const passwordHash = await LocalAuthService.hashPassword(dto.password);
+    const user = await this.dataSource.transaction(async (em) => {
+      const saved = await em.save(
+        this.staff.create({ idpSubject, name: dto.name, email, passwordHash }),
+      );
+      await this.audit.record({
+        actorType: ActorType.STAFF,
+        actorId: admin.id,
+        action: 'STAFF_CREATED',
+        newValue: email,
+        metadata: { staffUserId: saved.id },
+      }, em);
+      return saved;
     });
     return { id: user.id, name: user.name, email: user.email, status: user.status };
   }
@@ -144,12 +151,14 @@ export class AdminService {
     const user = await this.staff.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Staff user not found');
     user.passwordHash = await LocalAuthService.hashPassword(dto.password);
-    await this.staff.save(user);
-    await this.audit.record({
-      actorType: ActorType.STAFF,
-      actorId: admin.id,
-      action: 'STAFF_PASSWORD_SET',
-      metadata: { staffUserId: id },
+    await this.dataSource.transaction(async (em) => {
+      await em.save(user);
+      await this.audit.record({
+        actorType: ActorType.STAFF,
+        actorId: admin.id,
+        action: 'STAFF_PASSWORD_SET',
+        metadata: { staffUserId: id },
+      }, em);
     });
     return { ok: true };
   }
@@ -182,19 +191,22 @@ export class AdminService {
     });
     if (existing) throw new ConflictException('That role assignment already exists.');
 
-    const grant = await this.roles.save(
-      this.roles.create({
-        staffUser: { id: user.id } as any,
-        platform: platform ? ({ id: platform.id } as any) : null,
-        role: dto.role,
-      }),
-    );
-    await this.audit.record({
-      actorType: ActorType.STAFF,
-      actorId: admin.id,
-      action: 'ROLE_ASSIGNED',
-      newValue: dto.role,
-      metadata: { staffUserId: user.id, platformId: dto.platformId ?? null, grantId: grant.id },
+    const grant = await this.dataSource.transaction(async (em) => {
+      const saved = await em.save(
+        this.roles.create({
+          staffUser: { id: user.id } as any,
+          platform: platform ? ({ id: platform.id } as any) : null,
+          role: dto.role,
+        }),
+      );
+      await this.audit.record({
+        actorType: ActorType.STAFF,
+        actorId: admin.id,
+        action: 'ROLE_ASSIGNED',
+        newValue: dto.role,
+        metadata: { staffUserId: user.id, platformId: dto.platformId ?? null, grantId: saved.id },
+      }, em);
+      return saved;
     });
     return { id: grant.id, role: grant.role, platformId: dto.platformId ?? null };
   }
@@ -205,13 +217,15 @@ export class AdminService {
       relations: { staffUser: true, platform: true },
     });
     if (!grant) throw new NotFoundException('Role assignment not found');
-    await this.roles.remove(grant);
-    await this.audit.record({
-      actorType: ActorType.STAFF,
-      actorId: admin.id,
-      action: 'ROLE_REVOKED',
-      oldValue: grant.role,
-      metadata: { staffUserId: grant.staffUser?.id, platformId: grant.platform?.id ?? null },
+    await this.dataSource.transaction(async (em) => {
+      await em.remove(grant);
+      await this.audit.record({
+        actorType: ActorType.STAFF,
+        actorId: admin.id,
+        action: 'ROLE_REVOKED',
+        oldValue: grant.role,
+        metadata: { staffUserId: grant.staffUser?.id, platformId: grant.platform?.id ?? null },
+      }, em);
     });
     return { ok: true };
   }

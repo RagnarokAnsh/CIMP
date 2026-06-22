@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { LifeBuoy, Loader2 } from 'lucide-react';
+import { LifeBuoy } from 'lucide-react';
 import { setStaffTokenGetter, setStaffUnauthorizedHandler } from '@/api/client';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,18 +11,20 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StaffLayout } from './StaffLayout';
 import { StaffWorkspaceRoutes } from './routes';
 
-// Self-issued JWT (password) login mode. Enabled with VITE_AUTH_MODE=local and
-// the backend's JWT_SECRET set. No external IdP involved.
-export const localAuthEnabled = import.meta.env.VITE_AUTH_MODE === 'local';
-
+// Self-issued JWT (email/password) login — the only staff auth. No external IdP.
 const TOKEN_KEY = 'staff_token';
 
-// Keep the axios staff client's bearer in sync with the stored token.
+// Holds the stored token; the getter is registered from the component (see
+// below) so the dev/local/OIDC modules never clobber each other's getter at
+// import time.
 let currentToken: string | null = sessionStorage.getItem(TOKEN_KEY);
-setStaffTokenGetter(() => currentToken ?? undefined);
 
 export function LocalStaffApp() {
   const [token, setToken] = useState<string | null>(currentToken);
+
+  // Register the token getter during render (not an effect) so it's active
+  // before child query effects fire — only the mounted staff app sets this.
+  setStaffTokenGetter(() => currentToken ?? undefined);
 
   const setSession = (t: string | null) => {
     currentToken = t;
@@ -104,7 +107,7 @@ function LoginForm({ onLogin }: { onLogin: (token: string) => void }) {
               />
             </div>
             <Button type="submit" className="w-full" disabled={pending || !email || !password}>
-              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {pending && <Spinner />}
               {pending ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>

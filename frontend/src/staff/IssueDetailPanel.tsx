@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AtSign, Download, FileText, Loader2, Lock, MessageSquare, Send, UserCheck, Users,
+  AtSign, Lock, MessageSquare, Send, UserCheck, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
-import { downloadFile } from '@/lib/download';
+import { AttachmentGallery } from '@/components/AttachmentGallery';
+import { Spinner } from '@/components/ui/spinner';
 import type {
   AssigneeOption, CommentVisibility, IssueStatus, Priority, StaffIssueDetail, StaffMe,
 } from '@/api/types';
@@ -189,14 +190,6 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
     });
   }
 
-  async function downloadAttachment(attachmentId: string, filename: string) {
-    try {
-      await downloadFile(staffApi, `/staff/attachments/${attachmentId}/download`, filename);
-    } catch {
-      toast.error('Could not download that file.');
-    }
-  }
-
   function onCommentKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (!mention || mentionSuggestions.length === 0) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx((i) => (i + 1) % mentionSuggestions.length); }
@@ -234,8 +227,22 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
         <div className="space-y-6">
           <Card>
             <CardHeader><CardTitle className="text-base">Description</CardTitle></CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <p className="whitespace-pre-wrap text-sm leading-relaxed">{data.description}</p>
+              {data.attachments.length > 0 && (
+                <AttachmentGallery
+                  api={staffApi}
+                  urlFor={(a) => `/staff/attachments/${a.id}/download`}
+                  attachments={data.attachments.map((a) => ({
+                    id: a.id,
+                    filename: a.filename,
+                    contentType: a.contentType,
+                    sizeBytes: a.sizeBytes,
+                    servable: a.scanStatus === 'CLEAN' || a.scanStatus === 'SKIPPED',
+                    scanLabel: a.scanStatus,
+                  }))}
+                />
+              )}
             </CardContent>
           </Card>
 
@@ -325,7 +332,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                         </SelectContent>
                       </Select>
                       <Button onClick={() => addComment.mutate()} disabled={!body.trim() || addComment.isPending}>
-                        {addComment.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        {addComment.isPending ? <Spinner /> : <Send className="h-4 w-4" />}
                         Post
                       </Button>
                     </div>
@@ -373,39 +380,13 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
             </CardContent>
           </Card>
 
-          {data.attachments.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-base">Attachments</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                {data.attachments.map((a) => {
-                  const servable = a.scanStatus === 'CLEAN' || a.scanStatus === 'SKIPPED';
-                  return (
-                    <div key={a.id} className="flex items-center gap-2 text-sm">
-                      <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{a.filename}</span>
-                      {!servable && (
-                        <Badge variant="outline" className="text-muted-foreground">{a.scanStatus}</Badge>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="ml-auto"
-                        disabled={!servable}
-                        title={servable ? 'Download' : `Unavailable (scan: ${a.scanStatus})`}
-                        aria-label={`Download ${a.filename}`}
-                        onClick={() => downloadAttachment(a.id, a.filename)}
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          )}
-
           <Card>
-            <CardHeader><CardTitle className="text-base">Actions</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                Actions
+                {busy && <Spinner className="h-3.5 w-3.5 text-muted-foreground" />}
+              </CardTitle>
+            </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Move status to</p>

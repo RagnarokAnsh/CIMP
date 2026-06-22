@@ -53,7 +53,19 @@ export class ReporterService {
       reporter.name = ctx.reporter.name;
       reporter.email = ctx.reporter.email;
     }
-    return this.reporters.save(reporter);
+
+    try {
+      return await this.reporters.save(reporter);
+    } catch (e) {
+      // Concurrent first-time submit: another request inserted this reporter
+      // between our findOne and save (unique on platform + portalUserId). Re-read
+      // and use the existing row instead of surfacing a 500.
+      if (this.isUniqueViolation(e)) {
+        const existing = await this.findReporter(ctx);
+        if (existing) return existing;
+      }
+      throw e;
+    }
   }
 
   private validateFiles(files: Express.Multer.File[]): void {

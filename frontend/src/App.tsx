@@ -5,11 +5,14 @@ import { MyIssuesPage } from './reporter/MyIssuesPage';
 import { ReporterIssueDetailPage } from './reporter/ReporterIssueDetailPage';
 import { StaffApp } from './staff/StaffApp';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { GlobalLoadingBar } from '@/components/GlobalLoadingBar';
 import { cn } from '@/lib/utils';
 
 export function App() {
   return (
-    <Routes>
+    <>
+      <GlobalLoadingBar />
+      <Routes>
       {/* Reporter surface (embedded in portals; auth via hand-off token). */}
       <Route path="/" element={<Navigate to="/reporter/issues" replace />} />
       <Route path="/reporter/new" element={<ReporterShell><NewIssuePage /></ReporterShell>} />
@@ -19,11 +22,12 @@ export function App() {
         element={<ReporterShell><ReporterIssueDetailPage /></ReporterShell>}
       />
 
-      {/* Staff workspace (OIDC). */}
+      {/* Staff workspace. */}
       <Route path="/staff/*" element={<StaffApp />} />
 
       <Route path="*" element={<div className="p-8 text-muted-foreground">Not found.</div>} />
-    </Routes>
+      </Routes>
+    </>
   );
 }
 

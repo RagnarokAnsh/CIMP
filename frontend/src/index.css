@@ -269,6 +269,15 @@
   }
 }
 
+/* Indeterminate top loading bar (GlobalLoadingBar): a sliver sliding across. */
+@keyframes cimp-loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.cimp-loading-bar {
+  animation: cimp-loading-bar 1.1s ease-in-out infinite;
+}
+
 /* Motion is opt-in to a calm baseline: honor the OS preference everywhere. */
 @media (prefers-reduced-motion: reduce) {
   *,

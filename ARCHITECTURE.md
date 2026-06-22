@@ -31,7 +31,7 @@ flowchart TD
   end
 
   subgraph Auth["Auth backbone"]
-    AuthM[AuthModule\nOIDC + DevAuth + JwtAuthGuard]
+    AuthM[AuthModule\nLocalAuth JWT + JwtAuthGuard]
     Authz[AuthzModule\nScopeService + guards]
   end
 
@@ -65,7 +65,7 @@ flowchart TD
 |---|---|---|
 | `HandoffModule` | token verify, `@Handoff()` | `HandoffGuard` |
 | `ReporterModule` | intake, my-issues | `HandoffGuard` |
-| `AuthModule` | OIDC + dev login, `/staff/me` | `JwtAuthGuard` |
+| `AuthModule` | self-issued JWT login, `/staff/me` | `JwtAuthGuard` |
 | `AuthzModule` | `ScopeService`, role/scope checks | `PlatformAccessGuard`, `RolesGuard` |
 | `IssuesModule` | list/detail/status/assign/priority, CSV, attachment download | Jwt + PlatformAccess |
 | `CommentsModule` | add/edit comments | Jwt + PlatformAccess |
@@ -80,8 +80,8 @@ flowchart TD
 ## 2. Request & authorization flow
 
 Two independent auth paths. Reporters never log in (signed portal token); staff
-use OIDC (or the dev shim), then every issue-scoped route resolves the issue's
-platform and checks role + scope.
+sign in with email/password for a self-issued JWT, then every issue-scoped route
+resolves the issue's platform and checks role + scope.
 
 ```mermaid
 flowchart TD
@@ -89,9 +89,9 @@ flowchart TD
   HG -- valid --> RC[ReporterController] --> RS[ReporterService]
   HG -- invalid --> R401[401]
 
+  L([POST /auth/login]) -- "bcrypt ok" --> TK[sign JWT with JWT_SECRET]
   S([Staff request]) --> JG{JwtAuthGuard}
-  JG -- "DEV_AUTH: dev token" --> UP[upsert StaffUser + roles]
-  JG -- "OIDC: JWKS verify" --> UP
+  JG -- "verify JWT (JWT_SECRET)" --> UP[upsert StaffUser + roles]
   JG -- no/bad token --> S401[401]
   UP --> PG{PlatformAccessGuard\n+ @Roles}
   PG -- "resolve issue.platformId\ncanAccessPlatform?" --> SC[Controller -> Service]
@@ -175,10 +175,9 @@ flowchart TD
 
   Rep --> NI[NewIssuePage] & MI[MyIssuesPage] & RD[ReporterIssueDetailPage]
 
-  Staff -->|VITE_DEV_AUTH| Dev[DevStaffApp\nrole picker]
-  Staff -->|else| Oidc[StaffAuthProvider\nOIDC]
-  Dev & Oidc --> Layout[StaffLayout] --> Routes[routes.tsx]
-  Routes --> IL[IssuesListPage] & ID[StaffIssueDetailPage] & DB[DashboardPage] & AD[AdminPage]
+  Staff --> Login[LocalStaffApp\nemail/password login]
+  Login --> Layout[StaffLayout] --> Routes[routes.tsx]
+  Routes --> IL[IssuesListPage] & ID[StaffIssueDetailPage] & DB[DashboardPage] & AD[AdminPage] & AU[AuditPage]
   DB --> TC[TrendChart] & AN[AnimatedNumber]
 
   subgraph api["api/"]
@@ -202,6 +201,6 @@ flowchart TD
 | POST/PATCH | `/api/staff/issues/:id/comments`, `/api/staff/comments/:id` | [comments.controller.ts](src/comments/comments.controller.ts) |
 | GET | `/api/staff/dashboard` | [dashboard.controller.ts](src/dashboard/dashboard.controller.ts) |
 | GET/POST/PATCH/DELETE | `/api/admin/platforms…`, `/api/admin/staff`, `/api/admin/roles…` | [admin.controller.ts](src/admin/admin.controller.ts) |
-| GET/POST | `/api/auth/dev/users`, `/api/auth/dev/login` (dev only) | [dev-auth.controller.ts](src/auth/dev-auth.controller.ts) |
+| POST | `/api/auth/login` (staff email/password → JWT) | [local-auth.controller.ts](src/auth/local-auth.controller.ts) |
 | GET | `/api/docs` (Swagger) | — |
 ```

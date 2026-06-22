@@ -9,36 +9,40 @@ describe('JiraInboundService.applyWebhook', () => {
   });
 
   function make(issue: any) {
-    const issues = {
+    // Mimic em inside dataSource.transaction(cb) → cb(em).
+    const em = {
       findOne: jest.fn().mockResolvedValue(issue),
       save: jest.fn().mockResolvedValue(issue),
     };
+    const dataSource = {
+      transaction: jest.fn(async (cb: any) => cb(em)),
+    };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
-    const service = new JiraInboundService(issues as any, audit as any);
-    return { service, issues, audit };
+    const service = new JiraInboundService(dataSource as any, audit as any);
+    return { service, em, audit };
   }
 
   it('maps "done" to RESOLVED and records an audit event', async () => {
     const issue = { id: 'i1', referenceNo: 'SUP-1', status: IssueStatus.IN_PROGRESS, resolvedAt: null };
-    const { service, issues, audit } = make(issue);
+    const { service, em, audit } = make(issue);
 
     const res = await service.applyWebhook(payload('JIRA-1', 'done'));
 
     expect(res.applied).toBe(true);
     expect(issue.status).toBe(IssueStatus.RESOLVED);
     expect(issue.resolvedAt).toBeInstanceOf(Date);
-    expect(issues.save).toHaveBeenCalled();
+    expect(em.save).toHaveBeenCalled();
     expect(audit.record).toHaveBeenCalled();
   });
 
   it('is a no-op when the status already matches', async () => {
     const issue = { id: 'i1', referenceNo: 'SUP-1', status: IssueStatus.IN_PROGRESS };
-    const { service, issues } = make(issue);
+    const { service, em } = make(issue);
 
     const res = await service.applyWebhook(payload('JIRA-1', 'indeterminate'));
 
     expect(res.applied).toBe(false);
-    expect(issues.save).not.toHaveBeenCalled();
+    expect(em.save).not.toHaveBeenCalled();
   });
 
   it('ignores unknown categories and missing fields', async () => {

@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { StaffUser, UserPlatformRole } from '../entities';
-import { AuthenticatedStaff, OidcClaims, StaffRoleGrant } from './auth.types';
+import { AuthenticatedStaff, TokenClaims, StaffRoleGrant } from './auth.types';
 
 @Injectable()
 export class AuthService {
@@ -11,17 +10,14 @@ export class AuthService {
     @InjectRepository(StaffUser) private readonly staff: Repository<StaffUser>,
     @InjectRepository(UserPlatformRole)
     private readonly roles: Repository<UserPlatformRole>,
-    private readonly config: ConfigService,
   ) {}
 
-  // Upsert the StaffUser from verified token claims. The IdP masters identity;
-  // our DB only mirrors it so we can attach role grants (the source of truth
-  // for scope). Called on every authenticated request.
-  async upsertFromClaims(claims: OidcClaims): Promise<AuthenticatedStaff> {
-    const nameClaim = this.config.get<string>('oidc.nameClaim') ?? 'name';
-    const emailClaim = this.config.get<string>('oidc.emailClaim') ?? 'email';
-    const name = (claims[nameClaim] as string) ?? claims.sub;
-    const email = (claims[emailClaim] as string) ?? '';
+  // Upsert the StaffUser from verified token claims. The token masters identity;
+  // our DB mirrors it so we can attach role grants (the source of truth for
+  // scope). Called on every authenticated request.
+  async upsertFromClaims(claims: TokenClaims): Promise<AuthenticatedStaff> {
+    const name = claims.name ?? claims.sub;
+    const email = claims.email ?? '';
 
     let user = await this.staff.findOne({ where: { idpSubject: claims.sub } });
     if (!user) {

@@ -11,8 +11,8 @@ There are two audiences and two completely separate auth paths:
   hands it over; this API trusts that signature. See
   [Connecting a portal](#connecting-a-portal-reporter-hand-off).
 - **Staff** — your support team (focal points, developers, admins). They sign in
-  with an identity provider (OIDC) — or a local dev shim — and every issue-scoped
-  route enforces **role + platform scope**. See
+  with an email/password (a self-issued JWT — no external IdP), and every
+  issue-scoped route enforces **role + platform scope**. See
   [Authentication & RBAC](#authentication--rbac).
 
 ---
@@ -64,7 +64,7 @@ Auth: every route requires a valid `X-Handoff-Token` header (`src/handoff/`).
 
 ## Staff API (`/api/staff`, `/api/admin`)
 
-Auth: OIDC bearer token (or dev shim) → `JwtAuthGuard`; issue-scoped routes add
+Auth: self-issued JWT bearer token → `JwtAuthGuard`; issue-scoped routes add
 `PlatformAccessGuard` + `@Roles`.
 
 - **Identity** — `GET /api/staff/me`.
@@ -173,16 +173,15 @@ That's the whole integration. Every reporter API call then sends the token as
 
 ## Authentication & RBAC
 
-Two independent systems; you can change the **staff** one freely without touching
-the reporter hand-off.
+Staff auth is a **self-issued JWT** (email/password) — no Keycloak, no external
+IdP. It's independent of the reporter hand-off.
 
-The golden rule across every method below: **the token proves *identity* (who you
-are); the database decides *authorization* (what you can do).** Roles are never in
-the token — so you can change someone's access instantly without a re-login, and
-swapping login methods never touches RBAC.
+The golden rule: **the token proves *identity* (who you are); the database decides
+*authorization* (what you can do).** Roles are never in the token — so you can
+change someone's access instantly without a re-login.
 
-**RBAC model (identical for every login method):** a `StaffUser` holds
-`UserPlatformRole` grants of `{ role, platform | null }`.
+**RBAC model:** a `StaffUser` holds `UserPlatformRole` grants of
+`{ role, platform | null }`.
 - `FOCAL_POINT` — always per-platform.
 - `DEVELOPER` — per-platform or global (`platform = null`).
 - `ADMIN` — always global.
@@ -191,47 +190,34 @@ swapping login methods never touches RBAC.
 `scopedPlatformIds` (`'ALL' | string[]`) and `canAccessPlatform`. The **server**
 enforces it on every issue-scoped route; the frontend only gates UI for UX.
 
-### Choose a staff login method
+### How it works
 
-`JwtAuthGuard` tries each configured method in turn (self-issued JWT → dev shim →
-OIDC), so you can enable one or several. Pick what you need:
-
-| Method | Enable with | Use when |
-|---|---|---|
-| **Self-issued JWT** (built-in) | backend `JWT_SECRET` + frontend `VITE_AUTH_MODE=local` | You want simple RBAC, no external service. **Recommended.** |
-| **OIDC SSO** | `OIDC_*` (backend) + `VITE_OIDC_*` (frontend) | You already have an IdP (Keycloak/Auth0/Entra/…). |
-| **Dev shim** | `DEV_AUTH=true` + `VITE_DEV_AUTH=true` | Local dev only; a role picker, force-disabled in production. |
-
-### Self-issued JWT (built-in — no Keycloak, no IdP)
-
-This is fully implemented. The API issues and verifies its own HS256 tokens; no
-external service is involved.
-
-1. **Configure it.** Set a strong random `JWT_SECRET` (and optional
-   `JWT_EXPIRES_IN`, default `8h`) in the backend `.env`; set `VITE_AUTH_MODE=local`
-   in `frontend/.env`. The staff workspace then shows an email/password sign-in.
-2. **Create staff + passwords** (admin, via the API or an Admin UI button):
+1. **Configure.** Set a strong random `JWT_SECRET` (e.g. `openssl rand -hex 32`)
+   and optional `JWT_EXPIRES_IN` (default `8h`) in the backend `.env`. No frontend
+   auth config is needed — the staff workspace always shows an email/password sign-in.
+2. **Create staff + passwords** (admin):
    - `POST /api/admin/staff` `{ name, email, password }` — creates a `StaffUser`
      (keyed `idp_subject = local:<email>`), password bcrypt-hashed at rest.
    - `POST /api/admin/staff/:id/password` `{ password }` — reset a password.
-3. **Grant roles** as usual: `POST /api/admin/roles` `{ staffUserId, role, platformId? }`.
-4. **Sign in.** `POST /api/auth/login` `{ email, password }` → `{ accessToken }`.
+   - Or just run `npm run seed` / `npm run seed:demo`, which create staff with
+     printed credentials.
+3. **Grant roles:** `POST /api/admin/roles` `{ staffUserId, role, platformId? }`.
+4. **Sign in:** `POST /api/auth/login` `{ email, password }` → `{ accessToken }`.
    The SPA stores it and sends it as `Authorization: Bearer …`; SSE uses
    `?access_token=`. Login is rate-limited; `passwordHash` is `select: false` so it
    never leaves the DB.
 
-How it works under the hood (`src/auth/local-auth.service.ts`): on login we
-`bcrypt.compare` then `jwt.sign({ sub, name, email }, JWT_SECRET)`; on every
-request `JwtAuthGuard` `jwt.verify`s with the same secret and calls
-`AuthService.upsertFromClaims` — the exact same path OIDC uses, so RBAC is
-untouched. The token carries no roles.
+Under the hood (`src/auth/local-auth.service.ts`): on login we `bcrypt.compare`
+then `jwt.sign({ sub, name, email }, JWT_SECRET)`; on every request `JwtAuthGuard`
+`jwt.verify`s with the same secret and calls `AuthService.upsertFromClaims`. The
+token carries no roles.
 
 > Refresh/expiry: the default is a single `8h` token plus a logout the frontend
 > forgets. To add refresh tokens later, issue a short access token and a refresh
-> endpoint — the 401 handling and SSE token-in-query already work the same way.
-
-If you later want SSO, just configure `OIDC_*` instead (or as well) — nothing else
-changes, because roles never lived in the token.
+> endpoint — the 401 handling and SSE token-in-query work the same way.
+>
+> Want SSO later? Because roles live in the DB (never the token), adding an OIDC
+> path is purely an identity-verification swap; RBAC is unaffected.
 
 ---
 
@@ -246,14 +232,15 @@ npm run start:dev                    # API on :3000 under /api
 ```
 
 Frontend (in `frontend/`): `npm run dev` (`:5173`, proxies `/api` → `:3000`).
-With `VITE_DEV_AUTH=true` the staff workspace shows a role picker — no IdP needed.
+`npm run seed` prints a staff login (email + password) — sign in at `/staff`.
 
 ### Full demo dataset
 
 ```bash
 npm run seed:demo   # WIPES the schema (dev only): 4 platforms, 9 staff w/ roles,
                     # ~45 issues across every status/priority, comments, audit,
-                    # then prints a 2-hour reporter URL and the seeded staff.
+                    # then prints a 2-hour reporter URL and a staff credentials
+                    # table (all accounts share one printed dev password).
 ```
 
 ## Tests
@@ -269,7 +256,7 @@ Tests run without a database (boundaries stubbed).
 
 The app **fails closed** in production (`src/config/env.validation.ts`): with
 `NODE_ENV=production` it refuses to boot if `DB_SYNCHRONIZE=true`, `CORS_ORIGINS`
-is `*`/unset, `DEV_AUTH=true`, or OIDC is unconfigured (when dev-auth is off).
+is `*`/unset, or `JWT_SECRET` is missing.
 
 - **Migrations:** set `DB_SYNCHRONIZE=false`; generate a baseline against a live DB
   (`npm run migration:generate`) then `npm run migration:run`. (Includes the

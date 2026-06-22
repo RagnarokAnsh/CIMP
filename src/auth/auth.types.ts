@@ -16,8 +16,9 @@ export interface StaffRoleGrant {
   platformId: string | null;
 }
 
-// Validated OIDC access-token claims (a subset; IdPs add many more).
-export interface OidcClaims {
+// Validated self-issued JWT claims.
+export interface TokenClaims {
   sub: string;
-  [claim: string]: unknown;
+  name?: string;
+  email?: string;
 }

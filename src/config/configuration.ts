@@ -33,16 +33,8 @@ export default () => ({
       forcePathStyle: (process.env.S3_FORCE_PATH_STYLE ?? 'true') === 'true',
     },
   },
-  oidc: {
-    issuer: process.env.OIDC_ISSUER,
-    jwksUri: process.env.OIDC_JWKS_URI,
-    audience: process.env.OIDC_AUDIENCE,
-    // Claim names can vary by IdP; allow overrides.
-    nameClaim: process.env.OIDC_NAME_CLAIM ?? 'name',
-    emailClaim: process.env.OIDC_EMAIL_CLAIM ?? 'email',
-  },
-  // Self-issued JWT staff auth (no external IdP). Enabled when JWT_SECRET is set;
-  // the API both mints (POST /api/auth/login) and verifies these HS256 tokens.
+  // Self-issued JWT staff auth (the only staff auth). The API both mints
+  // (POST /api/auth/login) and verifies these HS256 tokens.
   auth: {
     jwtSecret: process.env.JWT_SECRET,
     jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
@@ -73,13 +65,4 @@ export default () => ({
   // Authorization policy seam for OD-09: may focal points change issue status?
   focalPointCanTransition:
     (process.env.FOCAL_POINT_CAN_TRANSITION ?? 'false') === 'true',
-
-  // DEV ONLY: a local staff login that bypasses OIDC so the staff workspace can
-  // be exercised without an identity provider. Force-disabled in production.
-  devAuth: {
-    enabled:
-      (process.env.DEV_AUTH ?? 'false') === 'true' &&
-      process.env.NODE_ENV !== 'production',
-    secret: process.env.DEV_AUTH_SECRET ?? 'dev-only-not-for-production',
-  },
 });

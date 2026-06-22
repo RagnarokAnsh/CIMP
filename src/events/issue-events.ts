@@ -8,6 +8,9 @@ export const IssueEvents = {
   PRIORITY_CHANGED: 'issue.priority_changed',
   ASSIGNED: 'issue.assigned',
   COMMENT_ADDED: 'comment.added',
+  // Emitted once an issue's attachments have finished scanning, so downstream
+  // sync (e.g. Jira) can push the now-servable files.
+  ATTACHMENTS_SCANNED: 'issue.attachments_scanned',
 } as const;
 
 export interface IssueCreatedEvent {
@@ -45,4 +48,8 @@ export interface CommentAddedEvent {
   reporterVisible: boolean;
   actorStaffId: string;
   mentionStaffIds: string[];
+}
+
+export interface AttachmentsScannedEvent {
+  issueId: string;
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Paperclip } from 'lucide-react';
+import { Paperclip } from 'lucide-react';
 import { toast } from 'sonner';
 import { reporterApi } from '@/api/client';
 import { getHandoffToken } from '@/api/handoff';
@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Spinner } from '@/components/ui/spinner';
 
 // The two-field intake: description + attachments (OD-04: ≤5 files, ≤10MB,
 // png/jpeg/webp/pdf). Mirrors the backend limits in src/common/constants.ts.
@@ -129,7 +130,7 @@ export function NewIssuePage() {
           )}
 
           <Button type="submit" disabled={mutation.isPending || description.length < 10 || Boolean(fileError)}>
-            {mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {mutation.isPending && <Spinner />}
             {mutation.isPending ? 'Submitting…' : 'Submit issue'}
           </Button>
         </form>

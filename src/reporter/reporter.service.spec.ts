@@ -77,3 +77,46 @@ describe('ReporterService reference-number collision handling', () => {
     expect(transaction).toHaveBeenCalledTimes(5);
   });
 });
+
+// A2 regression: concurrent first-time reporter submits race on the
+// (platform, portalUserId) unique index. The losing save must recover by
+// re-reading the row the winner inserted, not 500.
+describe('ReporterService reporter upsert race', () => {
+  const ctx: HandoffContext = {
+    platformId: 'p1',
+    platformKey: 'demo',
+    reporter: { portalUserId: 'u1', name: 'Ada', email: 'ada@example.com' },
+  };
+  const existing = { id: 'r1', name: 'Ada', email: 'ada@example.com' };
+  const uniqueViolation = () => new QueryFailedError('insert', [], { code: '23505' } as any);
+
+  it('recovers from a 23505 by returning the concurrently-inserted reporter', async () => {
+    const reporters = {
+      // 1st call (upsertReporter): not found → tries insert; 2nd call
+      // (findReporter after the violation): the winner's row.
+      findOne: jest.fn().mockResolvedValueOnce(null).mockResolvedValue(existing),
+      create: jest.fn((x) => x),
+      save: jest.fn().mockRejectedValue(uniqueViolation()),
+    };
+    const issues = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'issue-1', referenceNo: 'SUP-1', status: IssueStatus.NEW, priority: Priority.MEDIUM,
+        description: 'x', createdAt: new Date(), updatedAt: new Date(), attachments: [], comments: [],
+      }),
+    };
+    const service = new ReporterService(
+      reporters as any,
+      issues as any,
+      {} as any,
+      { findOne: jest.fn() } as any,
+      { save: jest.fn() } as any,
+      { transaction: jest.fn().mockResolvedValue('issue-1') } as any,
+      { emit: jest.fn() } as any,
+    );
+
+    // Resolves (no rethrow) despite the insert hitting 23505 — proving recovery.
+    const result = await service.createIssue(ctx, { description: 'x' } as any, []);
+    expect(result.id).toBe('issue-1');
+    expect(reporters.save).toHaveBeenCalled();
+  });
+});

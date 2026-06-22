@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, FileText, Loader2, MessageSquare, Send } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { reporterApi } from '@/api/client';
 import type { ReporterIssueDetail } from '@/api/types';
-import { downloadFile } from '@/lib/download';
+import { AttachmentGallery } from '@/components/AttachmentGallery';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -46,14 +47,6 @@ export function ReporterIssueDetailPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Could not send your reply.'),
   });
 
-  async function download(attachmentId: string, filename: string) {
-    try {
-      await downloadFile(reporterApi, `/issues/${id}/attachments/${attachmentId}`, filename);
-    } catch {
-      toast.error('Could not download that file.');
-    }
-  }
-
   if (isLoading) return <Skeleton className="h-64 w-full" />;
   if (isError || !data) {
     return <Alert variant="destructive"><AlertDescription>Issue not found.</AlertDescription></Alert>;
@@ -86,26 +79,18 @@ export function ReporterIssueDetailPage() {
           {data.attachments.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Attachments</h3>
-              <ul className="space-y-1">
-                {data.attachments.map((a) => (
-                  <li key={a.id} className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FileText className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{a.filename}</span>
-                    <span className="text-xs">({Math.round(a.sizeBytes / 1024)} KB)</span>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="ml-auto"
-                      disabled={!a.downloadable}
-                      title={a.downloadable ? 'Download' : 'Not available yet (being scanned)'}
-                      aria-label={`Download ${a.filename}`}
-                      onClick={() => download(a.id, a.filename)}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+              <AttachmentGallery
+                api={reporterApi}
+                urlFor={(a) => `/issues/${id}/attachments/${a.id}`}
+                attachments={data.attachments.map((a) => ({
+                  id: a.id,
+                  filename: a.filename,
+                  contentType: a.contentType,
+                  sizeBytes: a.sizeBytes,
+                  servable: a.downloadable,
+                  scanLabel: 'scanning…',
+                }))}
+              />
             </div>
           )}
 
@@ -157,7 +142,7 @@ export function ReporterIssueDetailPage() {
                   disabled={!reply.trim() || sendReply.isPending}
                   onClick={() => sendReply.mutate()}
                 >
-                  {sendReply.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {sendReply.isPending ? <Spinner /> : <Send className="h-4 w-4" />}
                   Send reply
                 </Button>
               </div>

@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { ActorType, IssueStatus } from '../common/enums';
 import { Issue } from '../entities';
 import { AuditService } from '../audit/audit.service';
@@ -20,7 +19,7 @@ export class JiraInboundService {
   private readonly logger = new Logger(JiraInboundService.name);
 
   constructor(
-    @InjectRepository(Issue) private readonly issues: Repository<Issue>,
+    private readonly dataSource: DataSource,
     private readonly audit: AuditService,
   ) {}
 
@@ -33,24 +32,30 @@ export class JiraInboundService {
     const target = CATEGORY_TO_STATUS[categoryKey];
     if (!target) return { applied: false };
 
-    const issue = await this.issues.findOne({ where: { jiraIssueKey: key } });
-    if (!issue || issue.status === target) return { applied: false };
+    // Status write + audit row in one transaction. We re-read inside the txn so
+    // the audit reflects the actual prior state. Jira is authoritative for
+    // inbound status, so this intentionally overrides the local value.
+    const applied = await this.dataSource.transaction(async (em) => {
+      const issue = await em.findOne(Issue, { where: { jiraIssueKey: key } });
+      if (!issue || issue.status === target) return false;
 
-    const from = issue.status;
-    issue.status = target;
-    if (target === IssueStatus.RESOLVED) issue.resolvedAt = issue.resolvedAt ?? new Date();
-    await this.issues.save(issue);
-    await this.audit.record({
-      issueId: issue.id,
-      actorType: ActorType.SYSTEM,
-      actorId: null,
-      action: 'STATUS_CHANGED',
-      field: 'status',
-      oldValue: from,
-      newValue: target,
-      metadata: { source: 'jira-webhook', jiraKey: key },
+      const from = issue.status;
+      issue.status = target;
+      if (target === IssueStatus.RESOLVED) issue.resolvedAt = issue.resolvedAt ?? new Date();
+      await em.save(issue);
+      await this.audit.record({
+        issueId: issue.id,
+        actorType: ActorType.SYSTEM,
+        actorId: null,
+        action: 'STATUS_CHANGED',
+        field: 'status',
+        oldValue: from,
+        newValue: target,
+        metadata: { source: 'jira-webhook', jiraKey: key },
+      }, em);
+      this.logger.log(`Jira webhook: ${issue.referenceNo} ${from} → ${target} (from ${key})`);
+      return true;
     });
-    this.logger.log(`Jira webhook: ${issue.referenceNo} ${from} → ${target} (from ${key})`);
-    return { applied: true };
+    return { applied };
   }
 }

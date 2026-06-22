@@ -22,7 +22,6 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           query: ['@tanstack/react-query', '@tanstack/react-table'],
-          auth: ['react-oidc-context', 'oidc-client-ts'],
           charts: ['recharts'],
           motion: ['gsap', '@gsap/react'],
         },

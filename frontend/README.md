@@ -10,16 +10,18 @@ Two surfaces:
   Embedded in portals; authenticated by the hand-off token, which it captures
   from a `?handoff=` query param or a `postMessage({ type: 'handoff', token })`
   and sends as `X-Handoff-Token` on every request. No login UI.
-- **Staff** (`/staff/*`) — OIDC login (`react-oidc-context`), then the issue
-  list (filters + search + CSV export), issue detail (status transitions,
-  priority, comments with an internal / reporter-visible toggle, audit history),
-  dashboard, and admin screens (platforms, staff/roles). UI is gated by role for
-  UX; the **server is the real enforcement point**.
+- **Staff** (`/staff/*`) — email/password login (self-issued JWT; the token is
+  stored and sent as `Authorization: Bearer …`), then the issue list (filters +
+  search + CSV export), issue detail (status transitions, priority, comments with
+  an internal / reporter-visible toggle, audit history), dashboard, and admin
+  screens (platforms, staff/roles). UI is gated by role for UX; the **server is
+  the real enforcement point**.
 
 ## Run
 
 ```bash
-cp .env.example .env        # set VITE_OIDC_* for staff login (optional in dev)
+cp .env.example .env        # no auth config needed; set VITE_PORTAL_ORIGINS only
+                            # if portals deliver the hand-off token via postMessage
 npm install
 npm run dev                 # http://localhost:5173 (proxies /api → :3000)
 ```

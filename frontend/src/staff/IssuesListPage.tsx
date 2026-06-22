@@ -100,6 +100,16 @@ export function IssuesListPage() {
 
   const patch = (p: Partial<Filters>) => { setFilters((f) => ({ ...f, ...p })); setPage(1); };
 
+  // Live search: debounce keystrokes so results refresh as you type. Hitting
+  // Enter (the form submit) still applies immediately.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (qInput !== filters.q) patch({ q: qInput });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qInput, filters.q]);
+
   const { data: me } = useQuery({
     queryKey: ['staff', 'me'],
     queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
@@ -451,12 +461,14 @@ export function IssuesListPage() {
         </Card>
       )}
 
-      {/* SPLIT VIEW — selectable list on the left, full detail on the right */}
+      {/* SPLIT VIEW — selectable list on the left, full detail on the right.
+          Fixed height at lg+ so both panes are equal height and scroll
+          independently (master–detail), instead of one column running long. */}
       {view === 'split' && (
-        <div className="grid items-start gap-4 lg:grid-cols-[clamp(300px,30%,400px)_1fr]">
-          <Card className="overflow-hidden">
-            <CardContent className="p-0">
-              <div className="max-h-[calc(100vh-17rem)] divide-y divide-border/60 overflow-y-auto">
+        <div className="grid gap-4 lg:h-[calc(100vh-15rem)] lg:min-h-[28rem] lg:grid-cols-[clamp(300px,30%,400px)_1fr]">
+          <Card className="flex flex-col overflow-hidden">
+            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+              <div className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto">
                 {isLoading &&
                   Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} className="p-3"><Skeleton className="h-12 w-full" /></div>
@@ -504,7 +516,7 @@ export function IssuesListPage() {
             </CardContent>
           </Card>
 
-          <div className="min-w-0">
+          <div className="min-w-0 lg:overflow-y-auto lg:pr-1">
             {selectedId ? (
               <IssueDetailPanel
                 key={selectedId}

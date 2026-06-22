@@ -28,22 +28,6 @@ class EnvVars {
   DB_SYNCHRONIZE?: string;
 
   @IsOptional()
-  @IsBooleanString()
-  DEV_AUTH?: string;
-
-  @IsOptional()
-  @IsString()
-  OIDC_ISSUER?: string;
-
-  @IsOptional()
-  @IsString()
-  OIDC_JWKS_URI?: string;
-
-  @IsOptional()
-  @IsString()
-  OIDC_AUDIENCE?: string;
-
-  @IsOptional()
   @IsString()
   JWT_SECRET?: string;
 
@@ -71,9 +55,8 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
 
   const isProd = (parsed.NODE_ENV ?? process.env.NODE_ENV) === 'production';
 
-  // Fail-closed production guards. In dev these are warnings only, so the
-  // current local workflow (DB_SYNCHRONIZE=true, DEV_AUTH=true, CORS '*') is
-  // untouched.
+  // Fail-closed production guards. In dev these are warnings only, so the local
+  // workflow (DB_SYNCHRONIZE=true, CORS '*') is untouched.
   const problems: string[] = [];
 
   // DB_SYNCHRONIZE defaults to true in configuration.ts; auto-syncing the schema
@@ -89,24 +72,9 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
     problems.push('CORS_ORIGINS must be set to explicit origin(s) in production (no "*").');
   }
 
-  // The dev staff login bypasses OIDC; it is already neutered at runtime, but we
-  // reject the config too so it can never be flipped on in production.
-  if (isTrue(parsed.DEV_AUTH)) {
-    problems.push('DEV_AUTH must not be enabled in production.');
-  }
-
-  // Staff sign-in needs at least one method configured: self-issued JWT
-  // (JWT_SECRET), OIDC, or — non-prod only — the dev shim. Without dev-auth and
-  // without a JWT secret, a complete OIDC config is required.
-  if (!isTrue(parsed.DEV_AUTH) && !parsed.JWT_SECRET) {
-    const missing = (['OIDC_ISSUER', 'OIDC_JWKS_URI', 'OIDC_AUDIENCE'] as const).filter(
-      (k) => !parsed[k],
-    );
-    if (missing.length) {
-      problems.push(
-        'No staff auth configured: set JWT_SECRET (self-issued JWT) or the OIDC_* vars.',
-      );
-    }
+  // Staff auth is self-issued JWT — it cannot work without a signing secret.
+  if (!parsed.JWT_SECRET) {
+    problems.push('JWT_SECRET must be set (staff auth signs/verifies with it).');
   }
 
   if (problems.length) {

@@ -68,9 +68,10 @@ graph, ER diagram, and route table):
   must be declared on a DTO or the request is rejected.
 - **Two independent auth paths.** Reporters never log in: portals mint a
   short-lived signed JWT verified per-portal by `HandoffGuard` (sent as
-  `X-Handoff-Token`). Staff use OIDC — `JwtAuthGuard` validates the IdP token via
-  JWKS and upserts a `StaffUser`, then `PlatformAccessGuard` + `@Roles` enforce
-  access on issue-scoped routes.
+  `X-Handoff-Token`). Staff use a **self-issued JWT** (email/password): `POST
+  /api/auth/login` (`LocalAuthService`, bcrypt + HS256 signed with `JWT_SECRET`);
+  `JwtAuthGuard` verifies it and upserts a `StaffUser`, then `PlatformAccessGuard`
+  + `@Roles` enforce access. Identity is in the token; roles are always in the DB.
 - **Authorization is centralized** in `src/authz/scope.service.ts`
   (`scopedPlatformIds`, `canAccessPlatform`, `scopeAllows`). The **server is the
   enforcement point**; the frontend gates UI only for UX. A focal point of one
@@ -90,9 +91,8 @@ graph, ER diagram, and route table):
 - **Shared enums** live in `src/common/enums.ts` (`Role`, `IssueStatus`,
   `Priority`, `CommentVisibility`, `ScanStatus`, …). Reuse them; don't restring.
 - **Policy seams via env.** `FOCAL_POINT_CAN_TRANSITION` (OD-09) toggles whether
-  focal points may change status (default `false`). `DEV_AUTH=true` enables a
-  local staff login that bypasses OIDC — force-disabled when
-  `NODE_ENV=production`; pair with `VITE_DEV_AUTH=true` in the frontend.
+  focal points may change status (default `false`). `JWT_SECRET` (required) signs
+  staff tokens; create staff with `POST /api/admin/staff` or the seeds.
 - `DB_SYNCHRONIZE=true` (auto-create schema) is **dev only** — production uses
   migrations.
 - **Frontend:** shadcn/ui components in `frontend/src/components/ui/` are owned

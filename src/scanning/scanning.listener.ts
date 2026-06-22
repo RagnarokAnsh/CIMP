@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ScanStatus } from '../common/enums';
 import { Attachment } from '../entities';
-import { IssueCreatedEvent, IssueEvents } from '../events/issue-events';
+import {
+  AttachmentsScannedEvent, IssueCreatedEvent, IssueEvents,
+} from '../events/issue-events';
 import { StorageService } from '../storage/storage.service';
 import { ScanService } from './scan.service';
 
@@ -18,6 +20,7 @@ export class ScanningListener {
     @InjectRepository(Attachment) private readonly attachments: Repository<Attachment>,
     private readonly storage: StorageService,
     private readonly scanner: ScanService,
+    private readonly events: EventEmitter2,
   ) {}
 
   @OnEvent(IssueEvents.CREATED, { async: true })
@@ -25,6 +28,8 @@ export class ScanningListener {
     const pending = await this.attachments.find({
       where: { issue: { id: evt.issueId }, scanStatus: ScanStatus.PENDING },
     });
+    if (pending.length === 0) return;
+
     for (const a of pending) {
       try {
         const bytes = await this.storage.read(a.storageKey);
@@ -35,5 +40,10 @@ export class ScanningListener {
       }
       await this.attachments.save(a);
     }
+
+    // Tell downstream sync (Jira) the files are now scanned and servable.
+    this.events.emit(IssueEvents.ATTACHMENTS_SCANNED, {
+      issueId: evt.issueId,
+    } satisfies AttachmentsScannedEvent);
   }
 }
