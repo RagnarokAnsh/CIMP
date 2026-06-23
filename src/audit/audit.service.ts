@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, Repository } from 'typeorm';
+import {
+  Between, EntityManager, FindOptionsWhere, LessThanOrEqual, MoreThanOrEqual, Repository,
+} from 'typeorm';
 import { ActorType } from '../common/enums';
 import { AuditEvent } from '../entities';
 
@@ -62,21 +64,27 @@ export class AuditService {
     const page = Math.max(1, filters.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, filters.pageSize ?? 50));
 
-    const qb = this.events
-      .createQueryBuilder('e')
-      .leftJoin('e.issue', 'issue')
-      .addSelect(['issue.id', 'issue.referenceNo'])
-      .orderBy('e.created_at', 'DESC')
-      .skip((page - 1) * pageSize)
-      .take(pageSize);
+    const where: FindOptionsWhere<AuditEvent> = {};
+    if (filters.actorType) where.actorType = filters.actorType;
+    if (filters.action) where.action = filters.action;
+    if (filters.issueId) where.issue = { id: filters.issueId };
+    if (filters.from && filters.to) {
+      where.createdAt = Between(new Date(filters.from), new Date(filters.to));
+    } else if (filters.from) {
+      where.createdAt = MoreThanOrEqual(new Date(filters.from));
+    } else if (filters.to) {
+      where.createdAt = LessThanOrEqual(new Date(filters.to));
+    }
 
-    if (filters.actorType) qb.andWhere('e.actor_type = :actorType', { actorType: filters.actorType });
-    if (filters.action) qb.andWhere('e.action = :action', { action: filters.action });
-    if (filters.issueId) qb.andWhere('issue.id = :issueId', { issueId: filters.issueId });
-    if (filters.from) qb.andWhere('e.created_at >= :from', { from: filters.from });
-    if (filters.to) qb.andWhere('e.created_at <= :to', { to: filters.to });
-
-    const [rows, total] = await qb.getManyAndCount();
+    // Repository findAndCount handles relation loading + pagination correctly;
+    // a QueryBuilder join with skip/take + raw orderBy trips a TypeORM bug.
+    const [rows, total] = await this.events.findAndCount({
+      where,
+      relations: { issue: true },
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
     return {
       data: rows.map((e) => ({
         id: e.id,
