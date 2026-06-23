@@ -193,7 +193,7 @@ export function BoardPage() {
         onDragEnd={onDragEnd}
         onDragCancel={() => setActiveId(null)}
       >
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:h-[calc(100vh-13rem)] xl:grid-cols-6">
           {BOARD_STATUS_ORDER.map((status) => (
             <Column
               key={status}
@@ -211,7 +211,7 @@ export function BoardPage() {
         </div>
 
         <DragOverlay dropAnimation={null}>
-          {activeIssue ? <IssueCard issue={activeIssue} dragging /> : null}
+          {activeIssue ? <div className="w-64"><IssueCard issue={activeIssue} dragging /></div> : null}
         </DragOverlay>
       </DndContext>
       )}
@@ -236,17 +236,17 @@ function Column({
   const meta = STATUS_META[status];
 
   return (
-    <div className="flex w-72 shrink-0 flex-col self-start rounded-xl border border-border bg-sidebar/40">
-      <div className="sticky top-0 flex items-center gap-2 rounded-t-xl border-b border-border bg-sidebar/80 px-3 py-2.5 backdrop-blur">
-        <span className={cn('size-2 rounded-full', meta.dot)} aria-hidden />
-        <span className="text-sm font-semibold">{meta.label}</span>
+    <div className="flex min-w-0 flex-col rounded-xl border border-border bg-sidebar/40 xl:h-full xl:overflow-hidden">
+      <div className="flex items-center gap-2 rounded-t-xl border-b border-border bg-sidebar/80 px-3 py-2.5 backdrop-blur">
+        <span className={cn('size-2 shrink-0 rounded-full', meta.dot)} aria-hidden />
+        <span className="truncate text-sm font-semibold">{meta.label}</span>
         <Badge variant="secondary" className="ml-auto tabular-nums">{issues.length}</Badge>
       </div>
 
       <div
         ref={setNodeRef}
         className={cn(
-          'flex min-h-72 flex-col gap-2 rounded-b-xl p-2 transition-colors',
+          'flex min-h-72 flex-col gap-2 rounded-b-xl p-2 transition-colors xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
           isOver && isDropTarget && 'bg-primary/5 ring-2 ring-inset ring-primary/40',
           isOver && isInvalidTarget && 'bg-destructive/5 ring-2 ring-inset ring-destructive/40',
         )}
