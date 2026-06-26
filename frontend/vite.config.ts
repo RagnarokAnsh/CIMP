@@ -3,7 +3,9 @@ import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-// Dev server proxies /api to the NestJS backend on :3000.
+// Dev server proxies /api to the NestJS backend (default :3000, overridable
+// with VITE_PROXY_TARGET when the backend runs on another port).
+const apiTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:3000';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -12,7 +14,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api': apiTarget,
     },
   },
   build: {
