@@ -281,7 +281,7 @@ export class Baseline1718500000000 implements MigrationInterface {
     // reporter_issue_views (depends on reporters, issues)
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "reporter_issue_views" (
-        "id"             uuid DEFAULT uuid_generate_in_ossp() NOT NULL,
+        "id"             uuid DEFAULT uuid_generate_v4() NOT NULL,
         "reporter_id"    uuid,
         "issue_id"       uuid,
         "last_viewed_at" TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -297,7 +297,7 @@ export class Baseline1718500000000 implements MigrationInterface {
     // saved_views (depends on staff_users)
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "saved_views" (
-        "id"            uuid DEFAULT uuid_generate_in_ossp() NOT NULL,
+        "id"            uuid DEFAULT uuid_generate_v4() NOT NULL,
         "staff_user_id" uuid,
         "name"          character varying NOT NULL,
         "filters"       jsonb NOT NULL,
