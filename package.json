@@ -16,6 +16,7 @@
     "migration:run": "npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "seed": "ts-node scripts/seed.ts",
+    "seed:prod": "ts-node scripts/seed-prod.ts",
     "seed:demo": "ts-node scripts/seed-demo.ts",
     "token": "ts-node scripts/make-token.ts"
   },
