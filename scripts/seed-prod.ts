@@ -45,7 +45,8 @@ async function main() {
     process.exit(1);
   }
 
-  // ── Connect ───────────────────────────────────────────────────────
+  // ── Connect (never auto-sync — tables were created by migrations) ──
+  AppDataSource.setOptions({ synchronize: false });
   await AppDataSource.initialize();
   console.log('\n  Connected to database.\n');
 
