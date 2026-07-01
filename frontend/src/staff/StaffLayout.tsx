@@ -20,6 +20,7 @@ import {
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { CommandPalette } from './CommandPalette';
 import { NotificationsBell } from './NotificationsBell';
+import { SupportButton } from './SupportButton';
 
 function initials(name?: string): string {
   if (!name) return '?';
@@ -104,6 +105,7 @@ export function StaffLayout({
           </button>
 
           <div className="ml-auto flex items-center gap-1">
+            <SupportButton />
             <NotificationsBell />
             <ThemeToggle />
             <DropdownMenu>
