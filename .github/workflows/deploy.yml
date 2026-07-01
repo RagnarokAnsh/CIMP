@@ -1,0 +1,69 @@
+name: Deploy to production
+
+# Push to main → run the full build/test gate, then deploy to the EC2 box over
+# SSH. Also runnable manually from the Actions tab (workflow_dispatch).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never run two production deploys at once, and don't cancel an in-flight one.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  # ── Gate: nothing deploys unless backend + frontend build and tests pass ──
+  verify:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend — install, typecheck, test, build
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Frontend — install, typecheck, build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+  # ── Deploy: SSH into the server and run scripts/deploy.sh ──
+  deploy:
+    name: Deploy to EC2
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run remote deploy over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+          PM2_APP: ${{ secrets.PM2_APP }}
+          RUN_MIGRATIONS: ${{ secrets.RUN_MIGRATIONS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            "$SSH_USER@$SSH_HOST" \
+            "APP_DIR='$APP_DIR' PM2_APP='${PM2_APP:-cimp-api}' RUN_MIGRATIONS='${RUN_MIGRATIONS:-false}' bash -s" \
+            < scripts/deploy.sh
