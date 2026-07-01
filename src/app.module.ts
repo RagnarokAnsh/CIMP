@@ -23,6 +23,7 @@ import { JiraModule } from './jira/jira.module';
 import { HealthModule } from './health/health.module';
 import { SavedViewsModule } from './saved-views/saved-views.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { SelfSupportModule } from './self-support/self-support.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { RealtimeModule } from './realtime/realtime.module';
     HealthModule,
     SavedViewsModule,
     RealtimeModule,
+    SelfSupportModule,
   ],
   providers: [
     // Global rate limiting; intake route tightens this further.

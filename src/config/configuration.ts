@@ -65,4 +65,10 @@ export default () => ({
   // Authorization policy seam for OD-09: may focal points change issue status?
   focalPointCanTransition:
     (process.env.FOCAL_POINT_CAN_TRANSITION ?? 'false') === 'true',
+  // CIMP registered as one of its own reporter portals (dogfooding / internal
+  // support). Which platform key staff file issues under via the in-app
+  // "Get support" button. Must match an existing platform (Admin → Platforms).
+  selfSupport: {
+    platformKey: process.env.SELF_SUPPORT_PLATFORM_KEY ?? 'cimp',
+  },
 });
