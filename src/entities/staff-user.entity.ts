@@ -30,6 +30,12 @@ export class StaffUser {
   @Column({ type: 'enum', enum: AccountStatus, default: AccountStatus.ACTIVE })
   status: AccountStatus;
 
+  // Bumped on password reset (and any forced logout). The value is embedded in
+  // the login token; on every request the token's `tv` must match, so a reset
+  // or disable immediately invalidates previously-issued tokens.
+  @Column({ name: 'token_version', type: 'int', default: 1 })
+  tokenVersion: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

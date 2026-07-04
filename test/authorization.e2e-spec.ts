@@ -70,9 +70,12 @@ describe('PlatformAccessGuard (e2e)', () => {
     await request(app.getHttpServer()).get(`/api/staff/issues/${ISSUE_A}`).expect(200);
   });
 
-  it('a Portal A focal point is forbidden on a Portal B issue (403)', async () => {
+  it('a Portal A focal point gets 404 (not 403) on a Portal B issue — no existence oracle', async () => {
+    // Out-of-scope must be indistinguishable from not-found so a focal point
+    // cannot enumerate other platforms' issue ids via a 403-vs-404 difference.
     currentStaff = staff([{ role: Role.FOCAL_POINT, platformId: PORTAL_A }]);
-    await request(app.getHttpServer()).get(`/api/staff/issues/${ISSUE_B}`).expect(403);
+    const res = await request(app.getHttpServer()).get(`/api/staff/issues/${ISSUE_B}`).expect(404);
+    expect(res.body.message).toBe('Issue not found');
   });
 
   it('an admin can read any platform issue (200)', async () => {

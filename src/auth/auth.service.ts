@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { AccountStatus } from '../common/enums';
 import { StaffUser, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff, TokenClaims, StaffRoleGrant } from './auth.types';
 
@@ -15,17 +16,27 @@ export class AuthService {
   // Upsert the StaffUser from verified token claims. The token masters identity;
   // our DB mirrors it so we can attach role grants (the source of truth for
   // scope). Called on every authenticated request.
-  async upsertFromClaims(claims: TokenClaims): Promise<AuthenticatedStaff> {
+  //
+  // Returns null (→ 401) when the token is revoked: the account is no longer
+  // ACTIVE, or its tokenVersion no longer matches (e.g. after a password reset).
+  // These are re-checked on EVERY request, so revocation is immediate rather
+  // than deferred to token expiry.
+  async upsertFromClaims(claims: TokenClaims): Promise<AuthenticatedStaff | null> {
     const name = claims.name ?? claims.sub;
     const email = claims.email ?? '';
 
     let user = await this.staff.findOne({ where: { idpSubject: claims.sub } });
-    if (!user) {
+    if (user) {
+      if (user.status !== AccountStatus.ACTIVE) return null;
+      if (claims.tv !== user.tokenVersion) return null;
+      if (user.name !== name || user.email !== email) {
+        user.name = name;
+        user.email = email;
+        user = await this.staff.save(user);
+      }
+    } else {
+      // First sight of this subject (self-issued signature already verified).
       user = this.staff.create({ idpSubject: claims.sub, name, email });
-      user = await this.staff.save(user);
-    } else if (user.name !== name || user.email !== email) {
-      user.name = name;
-      user.email = email;
       user = await this.staff.save(user);
     }
 

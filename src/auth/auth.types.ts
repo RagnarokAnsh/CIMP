@@ -21,4 +21,7 @@ export interface TokenClaims {
   sub: string;
   name?: string;
   email?: string;
+  // Token version stamped at login; must match the StaffUser's current
+  // tokenVersion or the token is treated as revoked.
+  tv?: number;
 }

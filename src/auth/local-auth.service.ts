@@ -59,7 +59,7 @@ export class LocalAuthService {
         '8h') as jwt.SignOptions['expiresIn'],
     };
     const accessToken = jwt.sign(
-      { sub: user.idpSubject, name: user.name, email: user.email },
+      { sub: user.idpSubject, name: user.name, email: user.email, tv: user.tokenVersion },
       this.secret,
       options,
     );
@@ -75,11 +75,13 @@ export class LocalAuthService {
         sub: string;
         name?: string;
         email?: string;
+        tv?: number;
       };
       return await this.auth.upsertFromClaims({
         sub: claims.sub,
         name: claims.name,
         email: claims.email,
+        tv: claims.tv,
       });
     } catch {
       return null;

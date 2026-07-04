@@ -44,6 +44,14 @@ export class PlatformAccessGuard implements CanActivate {
         relations: { platform: true },
       });
       if (!issue) throw new NotFoundException('Issue not found');
+      // Hide cross-tenant existence: a staff member with NO role on the issue's
+      // platform gets 404 (identical to not-found), so issue ids cannot be
+      // enumerated across platforms via a 403-vs-404 oracle. A staff member who
+      // IS scoped to the platform but lacks the specific role for this action
+      // gets a truthful 403.
+      if (!this.scope.canAccessPlatform(staff, issue.platform.id, ALL_STAFF_ROLES)) {
+        throw new NotFoundException('Issue not found');
+      }
       if (!this.scope.canAccessPlatform(staff, issue.platform.id, required)) {
         throw new ForbiddenException('You do not have access to this issue.');
       }

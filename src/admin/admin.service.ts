@@ -151,6 +151,8 @@ export class AdminService {
     const user = await this.staff.findOne({ where: { id } });
     if (!user) throw new NotFoundException('Staff user not found');
     user.passwordHash = await LocalAuthService.hashPassword(dto.password);
+    // Invalidate any tokens issued before this reset (session revocation).
+    user.tokenVersion = (user.tokenVersion ?? 1) + 1;
     await this.dataSource.transaction(async (em) => {
       await em.save(user);
       await this.audit.record({

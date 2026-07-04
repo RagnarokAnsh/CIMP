@@ -82,6 +82,12 @@ describe('HandoffService.verify', () => {
     );
   });
 
+  it('rejects a token with no expiry (exp required)', async () => {
+    // Signed correctly but with no expiresIn → has iat, no exp.
+    const token = jwt.sign(validClaims, SECRET, { algorithm: 'HS256' });
+    await expect(service.verify(token)).rejects.toThrow(UnauthorizedException);
+  });
+
   it('rejects an unknown platform BEFORE trusting the signature', async () => {
     findOne.mockResolvedValue(null);
     await expect(service.verify(sign(validClaims))).rejects.toThrow(UnauthorizedException);

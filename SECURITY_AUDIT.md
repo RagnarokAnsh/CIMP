@@ -21,7 +21,7 @@
 | Wave | Theme | Status |
 |---|---|---|
 | **0** | Launch blockers (won't boot / silently insecure) | ✅ **DONE** (this branch) |
-| 1 | Auth & tenant isolation | ⬜ Planned |
+| **1** | Auth & tenant isolation | ◐ **In progress** — H1, H2, M2, M4 done |
 | 2 | Availability / DoS | ⬜ Planned |
 | 3 | Observability & hardening | ⬜ Planned |
 | 4 | Tests (QA) | ◐ Started (handoff spec added) |
@@ -32,7 +32,14 @@
 3. **`JWT_SECRET` ≥32-char** production guard. `env.validation.ts`
 4. **Unscanned-uploads guard** — `SCAN_DRIVER=clamav` required in prod unless `ALLOW_UNSCANNED_UPLOADS=true`. `env.validation.ts`
 5. **Issue indexes** — new `1718700000000-AddIssueIndexes` migration + `@Index` decorators on the Issue entity.
-6. **Critical test added** — `src/handoff/handoff.service.spec.ts` (9 cases covering the reporter auth trust boundary).
+6. **Critical test added** — `src/handoff/handoff.service.spec.ts` (10 cases covering the reporter auth trust boundary).
+
+### ◐ Wave 1 — done so far
+- **H1 + M4 — session revocation.** `staff_users.token_version` (new column + migration); the value is embedded in the login token and re-checked on every request; a disabled account or a password reset (which bumps the version) now invalidates live tokens immediately. `auth.service.ts`, `local-auth.service.ts`, `admin.service.ts`, `staff-user.entity.ts`.
+- **H2 — hand-off token expiry.** `verify()` now enforces a 15-min `maxAge` and rejects tokens without `exp`. `handoff.service.ts` (+2 spec cases).
+- **M2 — existence oracle closed.** Out-of-scope issue routes return 404 (identical to not-found), keeping a truthful 403 only for in-scope/wrong-role. `platform-access.guard.ts` (+e2e).
+
+> ⚠️ **Deploy note (Wave 1):** the token-version check invalidates all *existing* staff sessions on deploy — everyone re-logs in once. Intended for a security release.
 
 ---
 

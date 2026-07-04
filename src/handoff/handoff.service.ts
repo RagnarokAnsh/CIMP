@@ -6,6 +6,11 @@ import { Platform } from '../entities';
 import { PlatformStatus } from '../common/enums';
 import { HandoffClaims, HandoffContext } from './handoff.types';
 
+// Absolute server-side cap on hand-off token lifetime, independent of the exp
+// the portal set. Reporter tokens are meant to be short-lived (the sample mints
+// 5m); this backstops a leaked/over-long token.
+const HANDOFF_MAX_AGE = '15m';
+
 @Injectable()
 export class HandoffService {
   constructor(
@@ -32,13 +37,23 @@ export class HandoffService {
 
     let claims: HandoffClaims;
     try {
-      // HS256 with the per-portal secret. To support RS256 (OD-06), verify
-      // with the portal's public key here instead.
+      // HS256 with the per-portal secret. maxAge is a server-side absolute
+      // lifetime cap so a token can never be accepted indefinitely, regardless
+      // of what the portal put in exp. To support RS256 (OD-06), verify with the
+      // portal's public key here instead.
       claims = jwt.verify(token, platform.handoffSecret, {
         algorithms: ['HS256'],
+        maxAge: HANDOFF_MAX_AGE,
       }) as HandoffClaims;
     } catch {
       throw new UnauthorizedException('Invalid or expired hand-off token');
+    }
+
+    // Require an explicit expiry: jsonwebtoken only enforces exp when present, so
+    // a portal that mints a token without exp would otherwise be accepted (up to
+    // maxAge). Reject it outright.
+    if (typeof claims.exp !== 'number') {
+      throw new UnauthorizedException('Hand-off token must have an expiry (exp).');
     }
 
     if (!claims.portalUserId || !claims.email || !claims.name) {
