@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,6 +15,8 @@ import { AuthenticatedStaff } from './auth.types';
 // via ScopeService. Inert unless JWT_SECRET is configured.
 @Injectable()
 export class LocalAuthService {
+  private readonly logger = new Logger(LocalAuthService.name);
+
   constructor(
     @InjectRepository(StaffUser) private readonly staff: Repository<StaffUser>,
     private readonly config: ConfigService,
@@ -47,11 +49,15 @@ export class LocalAuthService {
     const hash = user?.passwordHash ?? '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidina';
     const ok = await bcrypt.compare(password, hash);
     if (!user || !user.passwordHash || !ok) {
+      // Auditable auth event (A09): failed login. Never log the password.
+      this.logger.warn(`Failed staff login for "${email}"`);
       throw new UnauthorizedException('Invalid email or password.');
     }
     if (user.status !== AccountStatus.ACTIVE) {
+      this.logger.warn(`Login blocked (disabled account) for "${user.email}"`);
       throw new UnauthorizedException('This account is disabled.');
     }
+    this.logger.log(`Staff login succeeded: ${user.email}`);
 
     const options: jwt.SignOptions = {
       algorithm: 'HS256',

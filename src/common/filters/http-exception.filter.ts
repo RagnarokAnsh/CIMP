@@ -2,6 +2,7 @@ import {
   ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { OptimisticLockVersionMismatchError } from 'typeorm';
 
 // Produces a consistent error body for every failure:
 // { statusCode, message, error, timestamp, path }.
@@ -14,15 +15,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const res = ctx.getResponse<Response>();
     const req = ctx.getRequest<Request>();
 
-    const status =
-      exception instanceof HttpException
-        ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
-
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | string[] = 'Internal server error';
     let error = 'Internal Server Error';
 
     if (exception instanceof HttpException) {
+      status = exception.getStatus();
       const body = exception.getResponse();
       if (typeof body === 'string') {
         message = body;
@@ -32,9 +30,26 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = (b.message as string | string[]) ?? exception.message;
         error = (b.error as string) ?? exception.name;
       }
+    } else if (exception instanceof OptimisticLockVersionMismatchError) {
+      // A concurrent write lost the optimistic-lock race. Surface it as the
+      // documented 409 (matching assertVersion) so the client can reload+retry,
+      // instead of leaking it as a generic 500.
+      status = HttpStatus.CONFLICT;
+      message = 'This issue was changed by someone else. Reload and try again.';
+      error = 'Conflict';
     } else if (exception instanceof Error) {
       // Don't leak internals to the client, but log them for ops.
       this.logger.error(exception.message, exception.stack);
+    } else {
+      // Non-Error throw (string / POJO / third-party value). Log it so no 500 is
+      // ever silent, while the client body stays generic.
+      this.logger.error(`Non-error exception: ${safeStringify(exception)}`);
+    }
+
+    // Log security-relevant denials so an on-call/SIEM can see authz probing
+    // (bad tokens, cross-scope attempts). Response body is unchanged.
+    if (status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN) {
+      this.logger.warn(`${status} ${req.method} ${req.originalUrl ?? req.url}`);
     }
 
     res.status(status).json({
@@ -44,5 +59,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: req.url,
     });
+  }
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return typeof value === 'string' ? value : JSON.stringify(value);
+  } catch {
+    return String(value);
   }
 }

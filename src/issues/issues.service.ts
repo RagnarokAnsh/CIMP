@@ -484,7 +484,11 @@ export class IssuesService {
       .split(/\s+/)
       .map((t) => t.replace(/[^a-z0-9]/g, ''))
       .filter(Boolean);
-    return { tsq: terms.map((t) => `${t}:*`).join(' & '), likeRef: `%${raw}%` };
+    // Escape LIKE metacharacters so a search of "%" or "_" matches literally
+    // (Postgres' default ESCAPE is backslash) instead of acting as a wildcard
+    // that scans the whole reference-number space.
+    const likeEscaped = raw.replace(/[\\%_]/g, '\\$&');
+    return { tsq: terms.map((t) => `${t}:*`).join(' & '), likeRef: `%${likeEscaped}%` };
   }
 
   // A single-line snippet of the description so list rows read like a summary

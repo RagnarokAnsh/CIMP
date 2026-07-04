@@ -1,4 +1,5 @@
 import * as bcrypt from 'bcryptjs';
+import { writeFileSync } from 'fs';
 import { AppDataSource } from '../src/data-source';
 import { Platform, StaffUser, UserPlatformRole } from '../src/entities';
 import { AccountStatus, PlatformStatus, Role } from '../src/common/enums';
@@ -64,7 +65,12 @@ async function main() {
         }),
       );
       console.log(`  ✓ Created platform "${platformName}" (key: ${platformKey})`);
-      console.log(`    Handoff secret: ${handoffSecret}`);
+      // Never print the signing secret to stdout — it would land in shell
+      // history, terminal scrollback, and any captured deploy logs. Write it to
+      // a restricted-permission file the operator reads once, then deletes.
+      const secretFile = `handoff-secret-${platformKey}.txt`;
+      writeFileSync(secretFile, `${handoffSecret}\n`, { mode: 0o600 });
+      console.log(`    Handoff secret written to ${secretFile} (chmod 600). Move it to your secrets manager, then delete the file.`);
     } else {
       console.log(`  • Platform "${platformKey}" already exists — skipped.`);
     }

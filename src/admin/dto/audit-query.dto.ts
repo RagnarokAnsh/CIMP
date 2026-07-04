@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min,
+  IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, Min,
 } from 'class-validator';
 import { ActorType } from '../../common/enums';
 
@@ -23,12 +23,12 @@ export class AuditQueryDto {
 
   @ApiPropertyOptional({ description: 'ISO timestamp (inclusive lower bound).' })
   @IsOptional()
-  @IsString()
+  @IsISO8601()
   from?: string;
 
   @ApiPropertyOptional({ description: 'ISO timestamp (inclusive upper bound).' })
   @IsOptional()
-  @IsString()
+  @IsISO8601()
   to?: string;
 
   @ApiPropertyOptional({ default: 1 })

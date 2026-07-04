@@ -33,10 +33,12 @@ export class CreatePlatformDto {
   jiraEnabled?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Hand-off signing secret. If omitted, a random one is generated.',
+    description:
+      'Hand-off signing secret (HS256 key). If omitted, a strong random one is '
+      + 'generated server-side. Must be at least 32 chars if supplied.',
   })
   @IsOptional()
   @IsString()
-  @Length(16, 200)
+  @Length(32, 200)
   handoffSecret?: string;
 }

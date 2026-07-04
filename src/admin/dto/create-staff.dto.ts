@@ -12,9 +12,9 @@ export class CreateStaffDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ minLength: 8, description: 'Initial password (bcrypt-hashed at rest).' })
+  @ApiProperty({ minLength: 12, description: 'Initial password (bcrypt-hashed at rest).' })
   @IsString()
-  @MinLength(8)
+  @MinLength(12)
   @MaxLength(200)
   password: string;
 }

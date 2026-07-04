@@ -21,9 +21,9 @@
 | Wave | Theme | Status |
 |---|---|---|
 | **0** | Launch blockers (won't boot / silently insecure) | ✅ **DONE** (this branch) |
-| **1** | Auth & tenant isolation | ◐ **In progress** — H1, H2, M2, M4 done |
+| **1** | Auth & tenant isolation | ◐ **Mostly done** — H1, H2, M2, M4, M1, L9, H11 done; L1 needs product decision |
 | 2 | Availability / DoS | ⬜ Planned |
-| 3 | Observability & hardening | ⬜ Planned |
+| **3** | Observability & hardening | ◐ **Mostly done** — M3, M10, M13, L16, L5, L4, L10, L11, M14, H12 done |
 | 4 | Tests (QA) | ◐ Started (handoff spec added) |
 
 ### ✅ Wave 0 — completed on `hardening/security-audit`
@@ -40,6 +40,13 @@
 - **M2 — existence oracle closed.** Out-of-scope issue routes return 404 (identical to not-found), keeping a truthful 403 only for in-scope/wrong-role. `platform-access.guard.ts` (+e2e).
 
 > ⚠️ **Deploy note (Wave 1):** the token-version check invalidates all *existing* staff sessions on deploy — everyone re-logs in once. Intended for a security release.
+
+### ◐ Wave 1 (rest) + Wave 3 — done in this batch
+- **M1 — cross-tenant `@mention` leak** (+ its SSE twin): mentions are filtered to the issue's platform members at the source (`CommentsService.addComment`), so a non-member id never reaches the bell or the SSE `targetStaffIds`.
+- **L9 — `editComment` scope recheck**: authorship is no longer sufficient; the editor must still hold a role on the comment's platform.
+- **H11 — FK NOT-NULL** migration (`TightenFkNullability`) for `issues.platform_id/reporter_id`, `comments.issue_id`, `attachments.issue_id`.
+- **H12** login audit logging (success/failure/disabled); **M10** 401/403 denial logging; **L16** non-Error throws logged; **M3** optimistic-lock mismatch → 409 (not 500); **M13** Jira webhook secret now `timingSafeEqual`; **L5** audit `from/to` ISO8601; **L4** LIKE metacharacters escaped; **L10** password min 12; **L11** seeder writes the handoff secret to a 0600 file instead of stdout; **M14** handoff secret floor raised to 32.
+- **L1** (focal-point assign/priority vs OD-09): left as a **product decision** — focal points are the triage role, so gating assignment/priority behind the status flag may be undesirable. Needs your call.
 
 ---
 
