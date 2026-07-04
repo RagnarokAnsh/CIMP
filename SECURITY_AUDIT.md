@@ -22,9 +22,9 @@
 |---|---|---|
 | **0** | Launch blockers (won't boot / silently insecure) | ✅ **DONE** (this branch) |
 | **1** | Auth & tenant isolation | ◐ **Mostly done** — H1, H2, M2, M4, M1, L9, H11 done; L1 needs product decision |
-| 2 | Availability / DoS | ⬜ Planned |
+| 2 | Availability / DoS | ◐ H9 (CSV export cap) done; H10/M6/M7/M8/L12 planned |
 | **3** | Observability & hardening | ◐ **Mostly done** — M3, M10, M13, L16, L5, L4, L10, L11, M14, H12 done |
-| 4 | Tests (QA) | ◐ Started (handoff spec added) |
+| 4 | Tests (QA) | ◐ handoff, attachment scan-gating, reporter INTERNAL-filter + cross-access done |
 
 ### ✅ Wave 0 — completed on `hardening/security-audit`
 1. **uuid-ossp extension** added to the baseline migration → prod migrate no longer fails on clean Postgres. `src/migrations/1718500000000-Baseline.ts`
@@ -125,12 +125,12 @@
 ---
 
 ## Wave 4 — test plan (priority order)
-1. ✅ `handoff.service.spec.ts` — reporter trust boundary (done).
-2. Attachment scan-gating — INFECTED/PENDING → 403, `storage.read` never called (both staff + reporter paths).
-3. Reporter INTERNAL-comment filtering — internal notes never returned to reporter.
-4. Reporter cross-access IDOR — portal-A token → 404 on portal-B issue (unit + e2e).
-5. `bulkUpdate` scoping + OD-09 gate; optimistic-lock 409 behavior; PlatformAccessGuard no-id/admin branch; full CSV-injection char class.
-6. **CI gate:** `migration:generate` must produce an empty diff (catches entity/migration drift, H11).
+1. ✅ `handoff.service.spec.ts` — reporter trust boundary (10 cases).
+2. ✅ `attachments.service.spec.ts` — INFECTED/PENDING → 403, `storage.read` never called, + scope 403/404.
+3. ✅ `reporter.visibility.spec.ts` — INTERNAL notes hidden; another reporter's issue → 404 (ownership scoping).
+4. ⬜ `bulkUpdate` scoping + OD-09 gate; optimistic-lock 409 behavior; PlatformAccessGuard no-id/admin branch; full CSV-injection char class.
+5. ⬜ **CI gate:** `migration:generate` must produce an empty diff (catches entity/migration drift, H11).
+6. ⬜ Reporter cross-access **e2e** (two portals) to complement the unit test.
 
 ## Feature roadmap (make it more like JIRA)
 _2FA deferred by request._

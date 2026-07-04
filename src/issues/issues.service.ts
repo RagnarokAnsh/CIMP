@@ -23,6 +23,9 @@ import { BulkOp, BulkUpdateDto } from './dto/bulk-update.dto';
 import { canTransition } from './status-machine';
 import { computeSla } from './sla';
 
+// Upper bound on rows a single CSV export may materialize in memory.
+const EXPORT_MAX_ROWS = 50_000;
+
 @Injectable()
 export class IssuesService {
   constructor(
@@ -80,6 +83,10 @@ export class IssuesService {
     if (Array.isArray(scope) && scope.length === 0) return [];
     const qb = this.buildListQuery(staff, dto, scope);
     qb.orderBy(`issue.${dto.sort}`, dto.order);
+    // Hard cap: without this, an unfiltered export on a large table hydrates
+    // every row + joins into memory and OOMs the process. Beyond the cap, users
+    // must narrow their filters.
+    qb.take(EXPORT_MAX_ROWS);
     return qb.getMany();
   }
 
