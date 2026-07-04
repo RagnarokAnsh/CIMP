@@ -82,6 +82,7 @@ export class ReporterController {
   ) {
     const file = await this.reporter.getAttachmentForReporter(ctx, id, attachmentId);
     res.setHeader('Content-Type', file.contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', contentDisposition(file.filename));
     res.send(file.buffer);
   }

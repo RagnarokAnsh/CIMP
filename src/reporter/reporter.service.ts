@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
+import { fromBuffer } from 'file-type';
 import {
   CommentAddedEvent, IssueCreatedEvent, IssueEvents,
 } from '../events/issue-events';
@@ -68,30 +69,40 @@ export class ReporterService {
     }
   }
 
-  private validateFiles(files: Express.Multer.File[]): void {
+  // Validates count/size and sniffs each file's REAL content type from its magic
+  // bytes — the client-declared multipart mimetype is untrusted and must never
+  // be persisted or served. Returns the detected types aligned to `files`.
+  private async validateFiles(files: Express.Multer.File[]): Promise<string[]> {
     if (files.length > MAX_FILES) {
       throw new BadRequestException(`At most ${MAX_FILES} files may be attached.`);
     }
+    const detectedTypes: string[] = [];
     for (const f of files) {
       if (f.size > MAX_FILE_BYTES) {
         throw new BadRequestException(`"${f.originalname}" exceeds the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
       }
-      if (!ALLOWED_MIME_TYPES.includes(f.mimetype)) {
-        throw new BadRequestException(`"${f.originalname}" has an unsupported type (${f.mimetype}).`);
+      const sniffed = await fromBuffer(f.buffer);
+      if (!sniffed || !ALLOWED_MIME_TYPES.includes(sniffed.mime)) {
+        throw new BadRequestException(
+          `"${f.originalname}" content is not a supported file type (PNG, JPEG, WEBP, PDF).`,
+        );
       }
+      detectedTypes.push(sniffed.mime);
     }
+    return detectedTypes;
   }
 
   async createIssue(ctx: HandoffContext, dto: CreateIssueDto, files: Express.Multer.File[]) {
-    this.validateFiles(files);
+    // Sniffed types (not the client header) are what we store and later serve.
+    const detectedTypes = await this.validateFiles(files);
     const reporter = await this.upsertReporter(ctx);
 
     // Persist files to storage first (outside the transaction).
     const stored = await Promise.all(
-      files.map(async (f) => ({
-        ...(await this.storage.save(f.buffer, f.originalname, f.mimetype)),
+      files.map(async (f, i) => ({
+        ...(await this.storage.save(f.buffer, f.originalname, detectedTypes[i])),
         filename: f.originalname,
-        contentType: f.mimetype,
+        contentType: detectedTypes[i],
         sizeBytes: f.size,
       })),
     );

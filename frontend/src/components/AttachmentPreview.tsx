@@ -61,7 +61,14 @@ export function AttachmentPreview({
             <img src={src} alt={filename} className="max-h-[70vh] max-w-full rounded-md" />
           )}
           {src && isPdf && (
-            <iframe src={src} title={filename} className="h-[70vh] w-full rounded-md border border-border" />
+            // sandbox="" renders the PDF as an opaque origin with scripts
+            // disabled, so a hostile-but-valid PDF can't run in the app origin.
+            <iframe
+              src={src}
+              title={filename}
+              sandbox=""
+              className="h-[70vh] w-full rounded-md border border-border"
+            />
           )}
           {src && !isImage && !isPdf && (
             <div className="space-y-3 text-center">

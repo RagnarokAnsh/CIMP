@@ -26,6 +26,8 @@ export class AttachmentsController {
   ) {
     const file = await this.attachments.getForStaff(staff, id);
     res.setHeader('Content-Type', file.contentType);
+    // Prevent the browser from MIME-sniffing the body into an executable type.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', contentDisposition(file.filename));
     res.send(file.buffer);
   }
