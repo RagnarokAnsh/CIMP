@@ -31,6 +31,13 @@ import { cn } from '@/lib/utils';
 
 const BOARD_PAGE_SIZE = 100; // backend caps pageSize at 100.
 
+// Soft work-in-progress limits: the column badge turns red once a column is at
+// or over its limit, nudging the team to finish work before pulling in more.
+const WIP_LIMITS: Partial<Record<IssueStatus, number>> = {
+  IN_PROGRESS: 6,
+  ON_HOLD: 4,
+};
+
 export function BoardPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -240,7 +247,19 @@ function Column({
       <div className="flex items-center gap-2 rounded-t-xl border-b border-border bg-sidebar/80 px-3 py-2.5 backdrop-blur">
         <span className={cn('size-2 shrink-0 rounded-full', meta.dot)} aria-hidden />
         <span className="truncate text-sm font-semibold">{meta.label}</span>
-        <Badge variant="secondary" className="ml-auto tabular-nums">{issues.length}</Badge>
+        {(() => {
+          const limit = WIP_LIMITS[status];
+          const over = limit !== undefined && issues.length >= limit;
+          return (
+            <Badge
+              variant={over ? 'destructive' : 'secondary'}
+              className="ml-auto tabular-nums"
+              title={limit !== undefined ? `WIP limit ${limit}` : undefined}
+            >
+              {issues.length}{limit !== undefined ? ` / ${limit}` : ''}
+            </Badge>
+          );
+        })()}
       </div>
 
       <div
