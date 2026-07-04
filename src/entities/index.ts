@@ -12,6 +12,7 @@ export { SavedView } from './saved-view.entity';
 export { IssueLink } from './issue-link.entity';
 export { Label } from './label.entity';
 export { IssueLabel } from './issue-label.entity';
+export { IssueWatcher } from './issue-watcher.entity';
 
 import { Platform } from './platform.entity';
 import { StaffUser } from './staff-user.entity';
@@ -27,9 +28,10 @@ import { SavedView } from './saved-view.entity';
 import { IssueLink } from './issue-link.entity';
 import { Label } from './label.entity';
 import { IssueLabel } from './issue-label.entity';
+import { IssueWatcher } from './issue-watcher.entity';
 
 export const ALL_ENTITIES = [
   Platform, StaffUser, UserPlatformRole, Reporter, Issue,
   Attachment, Comment, AuditEvent, NotificationLog, ReporterIssueView,
-  SavedView, IssueLink, Label, IssueLabel,
+  SavedView, IssueLink, Label, IssueLabel, IssueWatcher,
 ];

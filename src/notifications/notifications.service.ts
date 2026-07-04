@@ -5,7 +5,7 @@ import {
   AccountStatus, NotificationChannel, NotificationStatus, RecipientType, Role,
 } from '../common/enums';
 import {
-  Issue, NotificationLog, StaffUser, UserPlatformRole,
+  Issue, IssueWatcher, NotificationLog, StaffUser, UserPlatformRole,
 } from '../entities';
 import { MailService } from './mail.service';
 
@@ -21,6 +21,7 @@ export class NotificationsService {
     @InjectRepository(UserPlatformRole) private readonly roles: Repository<UserPlatformRole>,
     @InjectRepository(StaffUser) private readonly staff: Repository<StaffUser>,
     @InjectRepository(Issue) private readonly issues: Repository<Issue>,
+    @InjectRepository(IssueWatcher) private readonly watchers: Repository<IssueWatcher>,
     private readonly mail: MailService,
   ) {}
 
@@ -85,7 +86,15 @@ export class NotificationsService {
       where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
       relations: { staffUser: true },
     });
-    const candidates = [issue.assignee, ...focalGrants.map((g) => g.staffUser)];
+    const watcherRows = await this.watchers.find({
+      where: { issue: { id: issueId } },
+      relations: { staffUser: true },
+    });
+    const candidates = [
+      issue.assignee,
+      ...focalGrants.map((g) => g.staffUser),
+      ...watcherRows.map((w) => w.staffUser),
+    ];
     const recipients = this.activeRecipients(candidates).filter((r) => r.id !== actorStaffId);
     if (recipients.length === 0) return;
 

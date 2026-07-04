@@ -26,6 +26,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { SelfSupportModule } from './self-support/self-support.module';
 import { IssueLinksModule } from './issues/issue-links.module';
 import { LabelsModule } from './issues/labels.module';
+import { WatchersModule } from './issues/watchers.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { LabelsModule } from './issues/labels.module';
     SelfSupportModule,
     IssueLinksModule,
     LabelsModule,
+    WatchersModule,
   ],
   providers: [
     // Global rate limiting; intake route tightens this further.
