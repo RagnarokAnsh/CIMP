@@ -139,6 +139,27 @@ export interface SavedViewDto {
   updatedAt: string;
 }
 
+export type IssueLinkType = 'BLOCKS' | 'RELATES' | 'DUPLICATES';
+
+export interface IssueLinkView {
+  id: string;
+  type: IssueLinkType;
+  direction: 'outward' | 'inward';
+  issue: { id: string; referenceNo: string; status: IssueStatus };
+  createdAt: string;
+}
+
+export interface LabelView {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface WatchersView {
+  watching: boolean;
+  watchers: { id: string; name: string }[];
+}
+
 export interface AuditEntry {
   id: string;
   actorType: string;

@@ -30,6 +30,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { IssueWatch, IssueLabels, IssueLinks } from './IssueExtras';
 
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const UNASSIGNED = '__unassigned__';
@@ -220,6 +221,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           <PriorityBadge priority={data.priority} />
           <SlaBadge slaState={data.slaState} dueAt={data.dueAt} />
           {data.jiraIssueKey && <Badge variant="secondary">Jira {data.jiraIssueKey}</Badge>}
+          <div className="ml-auto"><IssueWatch issueId={id} /></div>
         </div>
       </div>
 
@@ -439,6 +441,9 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               </div>
             </CardContent>
           </Card>
+
+          <IssueLabels issueId={id} platformId={data.platform?.id} />
+          <IssueLinks issueId={id} />
         </div>
       </div>
     </div>
