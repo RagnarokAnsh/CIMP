@@ -24,6 +24,7 @@ import { HealthModule } from './health/health.module';
 import { SavedViewsModule } from './saved-views/saved-views.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { SelfSupportModule } from './self-support/self-support.module';
+import { IssueLinksModule } from './issues/issue-links.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { SelfSupportModule } from './self-support/self-support.module';
     SavedViewsModule,
     RealtimeModule,
     SelfSupportModule,
+    IssueLinksModule,
   ],
   providers: [
     // Global rate limiting; intake route tightens this further.

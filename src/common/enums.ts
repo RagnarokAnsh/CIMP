@@ -70,3 +70,9 @@ export enum AccountStatus {
   ACTIVE = 'ACTIVE',
   DISABLED = 'DISABLED',
 }
+
+export enum IssueLinkType {
+  BLOCKS = 'BLOCKS',
+  RELATES = 'RELATES',
+  DUPLICATES = 'DUPLICATES',
+}
