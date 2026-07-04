@@ -59,7 +59,7 @@ export class IssuesService {
     const tsq = dto.q ? this.searchParams(dto.q).tsq : '';
     if (tsq) {
       qb.addSelect(
-        `ts_rank(to_tsvector('english', issue.description), to_tsquery('english', :tsq))`,
+        `ts_rank(issue.search_vector, to_tsquery('english', :tsq))`,
         'rank',
       )
         .orderBy('rank', 'DESC')
@@ -462,18 +462,10 @@ export class IssuesService {
         new Brackets((w) => {
           w.where('issue.reference_no ILIKE :likeRef', { likeRef });
           if (tsq) {
-            w.orWhere(`to_tsvector('english', issue.description) @@ to_tsquery('english', :tsq)`, {
-              tsq,
-            }).orWhere(
-              'issue.id IN ' +
-                qb
-                  .subQuery()
-                  .select('c.issue_id')
-                  .from('comments', 'c')
-                  .where(`to_tsvector('english', c.body) @@ to_tsquery('english', :tsq)`)
-                  .getQuery(),
-              { tsq },
-            );
+            // Single indexed predicate against the stored, GIN-indexed vector
+            // (already covers description + comment bodies via the trigger), so
+            // this uses idx_issues_search_vector instead of tokenizing every row.
+            w.orWhere('issue.search_vector @@ to_tsquery(\'english\', :tsq)', { tsq });
           }
         }),
       );

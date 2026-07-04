@@ -22,7 +22,7 @@
 |---|---|---|
 | **0** | Launch blockers (won't boot / silently insecure) | ✅ **DONE** (this branch) |
 | **1** | Auth & tenant isolation | ◐ **Mostly done** — H1, H2, M2, M4, M1, L9, H11 done; L1 needs product decision |
-| 2 | Availability / DoS | ◐ H9 (CSV export cap) done; H10/M6/M7/M8/L12 planned |
+| 2 | Availability / DoS | ◐ H9 (export cap) + H10 (FTS GIN index) done; M6 (disk-streaming upload), M7/M8/L12 planned |
 | **3** | Observability & hardening | ◐ **Mostly done** — M3, M10, M13, L16, L5, L4, L10, L11, M14, H12 done |
 | 4 | Tests (QA) | ◐ handoff, attachment scan-gating, reporter INTERNAL-filter + cross-access done |
 

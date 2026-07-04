@@ -56,6 +56,17 @@ export class Issue {
   @Column({ name: 'jira_sync_status', type: 'enum', enum: JiraSyncStatus, default: JiraSyncStatus.NOT_SYNCED })
   jiraSyncStatus: JiraSyncStatus;
 
+  // Full-text vector (description weight A + comment bodies weight B), populated
+  // and GIN-indexed by the AddIssueSearchVector migration's triggers. Not
+  // managed by the ORM — the query builder only references it in the FTS filter.
+  // NULL under DB_SYNCHRONIZE (dev), where the triggers don't exist; run the
+  // migration for index-backed full-text search.
+  @Column({
+    name: 'search_vector', type: 'tsvector', nullable: true,
+    select: false, insert: false, update: false,
+  })
+  searchVector?: string;
+
   // Optimistic locking: bumped on every save; a stale version triggers a
   // 409 Conflict instead of silently overwriting a concurrent change.
   @VersionColumn({ default: 1 })
