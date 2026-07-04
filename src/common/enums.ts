@@ -76,3 +76,14 @@ export enum IssueLinkType {
   RELATES = 'RELATES',
   DUPLICATES = 'DUPLICATES',
 }
+
+export enum AutomationTrigger {
+  ISSUE_CREATED = 'ISSUE_CREATED',
+  STATUS_CHANGED = 'STATUS_CHANGED',
+}
+
+export enum AutomationAction {
+  SET_PRIORITY = 'SET_PRIORITY',
+  ASSIGN = 'ASSIGN',
+  ADD_LABEL = 'ADD_LABEL',
+}
