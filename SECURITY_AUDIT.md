@@ -134,11 +134,13 @@
 
 ## Feature roadmap (make it more like JIRA)
 _2FA deferred by request._
-1. **Issue links & sub-tasks** (blocks/relates/duplicates).
-2. **Labels/components + custom fields** per platform.
+1. ✅ **Issue links** (blocks/relates/duplicates) — backend + tests. `IssueLinksModule`. Sub-tasks + UI next.
+2. ✅ **Labels** per platform — backend + tests. `LabelsModule` (catalog + issue tagging). Components/custom-fields + UI next.
 3. **Automation rules** ("when status→X, assign/notify") on the existing domain-event bus.
 4. **Boards: swimlanes + WIP limits** (Kanban + bulk ops already exist).
 5. **SLA policies with escalations + business hours** (SLA compute exists).
 6. **JQL-like saved filters** (saved-views exist).
 7. **Email-to-issue intake** + **scoped API/integration tokens** (currently only session JWT).
-8. **Watchers + activity feed**, **@mention autocomplete** (fix M1 first).
+8. ◐ **Watchers** — backend + notification integration done (`WatchersModule`). Activity feed + @mention autocomplete + UI next.
+
+> All three shipped features are **backend-only** so far — each needs a small frontend (issue detail panel) pass to be usable in the app.
