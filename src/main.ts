@@ -7,8 +7,11 @@ import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { isProductionEnv } from './config/is-production';
 
-const isProduction = process.env.NODE_ENV === 'production';
+// Fail-closed: unset/misspelled NODE_ENV counts as production so Swagger and
+// verbose output are never exposed by an omitted env var.
+const isProduction = isProductionEnv();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

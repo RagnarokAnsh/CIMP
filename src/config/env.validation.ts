@@ -1,16 +1,27 @@
 import { plainToInstance } from 'class-transformer';
 import {
-  IsBooleanString, IsInt, IsOptional, IsString, Max, Min, validateSync,
+  IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min, validateSync,
 } from 'class-validator';
+import { isProductionEnv } from './is-production';
 
 // Environment schema. We validate the *raw* process env at boot so a typo or a
 // missing required var fails fast with a clear message instead of silently
 // defaulting deep inside the app. Most fields are optional (configuration.ts
 // supplies dev defaults); the production-safety checks below are what actually
 // matter and are enforced separately in `validate()`.
+
+// Minimum length for the HS256 staff-token signing key (256 bits as hex).
+const MIN_JWT_SECRET_LENGTH = 32;
+
 class EnvVars {
+  // Only 'development'/'test' relax the fail-closed guards; anything else
+  // (including unset or a typo) is treated as production (see isProductionEnv).
+  // A *present but invalid* value fails boot here rather than silently
+  // downgrading protections.
   @IsOptional()
-  @IsString()
+  @IsIn(['development', 'test', 'production'], {
+    message: "NODE_ENV must be one of 'development', 'test', or 'production'.",
+  })
   NODE_ENV?: string;
 
   @IsOptional()
@@ -34,6 +45,12 @@ class EnvVars {
   @IsOptional()
   @IsString()
   SCAN_DRIVER?: string;
+
+  // Conscious opt-out to serve unscanned uploads in production when no real
+  // malware scanner is configured. Defaults to off (fail closed).
+  @IsOptional()
+  @IsBooleanString()
+  ALLOW_UNSCANNED_UPLOADS?: string;
 }
 
 const isTrue = (v: string | undefined): boolean => (v ?? '').toLowerCase() === 'true';
@@ -53,18 +70,18 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
     throw new Error(`Invalid environment configuration:\n${errors.toString()}`);
   }
 
-  const isProd = (parsed.NODE_ENV ?? process.env.NODE_ENV) === 'production';
+  // Fail CLOSED: unset or unrecognized NODE_ENV counts as production, so a
+  // missing env var can never silently disable the hardening below.
+  const isProd = isProductionEnv(
+    parsed.NODE_ENV ?? (process.env.NODE_ENV as string | undefined),
+  );
 
-  // Fail-closed production guards. In dev these are warnings only, so the local
-  // workflow (DB_SYNCHRONIZE=true, CORS '*') is untouched.
   const problems: string[] = [];
 
   // DB_SYNCHRONIZE defaults to true in configuration.ts; auto-syncing the schema
   // against entities in production can silently alter/drop columns.
   if (parsed.DB_SYNCHRONIZE === undefined || isTrue(parsed.DB_SYNCHRONIZE)) {
-    problems.push(
-      'DB_SYNCHRONIZE must be explicitly "false" in production (use migrations).',
-    );
+    problems.push('DB_SYNCHRONIZE must be explicitly "false" in production (use migrations).');
   }
 
   // A wildcard CORS origin with credentials lets any site call the API.
@@ -72,9 +89,25 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
     problems.push('CORS_ORIGINS must be set to explicit origin(s) in production (no "*").');
   }
 
-  // Staff auth is self-issued JWT — it cannot work without a signing secret.
+  // Staff auth is a self-issued HS256 JWT — a weak signing key is offline
+  // brute-forceable and lets an attacker forge admin tokens.
   if (!parsed.JWT_SECRET) {
     problems.push('JWT_SECRET must be set (staff auth signs/verifies with it).');
+  } else if (parsed.JWT_SECRET.length < MIN_JWT_SECRET_LENGTH) {
+    problems.push(
+      `JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters of high-entropy `
+      + 'randomness (generate with `openssl rand -hex 32`).',
+    );
+  }
+
+  // Uploaded files are served to staff and reporters. Without a real scanner the
+  // no-op driver marks everything SKIPPED (= servable), so require clamav in
+  // production unless the operator consciously opts out.
+  if (isProd && parsed.SCAN_DRIVER !== 'clamav' && !isTrue(parsed.ALLOW_UNSCANNED_UPLOADS)) {
+    problems.push(
+      'SCAN_DRIVER must be "clamav" in production (uploads are otherwise served '
+      + 'unscanned). Set ALLOW_UNSCANNED_UPLOADS=true to consciously accept this risk.',
+    );
   }
 
   if (problems.length) {
@@ -83,15 +116,8 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
       throw new Error(msg);
     }
     // eslint-disable-next-line no-console
-    console.warn(`[config] ${msg}\n(These are fatal when NODE_ENV=production.)`);
-  }
-
-  // Non-fatal advisory: shipping without real malware scanning in production is
-  // risky but may be intentional, so warn rather than block the boot.
-  if (isProd && parsed.SCAN_DRIVER !== 'clamav') {
-    // eslint-disable-next-line no-console
     console.warn(
-      '[config] SCAN_DRIVER is not "clamav" in production — uploaded files are NOT being malware-scanned.',
+      `[config] ${msg}\n(These are fatal in production; set NODE_ENV=development for local dev.)`,
     );
   }
 

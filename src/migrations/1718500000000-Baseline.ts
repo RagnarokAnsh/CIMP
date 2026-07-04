@@ -9,6 +9,12 @@ export class Baseline1718500000000 implements MigrationInterface {
   name = 'Baseline1718500000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Required for uuid_generate_v4() used by every table below. Managed
+    // Postgres (RDS/Cloud SQL) does NOT preinstall uuid-ossp, so without this
+    // the first CREATE TABLE aborts with 'function uuid_generate_v4() does not
+    // exist' and the whole migration fails on a fresh production database.
+    await queryRunner.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+
     // ── Enum types ──────────────────────────────────────────────────
     await queryRunner.query(`
       DO $$ BEGIN

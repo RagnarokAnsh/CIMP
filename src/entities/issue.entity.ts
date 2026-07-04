@@ -10,7 +10,17 @@ import { Attachment } from './attachment.entity';
 import { Comment } from './comment.entity';
 import { ReporterIssueView } from './reporter-issue-view.entity';
 
+// Indexes on the hot filter/sort/FK columns. Without these every issue list,
+// dashboard aggregate and reporter lookup is a full sequential scan (Postgres
+// does not auto-index FK columns). Mirrored by AddIssueIndexes migration.
 @Entity('issues')
+@Index('idx_issues_platform', ['platform'])
+@Index('idx_issues_status', ['status'])
+@Index('idx_issues_assignee', ['assignee'])
+@Index('idx_issues_reporter', ['reporter'])
+@Index('idx_issues_created_at', ['createdAt'])
+@Index('idx_issues_platform_status', ['platform', 'status'])
+@Index('idx_issues_platform_created', ['platform', 'createdAt'])
 export class Issue {
   @PrimaryGeneratedColumn('uuid')
   id: string;
