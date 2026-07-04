@@ -136,11 +136,11 @@
 _2FA deferred by request._
 1. ✅ **Issue links** (blocks/relates/duplicates) — backend + tests + **UI** (issue detail panel). Sub-tasks next.
 2. ✅ **Labels** per platform — backend + tests + **UI** (label picker + create). Components/custom-fields next.
-3. **Automation rules** ("when status→X, assign/notify") on the existing domain-event bus.
-4. **Boards: swimlanes + WIP limits** (Kanban + bulk ops already exist).
-5. **SLA policies with escalations + business hours** (SLA compute exists).
-6. **JQL-like saved filters** (saved-views exist).
-7. **Email-to-issue intake** + **scoped API/integration tokens** (currently only session JWT).
+3. ✅ **Automation rules** ("when created/status→X: set priority / assign / add label") — backend + tests (`AutomationModule`, loop-safe, `@OnEvent`). Config UI next.
+4. ◐ **Boards** — ✅ **WIP limits** (per-column soft caps). Swimlanes next (needs a DnD droppable-id refactor per lane).
+5. ⬜ **SLA policies + escalations** — planned. Invasive: rewires `computeSla` (used by list/detail/dashboard) to load per-platform policies; also fix reopen-SLA baseline (L8). Do with care + tests.
+6. ⬜ **JQL-like saved filters** — planned. Needs a query grammar/parser on top of saved-views.
+7. ✅ **Scoped API tokens** — backend + tests (`IntegrationsModule`, hashed, read-only per platform, `/api/integrations/issues`). Management UI next. · ⬜ **Email-to-issue intake** — deferred (do last, per request).
 8. ✅ **Watchers** — backend + notification integration + **UI** (watch toggle). Activity feed + @mention autocomplete next.
 
-> Issue links, labels, and watchers are now usable end-to-end in the staff issue detail panel (`IssueExtras.tsx`).
+> Shipped this cycle: issue links, labels, watchers (with UI), automation rules, API tokens (backend+tests), board WIP limits, and the SSE-ticket security fix (H8). Remaining: SLA policies, JQL filters, email intake, and config UIs for automation/tokens + full board swimlanes.
