@@ -93,4 +93,36 @@ export class LocalAuthService {
       return null;
     }
   }
+
+  // Mint a short-lived, single-purpose ticket for the SSE stream. EventSource
+  // can't send Authorization headers, so it rides in the URL — keeping it to
+  // ~30s and audience-scoped means a leaked stream URL is not a usable session
+  // token (unlike the full 8h JWT it replaces). Minted only for an ACTIVE user.
+  async signSseTicket(idpSubject: string): Promise<string | null> {
+    if (!this.enabled) return null;
+    const user = await this.staff.findOne({ where: { idpSubject } });
+    if (!user || user.status !== AccountStatus.ACTIVE) return null;
+    return jwt.sign(
+      { sub: idpSubject, tv: user.tokenVersion },
+      this.secret,
+      { algorithm: 'HS256', expiresIn: '30s', audience: 'sse' },
+    );
+  }
+
+  // Verify an SSE ticket. The `audience: 'sse'` requirement means a normal
+  // session token (no audience) is rejected here, and the ticket is rejected on
+  // normal routes — so the two are not interchangeable.
+  async verifySseTicket(ticket: string): Promise<AuthenticatedStaff | null> {
+    if (!this.enabled) return null;
+    try {
+      const claims = jwt.verify(ticket, this.secret, {
+        algorithms: ['HS256'],
+        audience: 'sse',
+        maxAge: '30s',
+      }) as { sub: string; tv?: number };
+      return await this.auth.upsertFromClaims({ sub: claims.sub, tv: claims.tv });
+    } catch {
+      return null;
+    }
+  }
 }

@@ -10,8 +10,12 @@ interface RealtimeEvent {
 
 // Subscribes the staff workspace to the server's SSE stream and invalidates the
 // affected TanStack Query caches so the board, lists, detail, and notification
-// bell update live (replacing slow polling). EventSource auto-reconnects, so a
-// brief drop self-heals; the bell keeps a long poll as a backstop.
+// bell update live (replacing slow polling).
+//
+// Auth: EventSource can't set headers, so instead of putting the 8h session JWT
+// in the URL, we POST for a short-lived SSE ticket (bearer header) and connect
+// with that. On any error we fetch a fresh ticket and reconnect, so an expired
+// ticket self-heals without ever exposing the session token in a URL/log.
 export function useStaffRealtime(): void {
   const queryClient = useQueryClient();
 
@@ -19,11 +23,11 @@ export function useStaffRealtime(): void {
     const token = getStaffToken();
     if (!token) return;
 
-    // EventSource can't set headers, so the token rides as a query param.
-    const url = `/api/staff/events?access_token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
+    let es: EventSource | null = null;
+    let stopped = false;
+    let retry: ReturnType<typeof setTimeout> | null = null;
 
-    es.onmessage = (msg) => {
+    const handleMessage = (msg: MessageEvent) => {
       let evt: RealtimeEvent;
       try {
         evt = JSON.parse(msg.data);
@@ -32,18 +36,47 @@ export function useStaffRealtime(): void {
       }
       if (!evt.type || evt.type === 'ping') return;
 
-      // Any issue/comment event freshens the bell and the list/board views…
       queryClient.invalidateQueries({ queryKey: ['staff', 'notifications'] });
       queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
       queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
       queryClient.invalidateQueries({ queryKey: ['staff', 'dashboard'] });
-      // …and the specific issue detail when we know which one.
       if (evt.issueId) {
         queryClient.invalidateQueries({ queryKey: ['staff', 'issue', evt.issueId] });
       }
     };
 
-    return () => es.close();
-    // Re-open if the token changes (e.g. sign-in/out).
+    const scheduleReconnect = () => {
+      if (stopped) return;
+      retry = setTimeout(connect, 3000);
+    };
+
+    async function connect() {
+      if (stopped) return;
+      try {
+        const res = await fetch('/api/staff/events/ticket', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return scheduleReconnect();
+        const { ticket } = (await res.json()) as { ticket: string };
+        if (stopped) return;
+        es = new EventSource(`/api/staff/events?ticket=${encodeURIComponent(ticket)}`);
+        es.onmessage = handleMessage;
+        es.onerror = () => {
+          es?.close();
+          es = null;
+          scheduleReconnect(); // ticket likely expired / connection dropped
+        };
+      } catch {
+        scheduleReconnect();
+      }
+    }
+
+    connect();
+    return () => {
+      stopped = true;
+      if (retry) clearTimeout(retry);
+      es?.close();
+    };
   }, [queryClient]);
 }
