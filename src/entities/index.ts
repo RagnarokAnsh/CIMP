@@ -14,6 +14,7 @@ export { Label } from './label.entity';
 export { IssueLabel } from './issue-label.entity';
 export { IssueWatcher } from './issue-watcher.entity';
 export { AutomationRule } from './automation-rule.entity';
+export { ApiToken } from './api-token.entity';
 
 import { Platform } from './platform.entity';
 import { StaffUser } from './staff-user.entity';
@@ -31,9 +32,10 @@ import { Label } from './label.entity';
 import { IssueLabel } from './issue-label.entity';
 import { IssueWatcher } from './issue-watcher.entity';
 import { AutomationRule } from './automation-rule.entity';
+import { ApiToken } from './api-token.entity';
 
 export const ALL_ENTITIES = [
   Platform, StaffUser, UserPlatformRole, Reporter, Issue,
   Attachment, Comment, AuditEvent, NotificationLog, ReporterIssueView,
-  SavedView, IssueLink, Label, IssueLabel, IssueWatcher, AutomationRule,
+  SavedView, IssueLink, Label, IssueLabel, IssueWatcher, AutomationRule, ApiToken,
 ];
