@@ -15,6 +15,16 @@ events, ER diagram, route→handler table), `DESIGN.md`, `PRODUCT.md`. The live
 **Swagger at `/api/docs`** is the source of truth for the API contract; the
 frontend's typed client is generated from it.
 
+## Knowledge vault — read this first when resuming
+
+`vault/` is an Obsidian knowledge base of code-grounded notes (architecture,
+per-module notes, security, features, ops). **Before any large change or when
+resuming a session, read `vault/08 Meta/Session Handoff.md` (current state + next
+steps) and `vault/08 Meta/LLM Guide.md` (how to navigate the vault).** They orient
+you in ~3 notes without reading source. `vault/Directory Index.md` maps every
+folder to its note. After a meaningful change, update the affected module note +
+`vault/08 Meta/Changelog.md` — or run `/doc-sync` to do it.
+
 ## Commands
 
 **Backend** (run from repo root):

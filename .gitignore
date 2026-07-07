@@ -38,3 +38,9 @@ repomix-output.xml
 # Agents / skills lock (local config)
 .agents/
 skills-lock.json
+
+# Obsidian docs vault — keep the notes + shared config, drop per-machine UI state
+vault/.obsidian/workspace.json
+vault/.obsidian/workspace-mobile.json
+vault/.obsidian/graph.json
+vault/.obsidian/cache/
