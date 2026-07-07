@@ -2,6 +2,8 @@ export enum Role {
   FOCAL_POINT = 'FOCAL_POINT',
   DEVELOPER = 'DEVELOPER',
   ADMIN = 'ADMIN',
+  // Read-only: sees issues/comments/attachments in scope, never mutates.
+  WATCHER = 'WATCHER',
 }
 
 export enum IssueStatus {

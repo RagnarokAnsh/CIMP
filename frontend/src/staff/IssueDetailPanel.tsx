@@ -14,6 +14,7 @@ import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
+import { canWriteOn } from '@/lib/permissions';
 import { firstLine } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -129,15 +130,18 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
     queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
     staleTime: 5 * 60 * 1000,
   });
+  // Watchers are read-only: hide mutation UI and skip the write-role-only
+  // queries (/assignees and /members 403 for them). Server enforces regardless.
+  const canWrite = canWriteOn(me, data?.platform?.id);
   const { data: assignees } = useQuery({
     queryKey: ['staff', 'issue', id, 'assignees'],
     queryFn: async () => (await staffApi.get<AssigneeOption[]>(`/staff/issues/${id}/assignees`)).data,
-    enabled: Boolean(id),
+    enabled: Boolean(id) && canWrite,
   });
   const { data: members } = useQuery({
     queryKey: ['staff', 'issue', id, 'members'],
     queryFn: async () => (await staffApi.get<AssigneeOption[]>(`/staff/issues/${id}/members`)).data,
-    enabled: Boolean(id),
+    enabled: Boolean(id) && canWrite,
   });
   const changeAssignment = useMutation({
     mutationFn: (assigneeId: string | null) =>
@@ -295,6 +299,12 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                     </div>
                   ))}
 
+                  {!canWrite && (
+                    <p className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      You have read-only access to this issue.
+                    </p>
+                  )}
+                  {canWrite && (
                   <div className="space-y-3">
                     <div className="relative">
                       <Textarea
@@ -339,6 +349,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                       </Button>
                     </div>
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -382,6 +393,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
             </CardContent>
           </Card>
 
+          {canWrite && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -441,9 +453,10 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               </div>
             </CardContent>
           </Card>
+          )}
 
-          <IssueLabels issueId={id} platformId={data.platform?.id} />
-          <IssueLinks issueId={id} />
+          <IssueLabels issueId={id} platformId={data.platform?.id} readOnly={!canWrite} />
+          <IssueLinks issueId={id} readOnly={!canWrite} />
         </div>
       </div>
     </div>

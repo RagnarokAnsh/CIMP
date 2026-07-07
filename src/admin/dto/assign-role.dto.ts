@@ -12,7 +12,7 @@ export class AssignRoleDto {
   role: Role;
 
   @ApiProperty({
-    description: 'Platform id, or null for global scope (developers/admins).',
+    description: 'Platform id, or null for global scope (developers/admins/watchers).',
     nullable: true,
   })
   @ValidateIf((o) => o.platformId !== null && o.platformId !== undefined)

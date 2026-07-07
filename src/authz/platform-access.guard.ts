@@ -10,8 +10,7 @@ import { Issue } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ROLES_KEY } from './roles.decorator';
 import { ScopeService } from './scope.service';
-
-const ALL_STAFF_ROLES: Role[] = [Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN];
+import { STAFF_READ_ROLES, STAFF_WRITE_ROLES } from './role-sets';
 
 // Enforces role + platform scope. Runs after JwtAuthGuard (req.user is set).
 // For routes carrying an issue `:id`, it resolves the issue's platform and
@@ -27,11 +26,13 @@ export class PlatformAccessGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    // Routes without an explicit @Roles default to the WRITE set — fail-closed:
+    // a read-only WATCHER only reaches routes that opt in via @Roles.
     const required =
       this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
         ctx.getHandler(),
         ctx.getClass(),
-      ]) ?? ALL_STAFF_ROLES;
+      ]) ?? STAFF_WRITE_ROLES;
 
     const req = ctx.switchToHttp().getRequest<Request & { user?: AuthenticatedStaff }>();
     const staff = req.user;
@@ -49,7 +50,7 @@ export class PlatformAccessGuard implements CanActivate {
       // enumerated across platforms via a 403-vs-404 oracle. A staff member who
       // IS scoped to the platform but lacks the specific role for this action
       // gets a truthful 403.
-      if (!this.scope.canAccessPlatform(staff, issue.platform.id, ALL_STAFF_ROLES)) {
+      if (!this.scope.canAccessPlatform(staff, issue.platform.id, STAFF_READ_ROLES)) {
         throw new NotFoundException('Issue not found');
       }
       if (!this.scope.canAccessPlatform(staff, issue.platform.id, required)) {

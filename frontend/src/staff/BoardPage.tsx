@@ -12,6 +12,7 @@ import { staffApi } from '@/api/client';
 import type { IssueStatus, Paginated, StaffIssueSummary, StaffMe } from '@/api/types';
 import { BOARD_STATUS_ORDER, STATUS_TRANSITIONS, canTransition } from '@/lib/issue-status';
 import { STATUS_META } from '@/lib/issue-meta';
+import { canWriteOn } from '@/lib/permissions';
 import { relativeTime, initials } from '@/lib/format';
 import { PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
@@ -94,6 +95,9 @@ export function BoardPage() {
   // move the card, then persist with the optimistic-lock version.
   function moveIssue(issue: StaffIssueSummary, target: IssueStatus) {
     if (issue.status === target) return;
+    // Read-only (watcher) on this platform: dragging is disabled per-card, but
+    // guard the shared path too so nothing slips through.
+    if (!canWriteOn(me, issue.platform?.id)) return;
     if (!canTransition(issue.status, target)) {
       toast.error(
         `Can't move ${issue.referenceNo} from ${STATUS_META[issue.status].label} to ${STATUS_META[target].label}.`,
@@ -141,6 +145,11 @@ export function BoardPage() {
     return me.roles.some(
       (r) => r.role === 'DEVELOPER' && (r.platformId === null || r.platformId === issue.platform!.id),
     );
+  }
+
+  // Read-only watchers see the card but can't drag it or open the move menu.
+  function canMove(issue: StaffIssueSummary): boolean {
+    return canWriteOn(me, issue.platform?.id);
   }
 
   function assignToMe(issue: StaffIssueSummary) {
@@ -211,6 +220,7 @@ export function BoardPage() {
               onMove={moveIssue}
               onAssignToMe={assignToMe}
               canAssignToMe={canAssignToMe}
+              canMove={canMove}
               isDropTarget={!!activeIssue && canTransition(activeIssue.status, status)}
               isInvalidTarget={!!activeIssue && activeIssue.status !== status && !canTransition(activeIssue.status, status)}
             />
@@ -227,7 +237,7 @@ export function BoardPage() {
 }
 
 function Column({
-  status, issues, loading, onOpen, onMove, onAssignToMe, canAssignToMe, isDropTarget, isInvalidTarget,
+  status, issues, loading, onOpen, onMove, onAssignToMe, canAssignToMe, canMove, isDropTarget, isInvalidTarget,
 }: {
   status: IssueStatus;
   issues: StaffIssueSummary[];
@@ -236,6 +246,7 @@ function Column({
   onMove: (issue: StaffIssueSummary, target: IssueStatus) => void;
   onAssignToMe: (issue: StaffIssueSummary) => void;
   canAssignToMe: (issue: StaffIssueSummary) => boolean;
+  canMove: (issue: StaffIssueSummary) => boolean;
   isDropTarget: boolean;
   isInvalidTarget: boolean;
 }) {
@@ -287,6 +298,7 @@ function Column({
             onMove={onMove}
             onAssignToMe={onAssignToMe}
             canAssignToMe={canAssignToMe(issue)}
+            canMove={canMove(issue)}
           />
         ))}
       </div>
@@ -295,15 +307,16 @@ function Column({
 }
 
 function DraggableCard({
-  issue, onOpen, onMove, onAssignToMe, canAssignToMe,
+  issue, onOpen, onMove, onAssignToMe, canAssignToMe, canMove,
 }: {
   issue: StaffIssueSummary;
   onOpen: (id: string) => void;
   onMove: (issue: StaffIssueSummary, target: IssueStatus) => void;
   onAssignToMe: (issue: StaffIssueSummary) => void;
   canAssignToMe: boolean;
+  canMove: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: issue.id });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: issue.id, disabled: !canMove });
   const targets = STATUS_TRANSITIONS[issue.status];
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
@@ -316,12 +329,14 @@ function DraggableCard({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(issue.id); }}
-      className={cn('cursor-grab touch-none active:cursor-grabbing', isDragging && 'opacity-40')}
+      className={cn(canMove && 'cursor-grab active:cursor-grabbing', 'touch-none', isDragging && 'opacity-40')}
     >
       <IssueCard
         issue={issue}
         actions={
-          // Keyboard- and click-accessible alternative to dragging.
+          // Keyboard- and click-accessible alternative to dragging. Read-only
+          // (watcher) cards get no menu — there is nothing they could do with it.
+          (canMove || canAssignToMe) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -342,15 +357,20 @@ function DraggableCard({
                   <UserCheck className="size-3.5" /> Assign to me
                 </DropdownMenuItem>
               )}
-              <DropdownMenuLabel className="text-xs">Move to</DropdownMenuLabel>
-              {targets.map((t) => (
-                <DropdownMenuItem key={t} className="gap-2" onSelect={() => onMove(issue, t)}>
-                  <span className={cn('size-2 rounded-full', STATUS_META[t].dot)} aria-hidden />
-                  {STATUS_META[t].label}
-                </DropdownMenuItem>
-              ))}
+              {canMove && (
+                <>
+                  <DropdownMenuLabel className="text-xs">Move to</DropdownMenuLabel>
+                  {targets.map((t) => (
+                    <DropdownMenuItem key={t} className="gap-2" onSelect={() => onMove(issue, t)}>
+                      <span className={cn('size-2 rounded-full', STATUS_META[t].dot)} aria-hidden />
+                      {STATUS_META[t].label}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
+          )
         }
       />
     </div>

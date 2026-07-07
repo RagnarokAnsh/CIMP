@@ -4,17 +4,16 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
-  ActorType, AutomationAction, AutomationTrigger, IssueStatus, Priority, Role,
+  ActorType, AutomationAction, AutomationTrigger, IssueStatus, Priority,
 } from '../common/enums';
 import {
   AutomationRule, Issue, IssueLabel,
 } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
+import { STAFF_WRITE_ROLES } from '../authz/role-sets';
 import { AuditService } from '../audit/audit.service';
 import { CreateAutomationRuleDto, UpdateAutomationRuleDto } from './dto/automation-rule.dto';
-
-const ALL_STAFF_ROLES: Role[] = [Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN];
 
 @Injectable()
 export class AutomationService {
@@ -29,8 +28,10 @@ export class AutomationService {
   ) {}
 
   // ── CRUD (per-platform, scope-checked) ─────────────────────────────
+  // Automation rules are platform config: write roles only, list included
+  // (read-only watchers have no business here).
   private assertAccess(staff: AuthenticatedStaff, platformId: string): void {
-    if (!this.scope.canAccessPlatform(staff, platformId, ALL_STAFF_ROLES)) {
+    if (!this.scope.canAccessPlatform(staff, platformId, STAFF_WRITE_ROLES)) {
       throw new ForbiddenException('You do not have access to this platform.');
     }
   }

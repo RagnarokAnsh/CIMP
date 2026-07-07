@@ -13,6 +13,7 @@ import type {
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
+import { canWriteAnywhere } from '@/lib/permissions';
 import { SlaBadge } from '@/components/SlaBadge';
 import { IssueDetailPanel } from './IssueDetailPanel';
 import { relativeTime, initials } from '@/lib/format';
@@ -144,6 +145,9 @@ export function IssuesListPage() {
   const rows = data?.data ?? [];
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const allOnPageSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  // Watcher-only users get no selection column / bulk bar — bulk ops are writes.
+  // (Mixed grants still see it; the server skips out-of-write-scope issues.)
+  const canBulk = canWriteAnywhere(me);
 
   // Selection (bulk) only makes sense for the rows currently shown.
   useEffect(() => { setSelected(new Set()); }, [filters, page]);
@@ -348,7 +352,7 @@ export function IssuesListPage() {
         </CardContent>
       </Card>
 
-      {view === 'list' && selected.size > 0 && (
+      {view === 'list' && canBulk && selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
           <span className="text-sm font-medium">{selected.size} selected</span>
           <div className="flex flex-wrap items-center gap-2">
@@ -387,14 +391,16 @@ export function IssuesListPage() {
             <Table className="[&_td]:py-3">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10">
-                    <Checkbox
-                      checked={allOnPageSelected}
-                      onCheckedChange={toggleAll}
-                      aria-label="Select all on page"
-                      disabled={rows.length === 0}
-                    />
-                  </TableHead>
+                  {canBulk && (
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allOnPageSelected}
+                        onCheckedChange={toggleAll}
+                        aria-label="Select all on page"
+                        disabled={rows.length === 0}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Summary</TableHead>
                   <SortableHead label="Status" field="status" filters={filters} onSort={patch} />
                   <SortableHead label="Priority" field="priority" filters={filters} onSort={patch} />
@@ -407,7 +413,7 @@ export function IssuesListPage() {
                 {isLoading &&
                   Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: canBulk ? 7 : 6 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>
                       ))}
                     </TableRow>
@@ -415,19 +421,21 @@ export function IssuesListPage() {
 
                 {!isLoading && rows.length === 0 && (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={7}>{emptyState}</TableCell>
+                    <TableCell colSpan={canBulk ? 7 : 6}>{emptyState}</TableCell>
                   </TableRow>
                 )}
 
                 {!isLoading && rows.map((r) => (
                   <TableRow key={r.id} data-state={selected.has(r.id) ? 'selected' : undefined}>
-                    <TableCell>
-                      <Checkbox
-                        checked={selected.has(r.id)}
-                        onCheckedChange={() => toggleRow(r.id)}
-                        aria-label={`Select ${r.referenceNo}`}
-                      />
-                    </TableCell>
+                    {canBulk && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.has(r.id)}
+                          onCheckedChange={() => toggleRow(r.id)}
+                          aria-label={`Select ${r.referenceNo}`}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="max-w-md">
                       <Link to={`/staff/issues/${r.id}`} className="group block">
                         <span className="font-mono text-[11px] text-muted-foreground">

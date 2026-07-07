@@ -6,16 +6,15 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   DataSource, In, IsNull, Repository,
 } from 'typeorm';
-import { ActorType, CommentVisibility, Role } from '../common/enums';
+import { ActorType, CommentVisibility } from '../common/enums';
 import { Comment, Issue, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
+import { STAFF_WRITE_ROLES } from '../authz/role-sets';
 import { AuditService } from '../audit/audit.service';
 import { CommentAddedEvent, IssueEvents } from '../events/issue-events';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
-
-const ALL_STAFF_ROLES: Role[] = [Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN];
 
 @Injectable()
 export class CommentsService {
@@ -29,14 +28,17 @@ export class CommentsService {
     private readonly events: EventEmitter2,
   ) {}
 
-  // Which of `staffIds` actually hold a role on `platformId` (or a global grant).
-  // Used to drop cross-tenant @mentions before they reach notifications/SSE.
+  // Which of `staffIds` actually hold a mentionable role on `platformId` (or a
+  // global grant). Used to drop cross-tenant @mentions before they reach
+  // notifications/SSE. Watcher grants don't count: watchers cannot comment, so
+  // they are not mentionable (matching the /members picker).
   private async platformMemberIds(staffIds: string[], platformId: string): Promise<Set<string>> {
     if (staffIds.length === 0) return new Set();
+    const mentionable = In(STAFF_WRITE_ROLES);
     const grants = await this.roles.find({
       where: [
-        { staffUser: { id: In(staffIds) }, platform: { id: platformId } },
-        { staffUser: { id: In(staffIds) }, platform: IsNull() },
+        { staffUser: { id: In(staffIds) }, platform: { id: platformId }, role: mentionable },
+        { staffUser: { id: In(staffIds) }, platform: IsNull(), role: mentionable },
       ],
       relations: { staffUser: true },
     });
@@ -119,11 +121,12 @@ export class CommentsService {
       throw new ForbiddenException('You can only edit your own comments.');
     }
     // Authorship alone is not enough: the author may have lost access to the
-    // comment's platform since writing it (grant revoked/moved). This route
-    // carries a comment id, so PlatformAccessGuard's issue branch never runs.
+    // comment's platform since writing it (grant revoked/moved, or downgraded
+    // to read-only watcher). This route carries a comment id, so
+    // PlatformAccessGuard's issue branch never runs.
     const platformId = comment.issue?.platform?.id;
-    if (platformId && !this.scope.canAccessPlatform(staff, platformId, ALL_STAFF_ROLES)) {
-      throw new ForbiddenException('You no longer have access to this platform.');
+    if (platformId && !this.scope.canAccessPlatform(staff, platformId, STAFF_WRITE_ROLES)) {
+      throw new ForbiddenException('You no longer have write access to this platform.');
     }
 
     const oldBody = comment.body;

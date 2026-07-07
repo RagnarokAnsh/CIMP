@@ -73,6 +73,7 @@ export const ROLE_META: Record<Role, { label: string }> = {
   FOCAL_POINT: { label: 'Focal point' },
   DEVELOPER: { label: 'Developer' },
   ADMIN: { label: 'Admin' },
+  WATCHER: { label: 'Watcher' },
 };
 
 export const roleLabel = (role: Role): string => ROLE_META[role]?.label ?? role;

@@ -2,12 +2,12 @@ import {
   Body, Controller, Param, ParseUUIDPipe, Patch, Post, UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Role } from '../common/enums';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentStaff } from '../auth/current-staff.decorator';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { Roles } from '../authz/roles.decorator';
 import { PlatformAccessGuard } from '../authz/platform-access.guard';
+import { STAFF_WRITE_ROLES } from '../authz/role-sets';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
@@ -22,7 +22,7 @@ export class CommentsController {
   // Issue-scoped: PlatformAccessGuard resolves the platform from :id.
   @Post('issues/:id/comments')
   @UseGuards(PlatformAccessGuard)
-  @Roles(Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN)
+  @Roles(...STAFF_WRITE_ROLES)
   @ApiOperation({ summary: 'Add a comment (internal or reporter-visible).' })
   add(
     @CurrentStaff() staff: AuthenticatedStaff,

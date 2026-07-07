@@ -168,7 +168,7 @@ function PlatformsTab() {
   );
 }
 
-const ROLES: Role[] = ['FOCAL_POINT', 'DEVELOPER', 'ADMIN'];
+const ROLES: Role[] = ['FOCAL_POINT', 'DEVELOPER', 'ADMIN', 'WATCHER'];
 
 function StaffTab() {
   const queryClient = useQueryClient();

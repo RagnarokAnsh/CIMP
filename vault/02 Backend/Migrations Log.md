@@ -1,7 +1,7 @@
 ---
 title: Migrations Log
 tags: [cimp, backend, database, migrations]
-updated: 2026-07-06
+updated: 2026-07-07
 ---
 # Migrations Log (`src/migrations/`)
 ← [[Backend Modules and API]] · [[CIMP - Home]]
@@ -20,6 +20,7 @@ updated: 2026-07-06
 | 8 | `1719200000000-AddIssueWatchers.ts` | `issue_watchers` (issue, staff_user, unique). |
 | 9 | `1719300000000-AddAutomationRules.ts` | `automation_rules` + trigger/action enums. |
 | 10 | `1719400000000-AddApiTokens.ts` | `api_tokens` (hash unique, platform FK). |
+| 11 | `1719500000000-AddWatcherRole.ts` | `ALTER TYPE role_enum ADD VALUE IF NOT EXISTS 'WATCHER'` (read-only staff role). Down is a no-op — Postgres can't drop enum values. |
 
 ## Gotchas
 - **`search_vector` FTS only works where migration #2 ran (prod).** Under dev `synchronize` the column is NULL → description search returns nothing (reference-number search still works). See [[Session Handoff]].

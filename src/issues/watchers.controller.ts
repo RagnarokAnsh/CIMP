@@ -6,14 +6,19 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentStaff } from '../auth/current-staff.decorator';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { PlatformAccessGuard } from '../authz/platform-access.guard';
+import { Roles } from '../authz/roles.decorator';
+import { STAFF_READ_ROLES } from '../authz/role-sets';
 import { WatchersService } from './watchers.service';
 
 // Watch/unwatch an issue. Scoped like every issue route via PlatformAccessGuard;
-// any staff with access to the issue may watch it (no role restriction).
+// any staff with read access may watch — including the read-only WATCHER role,
+// for whom subscribing to status changes is the whole point. (Explicit @Roles:
+// the guard's un-decorated default is the write set.)
 @ApiTags('staff-issue-watchers')
 @ApiBearerAuth('staff')
 @Controller('staff/issues/:id/watchers')
 @UseGuards(JwtAuthGuard, PlatformAccessGuard)
+@Roles(...STAFF_READ_ROLES)
 export class WatchersController {
   constructor(private readonly watchers: WatchersService) {}
 

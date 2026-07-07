@@ -6,7 +6,7 @@ export type IssueStatus =
   | 'NEW' | 'IN_PROGRESS' | 'ON_HOLD' | 'RESOLVED' | 'CLOSED' | 'REOPENED';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type CommentVisibility = 'INTERNAL' | 'REPORTER_VISIBLE';
-export type Role = 'FOCAL_POINT' | 'DEVELOPER' | 'ADMIN';
+export type Role = 'FOCAL_POINT' | 'DEVELOPER' | 'ADMIN' | 'WATCHER';
 
 export interface ReporterIssueSummary {
   id: string;

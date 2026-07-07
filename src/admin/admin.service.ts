@@ -167,7 +167,8 @@ export class AdminService {
 
   async assignRole(admin: AuthenticatedStaff, dto: AssignRoleDto) {
     // Scope rules (Section 2): focal points are always per-platform; admins are
-    // global; developers may be either.
+    // global; developers and watchers may be either (a global watcher is a
+    // read-only observer across all platforms).
     if (dto.role === Role.FOCAL_POINT && !dto.platformId) {
       throw new BadRequestException('Focal points must be scoped to a platform.');
     }

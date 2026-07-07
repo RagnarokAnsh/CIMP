@@ -7,9 +7,8 @@ import { Role } from '../common/enums';
 import { Issue, IssueLabel, Label } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
+import { STAFF_READ_ROLES, STAFF_WRITE_ROLES } from '../authz/role-sets';
 import { AddIssueLabelDto, CreateLabelDto } from './dto/label.dto';
-
-const ALL_STAFF_ROLES: Role[] = [Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN];
 const isUniqueViolation = (e: unknown): boolean =>
   e instanceof QueryFailedError
   && (e as QueryFailedError & { driverError?: { code?: string } }).driverError?.code === '23505';
@@ -24,14 +23,16 @@ export class LabelsService {
   ) {}
 
   // ── Per-platform label catalog ─────────────────────────────────────
-  private assertPlatformAccess(staff: AuthenticatedStaff, platformId: string): void {
-    if (!this.scope.canAccessPlatform(staff, platformId, ALL_STAFF_ROLES)) {
+  // Reading the catalog needs any role on the platform (watchers see labels on
+  // issues, so they may list them); creating/deleting needs a write role.
+  private assertPlatformAccess(staff: AuthenticatedStaff, platformId: string, roles: Role[]): void {
+    if (!this.scope.canAccessPlatform(staff, platformId, roles)) {
       throw new ForbiddenException('You do not have access to this platform.');
     }
   }
 
   async listForPlatform(staff: AuthenticatedStaff, platformId: string) {
-    this.assertPlatformAccess(staff, platformId);
+    this.assertPlatformAccess(staff, platformId, STAFF_READ_ROLES);
     const rows = await this.labels.find({
       where: { platform: { id: platformId } },
       order: { name: 'ASC' },
@@ -40,7 +41,7 @@ export class LabelsService {
   }
 
   async createForPlatform(staff: AuthenticatedStaff, platformId: string, dto: CreateLabelDto) {
-    this.assertPlatformAccess(staff, platformId);
+    this.assertPlatformAccess(staff, platformId, STAFF_WRITE_ROLES);
     try {
       const saved = await this.labels.save(
         this.labels.create({
@@ -57,7 +58,7 @@ export class LabelsService {
   }
 
   async deleteForPlatform(staff: AuthenticatedStaff, platformId: string, labelId: string) {
-    this.assertPlatformAccess(staff, platformId);
+    this.assertPlatformAccess(staff, platformId, STAFF_WRITE_ROLES);
     const label = await this.labels.findOne({ where: { id: labelId }, relations: { platform: true } });
     if (!label || label.platform.id !== platformId) throw new NotFoundException('Label not found.');
     await this.labels.remove(label);

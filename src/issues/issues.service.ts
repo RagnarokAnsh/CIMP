@@ -11,6 +11,7 @@ import { Issue, Platform, StaffUser, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { AuthService } from '../auth/auth.service';
 import { ScopeService } from '../authz/scope.service';
+import { STAFF_WRITE_ROLES } from '../authz/role-sets';
 import { AuditService } from '../audit/audit.service';
 import {
   IssueAssignedEvent, IssueEvents, IssuePriorityChangedEvent, IssueStatusChangedEvent,
@@ -203,8 +204,10 @@ export class IssuesService {
   }
 
   // Everyone who can be @mentioned on this issue: any active staff holding a role
-  // (any role) on the issue's platform, plus global staff. Broader than the
-  // developer-only assignee list so focal points and admins can be looped in.
+  // on the issue's platform, plus global staff. Broader than the developer-only
+  // assignee list so focal points and admins can be looped in. Watchers are
+  // read-only and cannot comment, so a watcher grant never makes someone
+  // mentionable (holding another role alongside it still does).
   async listPlatformMembers(issueId: string) {
     const issue = await this.issues.findOne({
       where: { id: issueId },
@@ -217,6 +220,7 @@ export class IssuesService {
       .innerJoinAndSelect('upr.staffUser', 'su')
       .leftJoin('upr.platform', 'p')
       .where('su.status = :active', { active: AccountStatus.ACTIVE })
+      .andWhere('upr.role != :watcherRole', { watcherRole: Role.WATCHER })
       .andWhere(
         new Brackets((w) => {
           w.where('p.id = :pid', { pid: issue.platform.id }).orWhere('upr.platform_id IS NULL');
@@ -408,7 +412,10 @@ export class IssuesService {
     for (const id of dto.ids) {
       try {
         const issue = await this.loadForWrite(id);
-        if (!this.scope.scopeAllows(scope, issue.platform.id)) {
+        // Write access, not just scope: a WATCHER grant puts a platform in the
+        // read scope, but bulk ops are mutations — require a write role on the
+        // issue's platform (or globally), same as the single-issue routes.
+        if (!this.scope.canAccessPlatform(staff, issue.platform.id, STAFF_WRITE_ROLES)) {
           skipped.push({ id, reason: 'Out of scope' });
           continue;
         }

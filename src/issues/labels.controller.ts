@@ -2,12 +2,12 @@ import {
   Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Role } from '../common/enums';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentStaff } from '../auth/current-staff.decorator';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { Roles } from '../authz/roles.decorator';
 import { PlatformAccessGuard } from '../authz/platform-access.guard';
+import { STAFF_READ_ROLES, STAFF_WRITE_ROLES } from '../authz/role-sets';
 import { LabelsService } from './labels.service';
 import { AddIssueLabelDto, CreateLabelDto } from './dto/label.dto';
 
@@ -54,23 +54,25 @@ export class LabelsController {
 @ApiBearerAuth('staff')
 @Controller('staff/issues/:id/labels')
 @UseGuards(JwtAuthGuard, PlatformAccessGuard)
-@Roles(Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN)
 export class IssueLabelsController {
   constructor(private readonly labels: LabelsService) {}
 
   @Get()
+  @Roles(...STAFF_READ_ROLES)
   @ApiOperation({ summary: "List an issue's labels." })
   list(@Param('id', ParseUUIDPipe) id: string) {
     return this.labels.listForIssue(id);
   }
 
   @Post()
+  @Roles(...STAFF_WRITE_ROLES)
   @ApiOperation({ summary: 'Attach a label (from the issue\'s platform) to the issue.' })
   add(@Param('id', ParseUUIDPipe) id: string, @Body() dto: AddIssueLabelDto) {
     return this.labels.addToIssue(id, dto);
   }
 
   @Delete(':labelId')
+  @Roles(...STAFF_WRITE_ROLES)
   @ApiOperation({ summary: 'Remove a label from the issue.' })
   remove(@Param('id', ParseUUIDPipe) id: string, @Param('labelId', ParseUUIDPipe) labelId: string) {
     return this.labels.removeFromIssue(id, labelId);

@@ -58,7 +58,9 @@ export function IssueWatch({ issueId }: { issueId: string }) {
 }
 
 // ── Labels ────────────────────────────────────────────────────────────────
-export function IssueLabels({ issueId, platformId }: { issueId: string; platformId?: string }) {
+// `readOnly` hides the add/remove/create controls (read-only watchers still
+// see applied labels; the server rejects their writes anyway).
+export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId: string; platformId?: string; readOnly?: boolean }) {
   const qc = useQueryClient();
   const [newName, setNewName] = useState('');
   const issueKey = ['staff', 'issue', issueId, 'labels'];
@@ -120,17 +122,19 @@ export function IssueLabels({ issueId, platformId }: { issueId: string; platform
         <div className="flex flex-wrap gap-1.5">
           {(applied ?? []).length === 0 && <span className="text-sm text-muted-foreground">No labels.</span>}
           {(applied ?? []).map((l) => (
-            <Badge key={l.id} variant="outline" className="gap-1 pr-1" style={{ borderColor: `${l.color}66`, color: l.color }}>
+            <Badge key={l.id} variant="outline" className={readOnly ? 'gap-1' : 'gap-1 pr-1'} style={{ borderColor: `${l.color}66`, color: l.color }}>
               <span className="h-2 w-2 rounded-full" style={{ background: l.color }} />
               {l.name}
-              <button type="button" className="ml-0.5 text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
-                <X className="h-3 w-3" />
-              </button>
+              {!readOnly && (
+                <button type="button" className="ml-0.5 text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </Badge>
           ))}
         </div>
 
-        {addable.length > 0 && (
+        {!readOnly && addable.length > 0 && (
           <Select value="" onValueChange={(v) => add.mutate(v)}>
             <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Add existing label…" /></SelectTrigger>
             <SelectContent>
@@ -139,18 +143,20 @@ export function IssueLabels({ issueId, platformId }: { issueId: string; platform
           </Select>
         )}
 
-        <div className="flex items-center gap-2">
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submitNew(); }}
-            placeholder="New label…"
-            className="h-8 text-sm"
-          />
-          <Button size="sm" variant="secondary" disabled={!newName.trim() || create.isPending} onClick={submitNew}>
-            {create.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-          </Button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitNew(); }}
+              placeholder="New label…"
+              className="h-8 text-sm"
+            />
+            <Button size="sm" variant="secondary" disabled={!newName.trim() || create.isPending} onClick={submitNew}>
+              {create.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -163,7 +169,7 @@ const LINK_LABEL: Record<IssueLinkType, { outward: string; inward: string }> = {
   DUPLICATES: { outward: 'duplicates', inward: 'is duplicated by' },
 };
 
-export function IssueLinks({ issueId }: { issueId: string }) {
+export function IssueLinks({ issueId, readOnly = false }: { issueId: string; readOnly?: boolean }) {
   const qc = useQueryClient();
   const key = ['staff', 'issue', issueId, 'links'];
   const [type, setType] = useState<IssueLinkType>('RELATES');
@@ -202,13 +208,16 @@ export function IssueLinks({ issueId }: { issueId: string }) {
               <span className="w-24 shrink-0 text-xs text-muted-foreground">{LINK_LABEL[l.type][l.direction]}</span>
               <a href={`/staff/issues/${l.issue.id}`} className="font-mono text-primary hover:underline">{l.issue.referenceNo}</a>
               <Badge variant="outline" className="text-[10px]">{l.issue.status}</Badge>
-              <button type="button" className="ml-auto text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
-                <X className="h-3.5 w-3.5" />
-              </button>
+              {!readOnly && (
+                <button type="button" className="ml-auto text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           ))}
         </div>
 
+        {!readOnly && (
         <div className="flex items-center gap-2">
           <Select value={type} onValueChange={(v) => setType(v as IssueLinkType)}>
             <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
@@ -229,6 +238,7 @@ export function IssueLinks({ issueId }: { issueId: string }) {
             {create.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
           </Button>
         </div>
+        )}
       </CardContent>
     </Card>
   );

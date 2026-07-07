@@ -94,4 +94,44 @@ describe('PlatformAccessGuard (e2e)', () => {
       .get('/api/staff/issues/33333333-3333-3333-3333-333333333333')
       .expect(404);
   });
+
+  describe('WATCHER (read-only role)', () => {
+    it('a Portal A watcher can read a Portal A issue (200)', async () => {
+      currentStaff = staff([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      await request(app.getHttpServer()).get(`/api/staff/issues/${ISSUE_A}`).expect(200);
+    });
+
+    it('a Portal A watcher gets a truthful 403 on a write to their own platform', async () => {
+      // In scope (so the issue "exists" for them) but read-only: mutations 403.
+      currentStaff = staff([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      await request(app.getHttpServer())
+        .patch(`/api/staff/issues/${ISSUE_A}/status`)
+        .send({ status: 'IN_PROGRESS', version: 1 })
+        .expect(403);
+    });
+
+    it('a Portal A watcher gets 404 on a Portal B issue — same no-oracle rule', async () => {
+      currentStaff = staff([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      const res = await request(app.getHttpServer()).get(`/api/staff/issues/${ISSUE_B}`).expect(404);
+      expect(res.body.message).toBe('Issue not found');
+    });
+
+    it('a watcher gets 403 on the @mention member list (not mentionable, cannot comment)', async () => {
+      currentStaff = staff([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      await request(app.getHttpServer()).get(`/api/staff/issues/${ISSUE_A}/members`).expect(403);
+    });
+
+    it('a global watcher can read any platform issue (200)', async () => {
+      currentStaff = staff([{ role: Role.WATCHER, platformId: null }]);
+      await request(app.getHttpServer()).get(`/api/staff/issues/${ISSUE_B}`).expect(200);
+    });
+
+    it('a global watcher still cannot write anywhere (403)', async () => {
+      currentStaff = staff([{ role: Role.WATCHER, platformId: null }]);
+      await request(app.getHttpServer())
+        .patch(`/api/staff/issues/${ISSUE_B}/status`)
+        .send({ status: 'IN_PROGRESS', version: 1 })
+        .expect(403);
+    });
+  });
 });

@@ -4,12 +4,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, randomBytes } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
-import { Role } from '../common/enums';
 import { ApiToken, Issue } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
+import { STAFF_WRITE_ROLES } from '../authz/role-sets';
 
-const ALL_STAFF_ROLES: Role[] = [Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN];
 const sha256 = (v: string): string => createHash('sha256').update(v).digest('hex');
 
 @Injectable()
@@ -20,8 +19,9 @@ export class ApiTokensService {
     private readonly scope: ScopeService,
   ) {}
 
+  // API tokens are platform config: write roles only, list included.
   private assertAccess(staff: AuthenticatedStaff, platformId: string): void {
-    if (!this.scope.canAccessPlatform(staff, platformId, ALL_STAFF_ROLES)) {
+    if (!this.scope.canAccessPlatform(staff, platformId, STAFF_WRITE_ROLES)) {
       throw new ForbiddenException('You do not have access to this platform.');
     }
   }

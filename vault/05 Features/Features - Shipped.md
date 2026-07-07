@@ -1,7 +1,7 @@
 ---
 title: Features - Shipped
 tags: [cimp, features]
-updated: 2026-07-06
+updated: 2026-07-07
 ---
 # Features - Shipped (JIRA-like)
 ← [[CIMP - Home]] · roadmap → [[Feature Roadmap]]
@@ -25,5 +25,8 @@ All backend follows the same pattern: entity + migration + service (scoped, test
 
 ## Board WIP limits `#feature`
 `frontend/src/staff/BoardPage.tsx` — per-column soft caps (`IN_PROGRESS:6`, `ON_HOLD:4`); badge turns red at/over limit. Swimlanes still pending ([[Feature Roadmap]]).
+
+## WATCHER role (read-only staff) `#feature`
+`Role.WATCHER` + `src/authz/role-sets.ts` (`STAFF_READ_ROLES`/`STAFF_WRITE_ROLES`) + migration `AddWatcherRole`. Read-only staff role, grantable **per-platform or globally** from Admin → Staff & roles (no new endpoints — `POST /api/admin/roles` accepts it). Sees issues/comments (incl. internal)/attachments/labels/links/dashboard/CSV export, may watch issues; no mutations, no automation/API-token config, **not @mentionable** (`/members` and `platformMemberIds` filter watcher grants). Not to be confused with per-issue **Watchers** above — that's a subscription any staff can make; this is a role. **UI:** role in the admin picker; detail-panel actions/composer hidden, board drag disabled, bulk toolbar hidden, labels/links read-only. → [[Module - Authz]]
 
 Related: [[Data Model]] · [[Backend Modules and API]]

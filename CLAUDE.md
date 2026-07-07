@@ -83,9 +83,13 @@ graph, ER diagram, and route table):
   `JwtAuthGuard` verifies it and upserts a `StaffUser`, then `PlatformAccessGuard`
   + `@Roles` enforce access. Identity is in the token; roles are always in the DB.
 - **Authorization is centralized** in `src/authz/scope.service.ts`
-  (`scopedPlatformIds`, `canAccessPlatform`, `scopeAllows`). The **server is the
-  enforcement point**; the frontend gates UI only for UX. A focal point of one
-  platform gets `403` on another's issue; admins/global developers are unscoped.
+  (`scopedPlatformIds`, `canAccessPlatform`, `scopeAllows`), with the read/write
+  role split in `src/authz/role-sets.ts` — `STAFF_READ_ROLES` includes the
+  read-only `WATCHER` role, `STAFF_WRITE_ROLES` doesn't; import these instead of
+  hand-rolling role lists. The **server is the enforcement point**; the frontend
+  gates UI only for UX. A focal point of one platform gets `404` on another's
+  issue (enumeration defense); admins/global developers are unscoped.
+  `scopedPlatformIds` is *read* scope — never authorize a mutation with it alone.
 - **Event-driven decoupling.** State changes emit domain events
   (`src/events/issue-events.ts`); notifications, attachment scanning, and Jira
   sync are `@OnEvent` listeners and never run in the request path.

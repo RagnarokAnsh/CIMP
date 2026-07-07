@@ -61,6 +61,40 @@ describe('ScopeService', () => {
       const fp = staffWith([{ role: Role.FOCAL_POINT, platformId: PORTAL_A }]);
       expect(scope.canAccessPlatform(fp, PORTAL_A, [Role.DEVELOPER])).toBe(false);
     });
+
+    it('lets a scoped watcher pass a read check on their platform', () => {
+      const watcher = staffWith([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      expect(scope.canAccessPlatform(watcher, PORTAL_A, [Role.WATCHER])).toBe(true);
+    });
+
+    it('denies a scoped watcher a write check on their own platform', () => {
+      const watcher = staffWith([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      expect(
+        scope.canAccessPlatform(watcher, PORTAL_A, [Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN]),
+      ).toBe(false);
+    });
+
+    it('denies a scoped watcher on another platform', () => {
+      const watcher = staffWith([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      expect(scope.canAccessPlatform(watcher, PORTAL_B, [Role.WATCHER])).toBe(false);
+    });
+
+    it('lets a global watcher pass a read check on any platform', () => {
+      const watcher = staffWith([{ role: Role.WATCHER, platformId: null }]);
+      expect(scope.canAccessPlatform(watcher, PORTAL_B, [Role.WATCHER])).toBe(true);
+    });
+  });
+
+  describe('scopedPlatformIds (watcher)', () => {
+    it('scopes a per-platform watcher to their platform', () => {
+      const watcher = staffWith([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      expect(scope.scopedPlatformIds(watcher)).toEqual([PORTAL_A]);
+    });
+
+    it('returns ALL for a global watcher', () => {
+      const watcher = staffWith([{ role: Role.WATCHER, platformId: null }]);
+      expect(scope.scopedPlatformIds(watcher)).toBe('ALL');
+    });
   });
 
   describe('scopeAllows', () => {

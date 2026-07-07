@@ -1,7 +1,7 @@
 ---
 title: Session Handoff
 tags: [cimp, handoff, resume]
-updated: 2026-07-06
+updated: 2026-07-07
 ---
 # Session Handoff — read this first when resuming
 ← [[CIMP - Home]]
@@ -9,14 +9,14 @@ updated: 2026-07-06
 > Purpose: pick up work in a **fresh session** without re-deriving context. Read this + [[Architecture Overview]] + [[Backend Modules and API]] and you're oriented.
 
 ## Where the code is
-- **Active branch: `dev`** — ~17 commits ahead of **`main`** (the deploy branch). All recent work (security + features) is on `dev`. `main` is untouched.
+- **Active branch: `dev`** — ~18 commits ahead of **`main`** (the deploy branch). All recent work (security + features) is on `dev`. `main` is untouched.
 - Repo `D:\CIMP\CIMP` (GitHub `RagnarokAnsh/CIMP`). Vault `D:\CIMP\CIMP\vault`.
 - Sibling repos: `D:\cimp-connect` ([[cimp-connect Package]]), `D:\FAFICS` ([[FAFICS Integration]]).
 
 ## State (green)
-- **71 unit + 8 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
+- **77 unit + 14 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
 - **Security:** ~42/57 audit findings fixed. Tracker: `SECURITY_AUDIT.md`. → [[Security Audit and Hardening]].
-- **Features shipped:** issue links, labels, watchers (backend+tests+**UI**); automation rules, scoped API tokens (backend+tests, **UI pending**); board WIP limits (UI); SSE-ticket auth. → [[Features - Shipped]].
+- **Features shipped:** issue links, labels, watchers (backend+tests+**UI**); automation rules, scoped API tokens (backend+tests, **UI pending**); board WIP limits (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). → [[Features - Shipped]] / [[Module - Authz]].
 
 ## What's next (priority order) → [[Feature Roadmap]]
 1. **SLA policies + escalations** — *test-first, invasive* (rewires `computeSla`); also fix L8 reopen baseline.

@@ -70,6 +70,8 @@ const STAFF = [
   { sub: 'oidc|omar', name: 'Omar Haddad', email: 'omar.haddad@cimp.dev', roles: [{ role: Role.FOCAL_POINT, platform: 'atlas-logistics' }] },
   { sub: 'oidc|aisha', name: 'Aisha Bello', email: 'aisha.bello@cimp.dev', roles: [{ role: Role.DEVELOPER, platform: 'atlas-logistics' }] },
   { sub: 'oidc|noah', name: 'Noah Schmidt', email: 'noah.schmidt@cimp.dev', roles: [{ role: Role.FOCAL_POINT, platform: 'beacon-support' }, { role: Role.DEVELOPER, platform: 'beacon-support' }] },
+  // Read-only watcher scoped to one platform — for demoing the WATCHER role.
+  { sub: 'oidc|lena', name: 'Lena Fischer', email: 'lena.fischer@cimp.dev', roles: [{ role: Role.WATCHER, platform: 'compass-hr' }] },
 ];
 
 const INTERNAL_NOTES = [

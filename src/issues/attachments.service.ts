@@ -3,13 +3,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Role, ScanStatus } from '../common/enums';
+import { ScanStatus } from '../common/enums';
 import { Attachment } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
+import { STAFF_READ_ROLES } from '../authz/role-sets';
 import { StorageService } from '../storage/storage.service';
-
-const STAFF_ROLES = [Role.FOCAL_POINT, Role.DEVELOPER, Role.ADMIN];
 // Only files that have cleared (or skipped) scanning may be served.
 const SERVABLE = new Set([ScanStatus.CLEAN, ScanStatus.SKIPPED]);
 
@@ -34,7 +33,8 @@ export class AttachmentsService {
     });
     if (!attachment || !attachment.issue) throw new NotFoundException('Attachment not found');
 
-    if (!this.scope.canAccessPlatform(staff, attachment.issue.platform.id, STAFF_ROLES)) {
+    // Download is a read — any role on the platform may fetch, watchers included.
+    if (!this.scope.canAccessPlatform(staff, attachment.issue.platform.id, STAFF_READ_ROLES)) {
       throw new ForbiddenException('You do not have access to this attachment.');
     }
     if (!SERVABLE.has(attachment.scanStatus)) {
