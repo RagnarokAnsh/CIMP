@@ -6,9 +6,11 @@ import { AccountStatus, PlatformStatus, Role } from '../src/common/enums';
 
 const ADMIN_EMAIL = 'admin@cimp.dev';
 const ADMIN_PASSWORD = 'Password123!';
+const WATCHER_EMAIL = 'watcher@cimp.dev';
 
-// Seeds a demo portal + a staff admin account, and prints a ready-to-use
-// reporter hand-off token and the admin login. Run: npm run seed
+// Seeds a demo portal + a staff admin account (plus a read-only watcher scoped
+// to the portal), and prints a ready-to-use reporter hand-off token and the
+// staff logins. Run: npm run seed
 async function main() {
   await AppDataSource.initialize();
   const repo = AppDataSource.getRepository(Platform);
@@ -31,8 +33,12 @@ async function main() {
   }
 
   // A staff admin you can log into the workspace with (self-issued JWT).
+  // Look up by email OR idpSubject — both are unique, and a row created under a
+  // different email would otherwise collide on the idp_subject constraint.
   const staffRepo = AppDataSource.getRepository(StaffUser);
-  let admin = await staffRepo.findOne({ where: { email: ADMIN_EMAIL } });
+  let admin = await staffRepo.findOne({
+    where: [{ email: ADMIN_EMAIL }, { idpSubject: `local:${ADMIN_EMAIL}` }],
+  });
   if (!admin) {
     admin = await staffRepo.save(
       staffRepo.create({
@@ -55,6 +61,32 @@ async function main() {
     console.log(`Admin staff "${ADMIN_EMAIL}" already exists`);
   }
 
+  // A read-only WATCHER scoped to the demo portal, for trying the role.
+  let watcher = await staffRepo.findOne({
+    where: [{ email: WATCHER_EMAIL }, { idpSubject: `local:${WATCHER_EMAIL}` }],
+  });
+  if (!watcher) {
+    watcher = await staffRepo.save(
+      staffRepo.create({
+        idpSubject: `local:${WATCHER_EMAIL}`,
+        name: 'Demo Watcher',
+        email: WATCHER_EMAIL,
+        status: AccountStatus.ACTIVE,
+        passwordHash: await bcrypt.hash(ADMIN_PASSWORD, 10),
+      }),
+    );
+    await AppDataSource.getRepository(UserPlatformRole).save(
+      AppDataSource.getRepository(UserPlatformRole).create({
+        staffUser: { id: watcher.id } as any,
+        platform: { id: platform.id } as any,
+        role: Role.WATCHER,
+      }),
+    );
+    console.log(`Created watcher staff "${WATCHER_EMAIL}" (read-only on "${key}")`);
+  } else {
+    console.log(`Watcher staff "${WATCHER_EMAIL}" already exists`);
+  }
+
   const token = jwt.sign(
     { platformKey: key, portalUserId: 'u-1001', name: 'Asha Rao', email: 'asha@example.org' },
     secret,
@@ -62,6 +94,7 @@ async function main() {
   );
 
   console.log(`\nStaff login (email + password): ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+  console.log(`Watcher login (read-only on ${key}): ${WATCHER_EMAIL} / ${ADMIN_PASSWORD}`);
 
   console.log('\nSample reporter hand-off token (valid 5 min):\n');
   console.log(token);

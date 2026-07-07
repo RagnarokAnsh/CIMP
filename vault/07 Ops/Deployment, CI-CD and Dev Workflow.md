@@ -25,7 +25,9 @@ Trigger: **push to `main`** (or manual). Jobs:
 
 ## Dev commands (repo root)
 - `docker compose up -d postgres` (:5432) · `npm run start:dev` (API :3000 `/api`) · `npm run build` · `npm run typecheck` · `npm test` · `npm run test:e2e`.
-- Data: `npm run seed` (demo portal + token/curl), `npm run seed:demo` (WIPES schema, full dataset), `npm run token` (mint a hand-off token).
+- Data: `npm run seed` (demo portal + admin + read-only watcher `watcher@cimp.dev` + token/curl), `npm run seed:demo` (WIPES schema, full dataset incl. watcher `lena.fischer@cimp.dev`), `npm run token` (mint a hand-off token).
+- Prod seeding (`npm run seed:prod`, env-driven): `ADMIN_PASSWORD` required; optional read-only watcher via `WATCHER_EMAIL` + `WATCHER_PASSWORD` (+ `WATCHER_NAME`, `WATCHER_GLOBAL=true` for all-platforms scope; default scopes to `PLATFORM_KEY`).
+- Seeder lookups match staff by **email OR `idp_subject`** (both unique) — an email-only lookup used to collide on `idp_subject` when a row existed under a different email.
 - Migrations (`DB_SYNCHRONIZE=false`): `npm run migration:generate|run|revert`.
 - Frontend (`frontend/`): `npm run dev` (:5173) · `npm run gen:api`.
 - Tests run **without a DB** (boundaries stubbed).

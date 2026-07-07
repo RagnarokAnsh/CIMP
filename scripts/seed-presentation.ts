@@ -83,6 +83,10 @@ const STAFF: StaffSpec[] = [
   { key: 'aisha', name: 'Aisha Bello', email: 'aisha.bello@demo.com', roles: [{ role: Role.DEVELOPER, platform: 'shiftbridge-hr' }] },
   { key: 'noah', name: 'Noah Schmidt', email: 'noah.schmidt@demo.com', roles: [{ role: Role.FOCAL_POINT, platform: 'cargopilot' }] },
   { key: 'mateo', name: 'Mateo Silva', email: 'mateo.silva@demo.com', roles: [{ role: Role.DEVELOPER, platform: 'cargopilot' }] },
+  // Read-only WATCHER accounts — never referenced by issue/comment specs, so
+  // they hold no authored activity (consistent with the role).
+  { key: 'lena', name: 'Lena Fischer', email: 'lena.fischer@demo.com', roles: [{ role: Role.WATCHER, platform: 'nimbus-crm' }] },
+  { key: 'victor', name: 'Victor Osei', email: 'victor.osei@demo.com', roles: [{ role: Role.WATCHER, platform: null }] },
 ];
 
 // ---- static data: reporters (end users of each portal) ---------------------
