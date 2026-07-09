@@ -9,6 +9,10 @@ updated: 2026-07-07
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-07 — Deploy script hardening
+- Rewrote `scripts/deploy.sh`: two-phase rollback (abort-early before pm2 / real rollback after), **`GET /api/health` gate** with fail-fast on pm2 `errored`/`stopped`, `flock` single-instance lock, required-tool check, `DEPLOY_REF` pinning, and **atomic frontend swap** (build to `dist.new`, `mv` in — no mid-deploy 404s).
+- **Pre-flight env check** mirroring [[Configuration and Env|env.validation.ts]] runs *before* pm2 is touched — catches the fail-closed prod config (`SCAN_DRIVER=clamav`/`ALLOW_UNSCANNED_UPLOADS`, `JWT_SECRET`≥32, `DB_SYNCHRONIZE=false`, `CORS_ORIGINS`) and aborts with a named error while the old build stays live. This is the fix for the **clamav boot-crash** a deploy hit: the old script had no health check, so pm2 crash-looped while the deploy reported success. → [[Deployment, CI-CD and Dev Workflow]]
+
 ## 2026-07-07 — WATCHER role (read-only staff)
 - **New `Role.WATCHER`** — read-only staff role, grantable per-platform or **globally** from Admin → Staff & roles. Sees issues/comments (incl. internal)/attachments/labels/links/dashboard/**CSV export** and can watch (subscribe to) issues; **no mutations**, no automation/API-token config, **excluded from the @mention picker** and crafted-mention delivery.
 - Central role sets in `src/authz/role-sets.ts` (`STAFF_READ_ROLES` / `STAFF_WRITE_ROLES`) replaced the per-file `ALL_STAFF_ROLES`/`TRIAGE_ROLES` copies; `PlatformAccessGuard` default is now **fail-closed** (`STAFF_WRITE_ROLES` when no `@Roles`). → [[Module - Authz]]
