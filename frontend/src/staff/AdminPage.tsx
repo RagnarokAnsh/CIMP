@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, KeyRound, Plus, Trash2 } from 'lucide-react';
+import { Boxes, KeyRound, Plus, Trash2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type { PlatformItem, Role } from '@/api/types';
@@ -175,6 +175,10 @@ function StaffTab() {
   const [staffUserId, setStaffUserId] = useState('');
   const [role, setRole] = useState<Role>('DEVELOPER');
   const [platformId, setPlatformId] = useState<string>('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   const { data: staff, isLoading } = useQuery({
     queryKey: ['admin', 'staff'],
@@ -188,6 +192,15 @@ function StaffTab() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'staff'] });
   const onError = (e: any) => toast.error(e?.response?.data?.message ?? 'Action failed.');
 
+  const createStaff = useMutation({
+    mutationFn: () => staffApi.post('/admin/staff', { name: newName, email: newEmail, password: newPassword }),
+    onSuccess: () => {
+      setCreateOpen(false); setNewName(''); setNewEmail(''); setNewPassword('');
+      toast.success('Staff account created. Assign a role so they can see issues.');
+      invalidate();
+    },
+    onError,
+  });
   const assign = useMutation({
     mutationFn: () =>
       staffApi.post('/admin/roles', {
@@ -206,6 +219,44 @@ function StaffTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm"><UserPlus className="h-4 w-4" /> Add staff</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create staff account</DialogTitle>
+              <DialogDescription>
+                They log in with this email and password. New accounts have no roles — assign one below afterwards.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-name">Name</Label>
+                <Input id="staff-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Jane Doe" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-email">Email</Label>
+                <Input id="staff-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="jane@team.com" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="staff-password">Initial password</Label>
+                <Input id="staff-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 12 characters" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => createStaff.mutate()}
+                disabled={!newName || !newEmail || newPassword.length < 12 || createStaff.isPending}
+              >
+                {createStaff.isPending && <Spinner />} Create account
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 pt-6">
           <div className="space-y-1.5">
