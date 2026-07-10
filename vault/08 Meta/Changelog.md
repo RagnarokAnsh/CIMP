@@ -9,6 +9,11 @@ updated: 2026-07-07
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-10 — Feature strategy + executable plans; Add-staff UI; seed:prod wipe
+- **8 implementation plans** written to `05 Features/Plans/` (webhooks, duplicate merge, SDK context capture, deflection, AI triage, CSAT, command palette/triage inbox) — designed for execution by junior devs/smaller LLMs; decisions pre-made, repo gotchas encoded. Index: [[Plan 00 - How to Execute These Plans]].
+- **Admin UI: Add-staff dialog** in Staff & roles tab (`AdminPage.tsx`) — `POST /admin/staff` existed but had no UI; gap surfaced after the prod DB wipe.
+- **`seed:prod` gained `WIPE_DATA="YES_DELETE_ALL_DATA"`** — dynamic TRUNCATE of all app tables (schema + migrations kept) for clean production resets; supports `HANDOFF_SECRET` passthrough so connected portals keep working.
+
 ## 2026-07-10 — cimp-connect v0.4.0: Express/Next/fetch-mode/Java (sibling repo `D:\cimp-connect`)
 - **`/express`** one-liner (`cimpHandoff()`, env-configured, default `req.user` mapping) and **`/next`** App Router handler factory.
 - **Content negotiation in every backend adapter** (Express/NestJS/Next/Spring): 302 for link clicks, `{ url }` JSON for `Accept: application/json` / `?format=json` — enables header-JWT apps (Angular interceptor) where link navigation carries no auth.
