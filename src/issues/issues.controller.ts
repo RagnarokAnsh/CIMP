@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Get, Param, ParseUUIDPipe, Patch, Query, Res, UseGuards,
+  Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, Res, UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -10,8 +10,10 @@ import { Roles } from '../authz/roles.decorator';
 import { PlatformAccessGuard } from '../authz/platform-access.guard';
 import { STAFF_READ_ROLES, STAFF_WRITE_ROLES } from '../authz/role-sets';
 import { IssuesService } from './issues.service';
+import { MergeService } from './merge.service';
 import { toCsv } from './issues.csv';
 import { ListIssuesDto } from './dto/list-issues.dto';
+import { MergeIssueDto } from './dto/merge-issue.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { UpdatePriorityDto } from './dto/update-priority.dto';
@@ -22,7 +24,10 @@ import { BulkUpdateDto } from './dto/bulk-update.dto';
 @Controller('staff/issues')
 @UseGuards(JwtAuthGuard, PlatformAccessGuard)
 export class IssuesController {
-  constructor(private readonly issues: IssuesService) {}
+  constructor(
+    private readonly issues: IssuesService,
+    private readonly merge: MergeService,
+  ) {}
 
   @Get()
   @Roles(...STAFF_READ_ROLES)
@@ -73,6 +78,17 @@ export class IssuesController {
   @ApiOperation({ summary: 'Bulk change status/priority/assignee across issues in scope.' })
   bulk(@CurrentStaff() staff: AuthenticatedStaff, @Body() dto: BulkUpdateDto) {
     return this.issues.bulkUpdate(staff, dto);
+  }
+
+  @Post(':id/merge')
+  @Roles(...STAFF_WRITE_ROLES)
+  @ApiOperation({ summary: 'Merge this issue into a canonical issue as a duplicate.' })
+  mergeIssue(
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: MergeIssueDto,
+  ) {
+    return this.merge.merge(staff, id, dto);
   }
 
   @Patch(':id/status')

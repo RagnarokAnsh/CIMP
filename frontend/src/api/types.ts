@@ -70,6 +70,10 @@ export interface StaffIssueDetail extends StaffIssueSummary {
   closedAt: string | null;
   jiraIssueKey: string | null;
   jiraSyncStatus: string;
+  /** Set when this issue was merged into a canonical issue as a duplicate. */
+  duplicateOf: { id: string; referenceNo: string } | null;
+  /** Issues merged into this one as duplicates. */
+  duplicates: { id: string; referenceNo: string; status: IssueStatus }[];
   comments: {
     id: string;
     body: string;

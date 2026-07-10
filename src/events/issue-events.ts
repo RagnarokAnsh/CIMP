@@ -11,6 +11,10 @@ export const IssueEvents = {
   // Emitted once an issue's attachments have finished scanning, so downstream
   // sync (e.g. Jira) can push the now-servable files.
   ATTACHMENTS_SCANNED: 'issue.attachments_scanned',
+  // Emitted when an issue is merged into a canonical issue as a duplicate.
+  // Deliberately NOT a STATUS_CHANGED (the merge close must not trigger
+  // status automation rules or the standard status notifications).
+  MERGED: 'issue.merged',
 } as const;
 
 export interface IssueCreatedEvent {
@@ -52,4 +56,11 @@ export interface CommentAddedEvent {
 
 export interface AttachmentsScannedEvent {
   issueId: string;
+}
+
+export interface IssueMergedEvent {
+  duplicateIssueId: string;
+  canonicalIssueId: string;
+  platformId: string;
+  actorStaffId: string;
 }

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Link2, Plus, Tag, X } from 'lucide-react';
+import { Eye, GitMerge, Link2, Plus, Tag, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
@@ -11,9 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 const onError = (e: any) => {
   const msg = e?.response?.data?.message ?? 'Action failed.';
@@ -159,6 +164,116 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ── Merge (duplicate flow) ────────────────────────────────────────────────
+// Search-and-confirm dialog that merges the current issue into a canonical
+// same-platform issue. The server closes this issue, links the pair, copies
+// watchers, and notifies this issue's reporter when the canonical resolves.
+export function MergeIssueButton({
+  issueId, platformId, version, onMerged,
+}: {
+  issueId: string;
+  platformId?: string;
+  version: number;
+  onMerged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [selected, setSelected] = useState<StaffIssueSummary | null>(null);
+
+  // Debounce the search so we don't hit the list endpoint per keystroke.
+  const [debouncedQ, setDebouncedQ] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const { data: results, isFetching } = useQuery({
+    queryKey: ['staff', 'issue', issueId, 'merge-search', debouncedQ, platformId],
+    queryFn: async () =>
+      (await staffApi.get<Paginated<StaffIssueSummary>>(
+        `/staff/issues?q=${encodeURIComponent(debouncedQ)}&pageSize=6${platformId ? `&platformId=${platformId}` : ''}`,
+      )).data,
+    enabled: open && debouncedQ.length >= 2,
+  });
+  const candidates = (results?.data ?? []).filter((i) => i.id !== issueId && i.status !== 'CLOSED');
+
+  const merge = useMutation({
+    mutationFn: () =>
+      staffApi.post(`/staff/issues/${issueId}/merge`, {
+        canonicalIssueId: selected!.id,
+        version,
+      }),
+    onSuccess: () => {
+      setOpen(false); setQ(''); setSelected(null);
+      toast.success('Merged as duplicate.');
+      onMerged();
+    },
+    onError,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setQ(''); setSelected(null); } }}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1.5">
+          <GitMerge className="h-3.5 w-3.5" /> Merge into…
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Merge as duplicate</DialogTitle>
+          <DialogDescription>
+            This issue will be closed and linked to the issue you pick. Its reporter is
+            told it's being tracked centrally and gets notified when that issue resolves.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Input
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setSelected(null); }}
+            placeholder="Search by reference or words in the description…"
+            autoFocus
+          />
+          {debouncedQ.length >= 2 && (
+            <div className="max-h-56 space-y-1 overflow-y-auto">
+              {isFetching && candidates.length === 0 && <Skeleton className="h-10 w-full" />}
+              {!isFetching && candidates.length === 0 && (
+                <p className="px-1 py-2 text-sm text-muted-foreground">No matching open issues on this platform.</p>
+              )}
+              {candidates.map((i) => (
+                <button
+                  key={i.id}
+                  type="button"
+                  onClick={() => setSelected(i)}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm',
+                    selected?.id === i.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border/60 hover:bg-accent/60',
+                  )}
+                >
+                  <span className="shrink-0 font-mono text-xs">{i.referenceNo}</span>
+                  <span className="truncate text-muted-foreground">{i.descriptionPreview}</span>
+                  <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">{i.status}</Badge>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            variant="destructive"
+            disabled={!selected || merge.isPending}
+            onClick={() => merge.mutate()}
+          >
+            {merge.isPending && <Spinner />}
+            Merge into {selected?.referenceNo ?? '…'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

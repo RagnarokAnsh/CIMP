@@ -14,7 +14,8 @@ updated: 2026-07-07
 - Sibling repos: `D:\cimp-connect` ([[cimp-connect Package]]), `D:\FAFICS` ([[FAFICS Integration]]).
 
 ## State (green)
-- **77 unit + 14 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
+- **88 unit + 17 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
+- **Duplicate merge flow shipped** (2026-07-10, [[Plan 02 - Duplicate Merge Flow]]); remaining differentiator plans in `05 Features/Plans/` ([[Plan 00 - How to Execute These Plans]]).
 - **Security:** ~42/57 audit findings fixed. Tracker: `SECURITY_AUDIT.md`. → [[Security Audit and Hardening]].
 - **Features shipped:** issue links, labels, watchers (backend+tests+**UI**); automation rules, scoped API tokens (backend+tests, **UI pending**); board WIP limits (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). → [[Features - Shipped]] / [[Module - Authz]].
 

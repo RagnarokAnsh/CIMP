@@ -21,6 +21,7 @@ import { ReporterIssueView } from './reporter-issue-view.entity';
 @Index('idx_issues_created_at', ['createdAt'])
 @Index('idx_issues_platform_status', ['platform', 'status'])
 @Index('idx_issues_platform_created', ['platform', 'createdAt'])
+@Index('idx_issues_duplicate_of', ['duplicateOf'])
 export class Issue {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -49,6 +50,13 @@ export class Issue {
 
   @Column({ type: 'enum', enum: Priority, default: Priority.MEDIUM })
   priority: Priority;
+
+  // Set when this issue was merged as a duplicate of another (same-platform)
+  // issue. Source of truth for resolution fan-out to duplicate reporters — the
+  // DUPLICATES issue_link row created alongside is presentation only.
+  @ManyToOne(() => Issue, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'duplicate_of_id' })
+  duplicateOf: Issue | null;
 
   @Column({ name: 'jira_issue_key', type: 'varchar', nullable: true })
   jiraIssueKey: string | null;

@@ -31,7 +31,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { IssueWatch, IssueLabels, IssueLinks } from './IssueExtras';
+import { IssueWatch, IssueLabels, IssueLinks, MergeIssueButton } from './IssueExtras';
 
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const UNASSIGNED = '__unassigned__';
@@ -217,6 +217,17 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           <span className="text-muted-foreground/40">/</span>
           <span className="font-mono">{data.referenceNo}</span>
         </div>
+        {data.duplicateOf && (
+          <Alert>
+            <AlertDescription>
+              Duplicate of{' '}
+              <a href={`/staff/issues/${data.duplicateOf.id}`} className="font-mono text-primary hover:underline">
+                {data.duplicateOf.referenceNo}
+              </a>
+              {' '}— closed here; the reporter is notified when that issue resolves.
+            </AlertDescription>
+          </Alert>
+        )}
         <h1 className="text-xl font-semibold leading-snug tracking-tight text-balance">
           {firstLine(data.description, 120) || data.referenceNo}
         </h1>
@@ -275,7 +286,9 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                   {data.comments.map((c) => (
                     <div key={c.id} className="space-y-1">
                       <div className="flex items-center gap-2 text-sm">
-                        <span className="font-medium">{c.author?.name ?? 'Unknown'}</span>
+                        <span className="font-medium">
+                          {c.author?.name ?? (c.authorType === 'REPORTER' ? 'Reporter' : 'System')}
+                        </span>
                         {c.authorType === 'REPORTER' && (
                           <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-400">
                             Reporter
@@ -390,6 +403,18 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               <Field label="Assignee" value={data.assignee?.name ?? 'Unassigned'} />
               <Field label="Jira sync" value={data.jiraSyncStatus} />
               <Field label="Created" value={new Date(data.createdAt).toLocaleString()} />
+              {data.duplicates.length > 0 && (
+                <div className="space-y-1.5 border-t border-border/60 pt-3">
+                  <span className="text-muted-foreground">Duplicates ({data.duplicates.length})</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {data.duplicates.map((d) => (
+                      <a key={d.id} href={`/staff/issues/${d.id}`} className="font-mono text-xs text-primary hover:underline">
+                        {d.referenceNo}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -410,6 +435,14 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                       {STATUS_META[s].label}
                     </Button>
                   ))}
+                  {!data.duplicateOf && data.status !== 'CLOSED' && (
+                    <MergeIssueButton
+                      issueId={id}
+                      platformId={data.platform?.id}
+                      version={data.version}
+                      onMerged={() => { refresh(); invalidateLists(); }}
+                    />
+                  )}
                 </div>
               </div>
               <div className="space-y-2">

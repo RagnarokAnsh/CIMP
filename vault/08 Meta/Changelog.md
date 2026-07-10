@@ -9,6 +9,13 @@ updated: 2026-07-07
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-10 — Duplicate merge flow (Plan 02) shipped
+- **Merge as duplicate**: `POST /api/staff/issues/:id/merge` closes the duplicate with `issues.duplicate_of_id` → canonical (migration #12 `AddIssueDuplicateOf`), creates the DUPLICATES link, copies staff watchers, posts reporter-visible/internal system comments, emits new `issue.merged` event (deliberately NOT a STATUS_CHANGED — no automation/notification side effects). Chain-flattening, same-platform-only, optimistic-lock 409, closed-issue guards. REOPEN on a merged duplicate detaches it.
+- **Close the loop**: when the canonical hits RESOLVED, a listener in `merge.service.ts` drops a reporter-visible "underlying problem resolved" comment on every duplicate + bumps `updatedAt` (in-app only per OD-02).
+- **Privacy invariant verified live**: the duplicate's reporter payload never contains the canonical id/reference.
+- **UI**: Merge-into dialog (search same-platform open issues), duplicate banner, "Duplicates (N)" list, System author fallback. `gen:api` regenerated.
+- Tests: 88 unit (+11 `merge.service.spec.ts`) and 17 e2e (+3 merge authorization: focal 2xx, cross-platform 404-no-oracle, watcher 403) — all green. → [[Plan 02 - Duplicate Merge Flow]]
+
 ## 2026-07-10 — Feature strategy + executable plans; Add-staff UI; seed:prod wipe
 - **8 implementation plans** written to `05 Features/Plans/` (webhooks, duplicate merge, SDK context capture, deflection, AI triage, CSAT, command palette/triage inbox) — designed for execution by junior devs/smaller LLMs; decisions pre-made, repo gotchas encoded. Index: [[Plan 00 - How to Execute These Plans]].
 - **Admin UI: Add-staff dialog** in Staff & roles tab (`AdminPage.tsx`) — `POST /admin/staff` existed but had no UI; gap surfaced after the prod DB wipe.

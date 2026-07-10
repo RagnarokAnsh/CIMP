@@ -100,11 +100,16 @@ export class IssuesService {
         assignee: true,
         attachments: true,
         comments: { author: true },
+        duplicateOf: true,
       },
     });
     if (!issue) throw new NotFoundException('Issue not found');
 
     const history = await this.audit.forIssue(issueId);
+    const duplicates = await this.issues.find({
+      where: { duplicateOf: { id: issueId } },
+      select: { id: true, referenceNo: true, status: true },
+    });
     return {
       id: issue.id,
       referenceNo: issue.referenceNo,
@@ -119,6 +124,16 @@ export class IssuesService {
       closedAt: issue.closedAt,
       jiraIssueKey: issue.jiraIssueKey,
       jiraSyncStatus: issue.jiraSyncStatus,
+      // Staff-only detail: reporter responses are shaped separately in
+      // reporter.service.ts and never expose canonical references.
+      duplicateOf: issue.duplicateOf
+        ? { id: issue.duplicateOf.id, referenceNo: issue.duplicateOf.referenceNo }
+        : null,
+      duplicates: duplicates.map((d) => ({
+        id: d.id,
+        referenceNo: d.referenceNo,
+        status: d.status,
+      })),
       platform: { id: issue.platform.id, key: issue.platform.key, name: issue.platform.name },
       reporter: issue.reporter
         ? { id: issue.reporter.id, name: issue.reporter.name, email: issue.reporter.email }
@@ -557,6 +572,9 @@ export class IssuesService {
     } else if (to === IssueStatus.REOPENED) {
       issue.resolvedAt = null;
       issue.closedAt = null;
+      // Reopening a merged duplicate detaches it from its canonical issue —
+      // someone judged it NOT the same problem after all.
+      issue.duplicateOf = null;
     }
   }
 

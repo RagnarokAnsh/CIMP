@@ -3,8 +3,18 @@ title: Plan 02 - Duplicate Merge Flow
 tags: [cimp, plan, issues, merge]
 updated: 2026-07-10
 effort: M (1 week)
-status: planned
+status: done (2026-07-10)
 ---
+
+> **Implemented.** One deviation from the plan as written: resolution fan-out to
+> duplicate reporters is **in-app only** (reporter-visible system comment +
+> `updatedAt` bump), not email — emailing reporters would violate the existing
+> OD-02 decision (reporter notifications are in-app only). Everything else
+> landed as specified: `merge.service.ts` (+11 unit tests), `POST
+> /staff/issues/:id/merge`, `AddIssueDuplicateOf` migration, chain flattening,
+> watcher copy, REOPEN detach, staff UI (merge dialog, banner, duplicates
+> list), +3 e2e authorization tests. Verified live end-to-end incl. the
+> reporter-privacy invariant.
 # Plan 02 — Duplicate merge flow
 ← [[Plan 00 - How to Execute These Plans]]
 
