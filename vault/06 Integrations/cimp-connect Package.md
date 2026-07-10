@@ -8,7 +8,7 @@ updated: 2026-07-10
 
 Separate repo/package that connects **any backend** (Node or Java) to a CIMP support portal. This is the **bridge note** — link it from any other project's vault.
 
-- **Repo:** `RagnarokAnsh/cimp-connect` (public). **Registry:** GitHub Packages `@ragnarokansh/cimp-connect` (v0.4.0; v0.3.0 published — 0.4.0 pending push/publish). Local: `D:\cimp-connect`.
+- **Repo:** `RagnarokAnsh/cimp-connect` (public). Current: **v0.4.2** (pushed + tagged; **JitPack build green**, jar verified to contain all classes + autoconfig imports). Tags `v0.4.0`/`v0.4.1` exist but their JitPack Java builds are broken (ancient default Maven/compiler plugin — fixed by pinning `maven-compiler-plugin` 3.8.1) — **use `v0.4.2` for Java**. GitHub Packages registry still at v0.3.0 (git install always gets latest `main`). Local: `D:\cimp-connect`.
 - **Install (token-free, recommended):** `npm i github:RagnarokAnsh/cimp-connect` (builds on install via `prepare`). Or GitHub Packages with an `.npmrc` + `read:packages` token. **Java:** JitPack `com.github.ragnarokansh:cimp-connect` (project under `java/`, built via root `jitpack.yml`).
 
 ## What it does
