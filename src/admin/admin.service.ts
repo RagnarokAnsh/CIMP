@@ -4,7 +4,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
-import { ActorType, Role } from '../common/enums';
+import { ActorType, Priority, Role } from '../common/enums';
 import { Platform, StaffUser, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { LocalAuthService } from '../auth/local-auth.service';
@@ -67,6 +67,7 @@ export class AdminService {
     if (dto.status !== undefined) platform.status = dto.status;
     if (dto.jiraProjectKey !== undefined) platform.jiraProjectKey = dto.jiraProjectKey;
     if (dto.jiraEnabled !== undefined) platform.jiraEnabled = dto.jiraEnabled;
+    if (dto.slaPolicy !== undefined) platform.slaPolicy = this.validateSlaPolicy(dto.slaPolicy);
 
     await this.dataSource.transaction(async (em) => {
       await em.save(platform);
@@ -78,6 +79,27 @@ export class AdminService {
       }, em);
     });
     return this.toPlatform(platform);
+  }
+
+  // SLA policy: only priority keys, only sane positive hour values (≤ 1 year).
+  // Empty object normalizes to null (= all env defaults).
+  private validateSlaPolicy(
+    policy: Record<string, number> | null,
+  ): Partial<Record<string, number>> | null {
+    if (policy === null) return null;
+    const allowed = new Set(Object.values(Priority) as string[]);
+    const out: Record<string, number> = {};
+    for (const [key, value] of Object.entries(policy)) {
+      if (!allowed.has(key)) {
+        throw new BadRequestException(`Unknown SLA priority "${key}".`);
+      }
+      const hours = Number(value);
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 8760) {
+        throw new BadRequestException(`SLA hours for ${key} must be between 0 and 8760.`);
+      }
+      out[key] = hours;
+    }
+    return Object.keys(out).length > 0 ? out : null;
   }
 
   // Rotate the hand-off signing secret. Returns the new secret ONCE so the
@@ -246,6 +268,7 @@ export class AdminService {
       status: p.status,
       jiraProjectKey: p.jiraProjectKey,
       jiraEnabled: p.jiraEnabled,
+      slaPolicy: p.slaPolicy ?? null,
       createdAt: p.createdAt,
     };
   }

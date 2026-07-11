@@ -14,9 +14,9 @@ updated: 2026-07-07
 - Sibling repos: `D:\cimp-connect` ([[cimp-connect Package]]), `D:\FAFICS` ([[FAFICS Integration]]).
 
 ## State (green)
-- **127 unit + 21 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
-- **Differentiator track COMPLETE except Plan 05 (AI triage — user deferred):** merge (Plan 02), webhooks (01, Slack descoped), SDK context capture (03, cimp-connect v0.5.0), CSAT (06, in-portal only per OD-02), deflection + known-issues (04, cimp-connect v0.6.0), triage inbox (07). All live-verified. Migrations now #16 (`AddDeflection`).
-- **Deploy note:** dev is many features ahead of the AWS `main` deploy — merging dev→main runs migrations 12-16 and ships the new reporter/staff surfaces at once.
+- **138 unit + 21 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
+- **Differentiator track COMPLETE except Plan 05 (AI triage — user deferred):** merge (02), webhooks (01), SDK context capture (03, v0.5.0), CSAT (06), deflection (04, v0.6.0), triage inbox (07). PLUS 2026-07-12: **SLA policies/escalations (L8 fixed), Admin Integrations UI, ops analytics + weekly digest, screenshots (cimp-connect v0.7.0)**. All live-verified. Migrations now #17 (`AddSlaPolicy`). New deps: `@nestjs/schedule`.
+- **Deploy note:** dev is many features ahead of the AWS `main` deploy — merging dev→main runs migrations 12-17 and ships all new surfaces at once. New env (optional): `SLA_SWEEP_ENABLED`, `DIGEST_ENABLED` (both default on).
 - **Local dev ports:** FAFICS now squats :3000 (web) and :3001 (api) — run the CIMP backend with `PORT=<free> npm run start:dev` when both are up.
 - **Security:** ~42/57 audit findings fixed. Tracker: `SECURITY_AUDIT.md`. → [[Security Audit and Hardening]].
 - **Features shipped:** issue links, labels, watchers (backend+tests+**UI**); automation rules, scoped API tokens (backend+tests, **UI pending**); board WIP limits (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). → [[Features - Shipped]] / [[Module - Authz]].

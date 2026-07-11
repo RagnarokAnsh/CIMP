@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
@@ -60,6 +61,7 @@ import { DeflectionModule } from './deflection/deflection.module';
       ],
     }),
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     StorageModule,
     ScanningModule,
     HandoffModule,

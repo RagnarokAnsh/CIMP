@@ -8,6 +8,7 @@ import { AuthzModule } from '../authz/authz.module';
 import { IssuesController } from './issues.controller';
 import { IssuesService } from './issues.service';
 import { MergeService } from './merge.service';
+import { SlaEscalationService } from './sla-escalation.service';
 import { AttachmentsController } from './attachments.controller';
 import { AttachmentsService } from './attachments.service';
 import { StaffPlatformsController } from './platforms.controller';
@@ -21,7 +22,7 @@ import { StaffPlatformsController } from './platforms.controller';
     AuthzModule,
   ],
   controllers: [IssuesController, AttachmentsController, StaffPlatformsController],
-  providers: [IssuesService, MergeService, AttachmentsService],
+  providers: [IssuesService, MergeService, SlaEscalationService, AttachmentsService],
   exports: [IssuesService],
 })
 export class IssuesModule {}

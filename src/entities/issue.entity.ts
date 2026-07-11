@@ -98,6 +98,17 @@ export class Issue {
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 
+  // SLA clock baseline (L8): equals created_at until the issue is REOPENED,
+  // which resets it to the reopen time so old issues don't instantly re-breach.
+  @Column({ name: 'sla_started_at', type: 'timestamptz', default: () => 'now()' })
+  slaStartedAt: Date;
+
+  // Set once by the breach sweep when it first observes the SLA blown —
+  // idempotence marker so escalation fires exactly once per SLA cycle.
+  // Cleared on REOPENED (new cycle).
+  @Column({ name: 'sla_breached_at', type: 'timestamptz', nullable: true })
+  slaBreachedAt: Date | null;
+
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 

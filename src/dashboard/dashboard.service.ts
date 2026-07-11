@@ -26,7 +26,7 @@ export class DashboardService {
       return this.empty();
     }
 
-    const [byStatus, byPriority, byPlatform, byAssignee, trend, sla, csat] = await Promise.all([
+    const [byStatus, byPriority, byPlatform, byAssignee, trend, sla, csat, ops] = await Promise.all([
       this.groupCount(scope, 'issue.status', 'status'),
       this.groupCount(scope, 'issue.priority', 'priority'),
       this.byPlatform(scope),
@@ -34,6 +34,7 @@ export class DashboardService {
       this.trend(scope),
       this.slaCounts(scope),
       this.csat(scope),
+      this.ops(scope),
     ]);
 
     const total = byStatus.reduce((sum, r) => sum + r.count, 0);
@@ -50,6 +51,71 @@ export class DashboardService {
       trend,
       sla,
       csat,
+      ops,
+    };
+  }
+
+  // Operational quality over the last 30 days (all raw SQL — the aggregates
+  // need percentile_cont / cross-table joins TypeORM can't express):
+  //  - time-to-first-staff-action: creation → first STAFF audit event
+  //  - resolution time: creation → resolved_at
+  //  - reopen rate: issues reopened ÷ issues resolved
+  //  - deflected: "notify me instead" subscriptions ÷ (new issues + deflected)
+  private async ops(scope: string[] | 'ALL') {
+    const scopeSql = scope === 'ALL' ? '' : 'AND i.platform_id = ANY($1)';
+    const params = scope === 'ALL' ? [] : [scope];
+    const q = <T>(sql: string) => this.issues.manager.query(sql, params) as Promise<T[]>;
+
+    const [ttfr] = await q<{ p50: string | null; p90: string | null }>(`
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY t.hours) AS p50,
+             percentile_cont(0.9) WITHIN GROUP (ORDER BY t.hours) AS p90
+      FROM (
+        SELECT EXTRACT(EPOCH FROM (MIN(a.created_at) - i.created_at)) / 3600 AS hours
+        FROM issues i
+        JOIN audit_events a ON a.issue_id = i.id AND a.actor_type = 'STAFF'
+        WHERE i.created_at >= now() - interval '30 days' ${scopeSql}
+        GROUP BY i.id, i.created_at
+      ) t`);
+
+    const [resolution] = await q<{ p50: string | null; p90: string | null; resolved: string }>(`
+      SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (i.resolved_at - i.created_at)) / 3600) AS p50,
+             percentile_cont(0.9) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (i.resolved_at - i.created_at)) / 3600) AS p90,
+             COUNT(*) AS resolved
+      FROM issues i
+      WHERE i.resolved_at IS NOT NULL
+        AND i.resolved_at >= now() - interval '30 days' ${scopeSql}`);
+
+    const [reopens] = await q<{ count: string }>(`
+      SELECT COUNT(DISTINCT a.issue_id) AS count
+      FROM audit_events a
+      JOIN issues i ON i.id = a.issue_id
+      WHERE a.action = 'STATUS_CHANGED' AND a.new_value = 'REOPENED'
+        AND a.created_at >= now() - interval '30 days' ${scopeSql}`);
+
+    const [deflected] = await q<{ count: string }>(`
+      SELECT COUNT(*) AS count
+      FROM reporter_subscriptions s
+      JOIN issues i ON i.id = s.issue_id
+      WHERE s.created_at >= now() - interval '30 days' ${scopeSql}`);
+    const [created] = await q<{ count: string }>(`
+      SELECT COUNT(*) AS count FROM issues i
+      WHERE i.created_at >= now() - interval '30 days' ${scopeSql}`);
+
+    const num = (v: string | null | undefined) =>
+      v === null || v === undefined ? null : Math.round(Number(v) * 10) / 10;
+    const resolvedCount = Number(resolution?.resolved ?? 0);
+    const deflectedCount = Number(deflected?.count ?? 0);
+    const createdCount = Number(created?.count ?? 0);
+    return {
+      ttfrHours: { p50: num(ttfr?.p50), p90: num(ttfr?.p90) },
+      resolutionHours: { p50: num(resolution?.p50), p90: num(resolution?.p90) },
+      reopenRate: resolvedCount > 0
+        ? Math.round((Number(reopens?.count ?? 0) / resolvedCount) * 100)
+        : null,
+      deflected: deflectedCount,
+      deflectionRate: deflectedCount + createdCount > 0
+        ? Math.round((deflectedCount / (deflectedCount + createdCount)) * 100)
+        : null,
     };
   }
 
@@ -75,12 +141,15 @@ export class DashboardService {
   // Open issues past their SLA window (overdue) or within the at-risk fraction of
   // it. Thresholds mirror computeSla via the shared slaDueSql expression.
   private async slaCounts(scope: string[] | 'ALL') {
-    const due = slaDueSql();
+    // slaDueSql consults the per-platform policy, so the platform join is
+    // required; the baseline is sla_started_at (resets on reopen, L8).
+    const due = slaDueSql('issue.sla_started_at', 'platform');
     const row = await this.base(scope)
+      .leftJoin('issue.platform', 'platform')
       .andWhere('issue.status IN (:...open)', { open: OPEN_STATUSES })
       .select(`COUNT(*) FILTER (WHERE now() >= ${due})`, 'overdue')
       .addSelect(
-        `COUNT(*) FILTER (WHERE now() < ${due} AND now() >= issue.created_at + (${due} - issue.created_at) * ${SLA_AT_RISK_FRACTION})`,
+        `COUNT(*) FILTER (WHERE now() < ${due} AND now() >= issue.sla_started_at + (${due} - issue.sla_started_at) * ${SLA_AT_RISK_FRACTION})`,
         'atRisk',
       )
       .getRawOne<{ overdue: string; atRisk: string }>();
@@ -161,6 +230,13 @@ export class DashboardService {
       trend: { created: [], resolved: [] },
       sla: { overdue: 0, atRisk: 0 },
       csat: { count: 0, positiveRate: null as number | null },
+      ops: {
+        ttfrHours: { p50: null as number | null, p90: null as number | null },
+        resolutionHours: { p50: null as number | null, p90: null as number | null },
+        reopenRate: null as number | null,
+        deflected: 0,
+        deflectionRate: null as number | null,
+      },
     };
   }
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, KeyRound, Plus, Trash2, UserPlus } from 'lucide-react';
+import { Boxes, KeyRound, Plus, Timer, Trash2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type { PlatformItem, Role } from '@/api/types';
@@ -27,6 +27,7 @@ import {
 import { initials } from '@/lib/format';
 import { roleLabel } from '@/lib/issue-meta';
 import { Spinner } from '@/components/ui/spinner';
+import { IntegrationsTab, WebhooksTab } from './AdminIntegrations';
 
 interface StaffWithRoles {
   id: string;
@@ -47,9 +48,13 @@ export function AdminPage() {
         <TabsList>
           <TabsTrigger value="platforms">Platforms</TabsTrigger>
           <TabsTrigger value="staff">Staff &amp; roles</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
         <TabsContent value="platforms"><PlatformsTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
+        <TabsContent value="integrations"><IntegrationsTab /></TabsContent>
+        <TabsContent value="webhooks"><WebhooksTab /></TabsContent>
       </Tabs>
     </div>
   );
@@ -149,14 +154,17 @@ function PlatformsTab() {
                     {p.jiraEnabled ? p.jiraProjectKey ?? 'enabled' : '—'}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={rotate.isPending}
-                      onClick={() => rotate.mutate(p.id)}
-                    >
-                      <KeyRound className="h-4 w-4" /> Rotate
-                    </Button>
+                    <div className="flex justify-end gap-1.5">
+                      <SlaPolicyDialog platform={p} onSaved={invalidate} />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={rotate.isPending}
+                        onClick={() => rotate.mutate(p.id)}
+                      >
+                        <KeyRound className="h-4 w-4" /> Rotate
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -165,6 +173,86 @@ function PlatformsTab() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Per-platform SLA targets (hours). Blank = the deployment's env default.
+const SLA_PRIORITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
+
+function SlaPolicyDialog({ platform, onSaved }: { platform: PlatformItem; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [hours, setHours] = useState<Record<string, string>>({});
+
+  const openDialog = (o: boolean) => {
+    setOpen(o);
+    if (o) {
+      setHours(Object.fromEntries(
+        SLA_PRIORITIES.map((p) => [p, platform.slaPolicy?.[p]?.toString() ?? '']),
+      ));
+    }
+  };
+
+  const save = useMutation({
+    mutationFn: () => {
+      const policy: Record<string, number> = {};
+      for (const p of SLA_PRIORITIES) {
+        const v = hours[p]?.trim();
+        if (v) policy[p] = Number(v);
+      }
+      return staffApi.patch(`/admin/platforms/${platform.id}`, {
+        slaPolicy: Object.keys(policy).length ? policy : null,
+      });
+    },
+    onSuccess: () => { setOpen(false); toast.success('SLA policy saved.'); onSaved(); },
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message ?? 'Save failed.';
+      toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
+    },
+  });
+
+  const invalid = SLA_PRIORITIES.some((p) => {
+    const v = hours[p]?.trim();
+    return v && (!Number.isFinite(Number(v)) || Number(v) <= 0 || Number(v) > 8760);
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={openDialog}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" title="SLA targets">
+          <Timer className="h-4 w-4" /> SLA
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>SLA targets — {platform.name}</DialogTitle>
+          <DialogDescription>
+            Hours from report (or reopen) to resolution, per priority. Blank uses the
+            deployment default. Breaches escalate to the assignee, focal points and watchers.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3">
+          {SLA_PRIORITIES.map((p) => (
+            <div key={p} className="space-y-1.5">
+              <Label htmlFor={`sla-${p}`}>{p}</Label>
+              <Input
+                id={`sla-${p}`}
+                type="number"
+                min={1}
+                max={8760}
+                value={hours[p] ?? ''}
+                onChange={(e) => setHours((h) => ({ ...h, [p]: e.target.value }))}
+                placeholder="default"
+              />
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button onClick={() => save.mutate()} disabled={invalid || save.isPending}>
+            {save.isPending && <Spinner />} Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

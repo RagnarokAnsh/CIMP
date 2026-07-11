@@ -117,6 +117,13 @@ export interface DashboardSummary {
   trend: { created: { day: string; count: number }[]; resolved: { day: string; count: number }[] };
   sla: { overdue: number; atRisk: number };
   csat: { count: number; positiveRate: number | null };
+  ops: {
+    ttfrHours: { p50: number | null; p90: number | null };
+    resolutionHours: { p50: number | null; p90: number | null };
+    reopenRate: number | null;
+    deflected: number;
+    deflectionRate: number | null;
+  };
 }
 
 export interface AssigneeOption {
@@ -150,7 +157,42 @@ export interface PlatformItem {
   status: string;
   jiraProjectKey: string | null;
   jiraEnabled: boolean;
+  /** Per-priority SLA hour overrides; null = env defaults. */
+  slaPolicy: Partial<Record<Priority, number>> | null;
   createdAt: string;
+}
+
+export interface AutomationRuleView {
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: 'ISSUE_CREATED' | 'STATUS_CHANGED';
+  triggerStatus: IssueStatus | null;
+  action: 'SET_PRIORITY' | 'ASSIGN' | 'ADD_LABEL';
+  actionValue: string;
+  createdAt: string;
+}
+
+export interface ApiTokenView {
+  id: string;
+  name: string;
+  lastFour: string;
+  revoked: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+  /** Present ONLY in the create response. */
+  token?: string;
+}
+
+export interface WebhookView {
+  id: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  platformId: string | null;
+  createdAt: string;
+  /** Present ONLY in the create response. */
+  secret?: string;
 }
 
 export interface SavedViewDto {

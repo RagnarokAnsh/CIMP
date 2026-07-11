@@ -1,9 +1,14 @@
 import { IssueStatus, Priority } from '../common/enums';
 
-// Resolution SLA: hours-from-creation target per priority. Defaults below, each
-// overridable via env (SLA_HOURS_CRITICAL/HIGH/MEDIUM/LOW) so ops can tune
-// targets without a code change. Kept in one place so the per-issue computation
-// (JS) and the dashboard aggregate (SQL) never drift.
+// Resolution SLA: hours-from-baseline target per priority. Env defaults below
+// (SLA_HOURS_*), overridable PER PLATFORM via `platforms.sla_policy` jsonb
+// ({ CRITICAL?: hours, ... } — missing/invalid keys fall back to env). Plain
+// elapsed hours — business-hours calendars are deliberately out of scope.
+//
+// Baseline is `issues.sla_started_at`, not created_at: reopening an issue
+// resets the clock (L8) instead of instantly re-breaching on old issues.
+// Kept in one place so the per-issue computation (JS), the dashboard
+// aggregate and the breach sweep (SQL) never drift.
 const hoursFromEnv = (key: string, fallback: number): number => {
   const raw = process.env[key];
   const n = raw === undefined ? NaN : Number(raw);
@@ -25,34 +30,62 @@ export const SLA_AT_RISK_FRACTION = (() => {
 
 export type SlaState = 'on_track' | 'at_risk' | 'breached' | null;
 
+export type SlaPolicy = Partial<Record<Priority, number>>;
+
 // SLA is tracked for live work only; resolved/closed issues report no state.
 const OPEN_STATUSES: ReadonlySet<IssueStatus> = new Set([
   IssueStatus.NEW, IssueStatus.IN_PROGRESS, IssueStatus.ON_HOLD, IssueStatus.REOPENED,
 ]);
 
+export function slaWindowHours(
+  priority: Priority,
+  policy?: SlaPolicy | null,
+): number {
+  const override = policy?.[priority];
+  if (typeof override === 'number' && Number.isFinite(override) && override > 0) {
+    return override;
+  }
+  return SLA_TARGET_HOURS[priority];
+}
+
 export function computeSla(
-  input: { status: IssueStatus; priority: Priority; createdAt: Date | string },
+  input: {
+    status: IssueStatus;
+    priority: Priority;
+    createdAt: Date | string;
+    slaStartedAt?: Date | string | null;
+    platform?: { slaPolicy?: SlaPolicy | null } | null;
+  },
   now: Date = new Date(),
 ): { dueAt: string; slaState: SlaState } {
-  const created = new Date(input.createdAt).getTime();
-  const windowMs = SLA_TARGET_HOURS[input.priority] * 3_600_000;
-  const dueAt = new Date(created + windowMs).toISOString();
+  const baseline = new Date(input.slaStartedAt ?? input.createdAt).getTime();
+  const windowMs = slaWindowHours(input.priority, input.platform?.slaPolicy) * 3_600_000;
+  const dueAt = new Date(baseline + windowMs).toISOString();
 
   if (!OPEN_STATUSES.has(input.status)) return { dueAt, slaState: null };
 
-  const elapsed = now.getTime() - created;
+  const elapsed = now.getTime() - baseline;
   if (elapsed >= windowMs) return { dueAt, slaState: 'breached' };
   if (elapsed >= windowMs * SLA_AT_RISK_FRACTION) return { dueAt, slaState: 'at_risk' };
   return { dueAt, slaState: 'on_track' };
 }
 
-// SQL expression for an issue's due timestamp (created_at + per-priority window).
-// Used by the dashboard aggregate so its thresholds match computeSla exactly.
-export function slaDueSql(col = 'issue.created_at'): string {
-  return `(${col} + (CASE issue.priority
-    WHEN 'CRITICAL' THEN interval '${SLA_TARGET_HOURS.CRITICAL} hours'
-    WHEN 'HIGH' THEN interval '${SLA_TARGET_HOURS.HIGH} hours'
-    WHEN 'MEDIUM' THEN interval '${SLA_TARGET_HOURS.MEDIUM} hours'
-    WHEN 'LOW' THEN interval '${SLA_TARGET_HOURS.LOW} hours'
-  END))`;
+// SQL twin of the JS computation: an issue's due timestamp from its baseline
+// plus the per-platform (fallback env) window. Requires the platform relation
+// joined under `platformAlias` so the jsonb policy can be consulted.
+export function slaDueSql(
+  baselineCol = 'issue.sla_started_at',
+  platformAlias = 'platform',
+): string {
+  const policyHours = `NULLIF((${platformAlias}.sla_policy->>(issue.priority::text)), '')::numeric`;
+  const defaultHours = `CASE issue.priority
+    WHEN 'CRITICAL' THEN ${SLA_TARGET_HOURS.CRITICAL}
+    WHEN 'HIGH' THEN ${SLA_TARGET_HOURS.HIGH}
+    WHEN 'MEDIUM' THEN ${SLA_TARGET_HOURS.MEDIUM}
+    WHEN 'LOW' THEN ${SLA_TARGET_HOURS.LOW}
+  END`;
+  return `(${baselineCol} + (COALESCE(
+    CASE WHEN ${policyHours} > 0 THEN ${policyHours} ELSE NULL END,
+    ${defaultHours}
+  ) * interval '1 hour'))`;
 }

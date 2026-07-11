@@ -124,12 +124,20 @@ export function NewIssuePage() {
   const [fileError, setFileError] = useState<string | null>(null);
   // Diagnostics handed over by the portal's SDK (from the URL fragment) —
   // shown to the reporter, removable, sent only if still attached on submit.
+  // A screenshot travels inside the fragment but is split out here: it is
+  // submitted as a NORMAL attachment (scan pipeline applies), never as jsonb.
   const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
+  const [screenshot, setScreenshot] = useState<string | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    void loadDiagnostics().then(setDiagnostics);
+    void loadDiagnostics().then((d) => {
+      if (!d) return;
+      const { screenshot: shot, ...rest } = d;
+      if (typeof shot === 'string' && shot.startsWith('data:image/')) setScreenshot(shot);
+      setDiagnostics(Object.keys(rest).length > 0 ? rest : null);
+    });
   }, []);
 
   const mutation = useMutation({
@@ -138,6 +146,10 @@ export function NewIssuePage() {
       form.append('description', description);
       if (diagnostics) form.append('context', JSON.stringify(diagnostics));
       if (files) Array.from(files).forEach((f) => form.append('files', f));
+      if (screenshot && (files?.length ?? 0) < MAX_FILES) {
+        const blob = await (await fetch(screenshot)).blob();
+        form.append('files', new File([blob], 'screenshot.jpg', { type: 'image/jpeg' }));
+      }
       const { data } = await reporterApi.post<ReporterIssueDetail>('/issues', form);
       return data;
     },
@@ -215,6 +227,31 @@ export function NewIssuePage() {
             </p>
             {fileError && <p className="text-xs text-destructive">{fileError}</p>}
           </div>
+
+          {screenshot && (
+            <div className="flex items-center gap-3 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button type="button" title="View screenshot">
+                    <img src={screenshot} alt="Screenshot to attach" className="h-10 rounded border border-border object-cover" />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="max-w-3xl">
+                  <DialogHeader><DialogTitle>Screenshot to be attached</DialogTitle></DialogHeader>
+                  <img src={screenshot} alt="Screenshot" className="max-h-[70vh] w-full rounded object-contain" />
+                </DialogContent>
+              </Dialog>
+              <span>A screenshot from your app will be attached.</span>
+              <button
+                type="button"
+                className="ml-auto text-muted-foreground hover:text-destructive"
+                title="Remove screenshot"
+                onClick={() => setScreenshot(null)}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           {diagnostics && (
             <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">

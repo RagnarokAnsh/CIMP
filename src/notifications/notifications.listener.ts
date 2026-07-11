@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   CommentAddedEvent, IssueAssignedEvent, IssueCreatedEvent, IssueEvents,
-  IssueStatusChangedEvent,
+  IssueSlaBreachedEvent, IssueStatusChangedEvent,
 } from '../events/issue-events';
 import { NotificationsService } from './notifications.service';
 
@@ -39,6 +39,15 @@ export class NotificationsListener {
       await this.notifications.notifyStatusChange(evt.issueId, evt.from, evt.to, evt.actorStaffId);
     } catch (err) {
       this.logger.error(`issue.status_changed notification failed: ${(err as Error).message}`);
+    }
+  }
+
+  @OnEvent(IssueEvents.SLA_BREACHED, { async: true })
+  async onSlaBreached(evt: IssueSlaBreachedEvent): Promise<void> {
+    try {
+      await this.notifications.notifySlaBreach(evt.issueId);
+    } catch (err) {
+      this.logger.error(`issue.sla_breached notification failed: ${(err as Error).message}`);
     }
   }
 

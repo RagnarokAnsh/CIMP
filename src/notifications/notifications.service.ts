@@ -109,6 +109,43 @@ export class NotificationsService {
     }
   }
 
+  // SLA escalation: the breach sweep found an open issue past its window.
+  // Louder audience than a normal status change: assignee + focal points +
+  // watchers, and it lands in the bell via the NotificationLog rows.
+  async notifySlaBreach(issueId: string): Promise<void> {
+    const issue = await this.issues.findOne({
+      where: { id: issueId },
+      relations: { platform: true, assignee: true },
+    });
+    if (!issue) return;
+
+    const focalGrants = await this.roles.find({
+      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
+      relations: { staffUser: true },
+    });
+    const watcherRows = await this.watchers.find({
+      where: { issue: { id: issueId } },
+      relations: { staffUser: true },
+    });
+    const recipients = this.activeRecipients([
+      issue.assignee,
+      ...focalGrants.map((g) => g.staffUser),
+      ...watcherRows.map((w) => w.staffUser),
+    ]);
+
+    const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
+    for (const r of recipients) {
+      await this.dispatch(issueId, r, 'issue.sla_breached', {
+        subject: `[${issue.platform.key}] SLA BREACHED: ${issue.referenceNo}`,
+        text:
+          `Issue ${issue.referenceNo} on ${issue.platform.name} has exceeded its `
+          + `${issue.priority} SLA window and needs attention.\n\n`
+          + `Status: ${issue.status}\nAssignee: ${issue.assignee?.name ?? 'Unassigned'}\n\n`
+          + `Open it: ${url}`,
+      });
+    }
+  }
+
   // Notify the assignee and focal points when a reporter replies on their issue.
   async notifyReporterReply(issueId: string): Promise<void> {
     const issue = await this.issues.findOne({

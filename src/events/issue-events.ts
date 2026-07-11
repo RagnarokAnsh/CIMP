@@ -17,6 +17,9 @@ export const IssueEvents = {
   MERGED: 'issue.merged',
   // Emitted when a reporter rates a resolution (CSAT 👍/👎).
   CSAT_RECEIVED: 'csat.received',
+  // Emitted exactly once per SLA cycle when the breach sweep first observes an
+  // open issue past its due time.
+  SLA_BREACHED: 'issue.sla_breached',
 } as const;
 
 export interface IssueCreatedEvent {
@@ -71,4 +74,9 @@ export interface CsatReceivedEvent {
   issueId: string;
   platformId: string;
   score: number; // 1 = positive, 0 = negative
+}
+
+export interface IssueSlaBreachedEvent {
+  issueId: string;
+  platformId: string;
 }

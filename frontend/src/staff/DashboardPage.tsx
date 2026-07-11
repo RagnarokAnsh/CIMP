@@ -24,6 +24,12 @@ const PRIORITY_BAR: Record<string, string> = {
 
 const pct = (n: number, of: number) => (of > 0 ? Math.round((n / of) * 100) : 0);
 
+// Humanize an hour count: 4.2h under two days, 2.1d beyond.
+function hoursFmt(hours: number | null): string {
+  if (hours === null) return '—';
+  return hours < 48 ? `${Math.round(hours * 10) / 10}h` : `${Math.round((hours / 24) * 10) / 10}d`;
+}
+
 export function DashboardPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['staff', 'dashboard'],
@@ -129,6 +135,38 @@ export function DashboardPage() {
             : 'no reporter ratings yet'}
           progress={data.csat.positiveRate ?? 0}
           progressClass={data.csat.positiveRate !== null && data.csat.positiveRate < 60 ? 'bg-amber-500' : 'bg-emerald-500'}
+        />
+      </Reveal>
+
+      {/* Operational quality (last 30 days). */}
+      <Reveal className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="First response"
+          icon={<Clock className="h-5 w-5" />}
+          value={hoursFmt(data.ops.ttfrHours.p50)}
+          sub={data.ops.ttfrHours.p90 !== null ? `median · p90 ${hoursFmt(data.ops.ttfrHours.p90)}` : 'median, last 30 days'}
+        />
+        <KpiCard
+          label="Resolution time"
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          value={hoursFmt(data.ops.resolutionHours.p50)}
+          sub={data.ops.resolutionHours.p90 !== null ? `median · p90 ${hoursFmt(data.ops.resolutionHours.p90)}` : 'median, last 30 days'}
+        />
+        <KpiCard
+          label="Reopen rate"
+          icon={<AlertTriangle className="h-5 w-5" />}
+          value={data.ops.reopenRate === null ? '—' : `${data.ops.reopenRate}%`}
+          sub="of resolutions reopened (30d)"
+          progress={data.ops.reopenRate ?? 0}
+          progressClass={data.ops.reopenRate !== null && data.ops.reopenRate > 20 ? 'bg-amber-500' : 'bg-emerald-500'}
+        />
+        <KpiCard
+          label="Deflected"
+          icon={<ShieldCheck className="h-5 w-5" />}
+          value={<AnimatedNumber value={data.ops.deflected} className="tabular-nums" />}
+          sub={data.ops.deflectionRate !== null
+            ? `${data.ops.deflectionRate}% of would-be reports subscribed instead`
+            : 'duplicate reports avoided (30d)'}
         />
       </Reveal>
 

@@ -1113,6 +1113,8 @@ export interface components {
             status?: "ACTIVE" | "DISABLED";
             jiraProjectKey?: Record<string, never>;
             jiraEnabled?: boolean;
+            /** @description Per-priority SLA hours overriding the env defaults, e.g. { "CRITICAL": 2, "HIGH": 12 }. Pass null to clear. Keys/values validated in the service. */
+            slaPolicy?: Record<string, never>;
         };
         CreateStaffDto: {
             name: string;
@@ -1195,11 +1197,11 @@ export interface components {
             /** @description Scope to one platform (omit for all platforms). */
             platformId?: string;
             /** @description Event names to deliver (omit or empty for all). */
-            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged" | "csat.received")[];
+            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged" | "csat.received" | "issue.sla_breached")[];
         };
         UpdateWebhookDto: {
             url?: string;
-            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged" | "csat.received")[];
+            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged" | "csat.received" | "issue.sla_breached")[];
             enabled?: boolean;
         };
         SubmitCsatDto: {

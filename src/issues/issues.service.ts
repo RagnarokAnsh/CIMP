@@ -577,6 +577,11 @@ export class IssuesService {
       // Reopening a merged duplicate detaches it from its canonical issue —
       // someone judged it NOT the same problem after all.
       issue.duplicateOf = null;
+      // L8: the SLA clock restarts on reopen — measuring from the original
+      // createdAt would instantly re-breach any old issue. New cycle, new
+      // breach marker.
+      issue.slaStartedAt = new Date();
+      issue.slaBreachedAt = null;
     }
   }
 

@@ -5,7 +5,8 @@ import { Repository } from 'typeorm';
 import { Issue } from '../entities';
 import {
   CommentAddedEvent, CsatReceivedEvent, IssueAssignedEvent, IssueCreatedEvent,
-  IssueEvents, IssueMergedEvent, IssuePriorityChangedEvent, IssueStatusChangedEvent,
+  IssueEvents, IssueMergedEvent, IssuePriorityChangedEvent, IssueSlaBreachedEvent,
+  IssueStatusChangedEvent,
 } from '../events/issue-events';
 import { WebhooksService } from './webhooks.service';
 
@@ -66,6 +67,11 @@ export class WebhooksListener {
     return this.forward(IssueEvents.CSAT_RECEIVED, evt.issueId, evt.platformId, {
       score: evt.score,
     });
+  }
+
+  @OnEvent(IssueEvents.SLA_BREACHED, { async: true })
+  onSlaBreached(evt: IssueSlaBreachedEvent): Promise<void> {
+    return this.forward(IssueEvents.SLA_BREACHED, evt.issueId, evt.platformId, {});
   }
 
   private async forward(
