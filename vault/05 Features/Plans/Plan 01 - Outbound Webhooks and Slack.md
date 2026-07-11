@@ -3,8 +3,17 @@ title: Plan 01 - Outbound Webhooks and Slack
 tags: [cimp, plan, webhooks, integrations]
 updated: 2026-07-10
 effort: S (2-4 days)
-status: planned
+status: done (2026-07-11) — Slack variant descoped
 ---
+
+> **Implemented — generic webhooks only.** The SLACK kind was dropped by user
+> decision (no Slack community yet); there is no `kind` column — adding Slack
+> later means a small migration + a formatter branch in `webhooks.service.ts`.
+> Shipped: `webhook_endpoints` entity/migration (#13), HMAC-SHA256 signed
+> delivery with 3 detached retries, SSRF guard (live-verified against the AWS
+> metadata IP), admin-only CRUD (`/api/admin/webhooks`, secret returned once),
+> listener covering all six issue events incl. `issue.merged`. Verified live
+> end-to-end against webhook.site with signature recomputation.
 # Plan 01 — Outbound webhooks + Slack notifier
 ← [[Plan 00 - How to Execute These Plans]]
 

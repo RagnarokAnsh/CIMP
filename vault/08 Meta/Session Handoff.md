@@ -14,8 +14,9 @@ updated: 2026-07-07
 - Sibling repos: `D:\cimp-connect` ([[cimp-connect Package]]), `D:\FAFICS` ([[FAFICS Integration]]).
 
 ## State (green)
-- **88 unit + 17 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
-- **Duplicate merge flow shipped** (2026-07-10, [[Plan 02 - Duplicate Merge Flow]]); remaining differentiator plans in `05 Features/Plans/` ([[Plan 00 - How to Execute These Plans]]).
+- **108 unit + 21 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
+- **Shipped from the differentiator track:** duplicate merge (2026-07-10, [[Plan 02 - Duplicate Merge Flow]]), outbound webhooks — Slack descoped (2026-07-11, [[Plan 01 - Outbound Webhooks and Slack]]). Remaining plans in `05 Features/Plans/` ([[Plan 00 - How to Execute These Plans]]).
+- **Local dev ports:** FAFICS now squats :3000 (web) and :3001 (api) — run the CIMP backend with `PORT=<free> npm run start:dev` when both are up.
 - **Security:** ~42/57 audit findings fixed. Tracker: `SECURITY_AUDIT.md`. → [[Security Audit and Hardening]].
 - **Features shipped:** issue links, labels, watchers (backend+tests+**UI**); automation rules, scoped API tokens (backend+tests, **UI pending**); board WIP limits (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). → [[Features - Shipped]] / [[Module - Authz]].
 

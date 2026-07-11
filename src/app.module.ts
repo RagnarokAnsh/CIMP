@@ -29,6 +29,7 @@ import { LabelsModule } from './issues/labels.module';
 import { WatchersModule } from './issues/watchers.module';
 import { AutomationModule } from './issues/automation.module';
 import { IntegrationsModule } from './integrations/integrations.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -79,6 +80,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
     WatchersModule,
     AutomationModule,
     IntegrationsModule,
+    WebhooksModule,
   ],
   providers: [
     // Global rate limiting; intake route tightens this further.

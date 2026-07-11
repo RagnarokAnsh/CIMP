@@ -9,6 +9,13 @@ updated: 2026-07-07
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-11 — Outbound webhooks (Plan 01) shipped — Slack descoped
+- **`webhook_endpoints`** (migration #13): admin-configured HTTPS targets, per-platform or global, optional event-name filter. CRUD at `/api/admin/webhooks` (ADMIN only, Swagger/curl — no UI yet); HMAC secret generated server-side, returned exactly once.
+- **Delivery** (`src/webhooks/`): listener bridges all six domain events (incl. `issue.merged`) → `X-CIMP-Event` + `X-CIMP-Signature: sha256=<HMAC(rawBody)>`, 5s timeout, 3 detached unref'd retries (2s/8s/30s), never blocks the request path. Comment bodies deliberately excluded from payloads.
+- **SSRF guard**: https-only + loopback/private/link-local hostname rejection, enforced on create/update AND re-checked per send.
+- **Slack variant dropped** (user decision — no Slack community); no `kind` column shipped, easy to add later.
+- Tests: 108 unit (+9) / 21 e2e (+4, incl. whitelist + SSRF 400s). Live-verified against webhook.site: signatures recomputed and matched for `issue.created` + `issue.status_changed`. → [[Plan 01 - Outbound Webhooks and Slack]]
+
 ## 2026-07-10 — Duplicate merge flow (Plan 02) shipped
 - **Merge as duplicate**: `POST /api/staff/issues/:id/merge` closes the duplicate with `issues.duplicate_of_id` → canonical (migration #12 `AddIssueDuplicateOf`), creates the DUPLICATES link, copies staff watchers, posts reporter-visible/internal system comments, emits new `issue.merged` event (deliberately NOT a STATUS_CHANGED — no automation/notification side effects). Chain-flattening, same-platform-only, optimistic-lock 409, closed-issue guards. REOPEN on a merged duplicate detaches it.
 - **Close the loop**: when the canonical hits RESOLVED, a listener in `merge.service.ts` drops a reporter-visible "underlying problem resolved" comment on every duplicate + bumps `updatedAt` (in-app only per OD-02).
