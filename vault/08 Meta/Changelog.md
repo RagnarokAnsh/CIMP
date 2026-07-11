@@ -9,6 +9,12 @@ updated: 2026-07-07
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-11 — SDK context capture (Plan 03) shipped — pre-diagnosed reports
+- **cimp-connect v0.5.0** (tagged): `initCimpDiagnostics()` passively rings console errors (20) / failed requests (10, method + redacted URL + status — never bodies/headers) / route breadcrumbs (10). Fetch-mode buttons append the snapshot to the handoff URL as a **`#cimpctx=` fragment** (gzip + base64url, 48KB cap) — fragments never reach any server or log.
+- **CIMP intake**: `issues.context` jsonb (migration #14). Multipart nuance: `context` arrives as a JSON *string* form field (multer), parsed + clamped by `src/reporter/context-sanitizer.ts` (strings 1k, arrays 25, keys 40, depth 5, total 64KB; malformed → dropped silently, oversize raw → 400). Never fails the report it rides on.
+- **UI**: reporter form shows a removable "diagnostics will be included" chip with a view dialog (consent); staff detail gets a collapsible Diagnostics panel (env table, console errors, failed requests, route history, Copy JSON) — shared `DiagnosticsView` component, plain-text rendering only.
+- Tests: 113 unit (+5 sanitizer) / 21 e2e. Live-verified end-to-end: SDK encode → lossless decode → intake → staff detail; hostile inputs contained. → [[Plan 03 - SDK Context Capture]]
+
 ## 2026-07-11 — Outbound webhooks (Plan 01) shipped — Slack descoped
 - **`webhook_endpoints`** (migration #13): admin-configured HTTPS targets, per-platform or global, optional event-name filter. CRUD at `/api/admin/webhooks` (ADMIN only, Swagger/curl — no UI yet); HMAC secret generated server-side, returned exactly once.
 - **Delivery** (`src/webhooks/`): listener bridges all six domain events (incl. `issue.merged`) → `X-CIMP-Event` + `X-CIMP-Signature: sha256=<HMAC(rawBody)>`, 5s timeout, 3 detached unref'd retries (2s/8s/30s), never blocks the request path. Comment bodies deliberately excluded from payloads.

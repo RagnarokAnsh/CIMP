@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { captureHandoffToken } from './api/handoff';
+import { captureDiagnosticsFragment } from './api/diagnostics';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -11,7 +12,9 @@ import '@fontsource-variable/geist';
 import '@fontsource-variable/geist-mono';
 import './index.css';
 
-// Grab the portal hand-off token before anything renders.
+// Grab the SDK diagnostics fragment, then the portal hand-off token, before
+// anything renders (both strip themselves from the address bar).
+captureDiagnosticsFragment();
 captureHandoffToken();
 
 const queryClient = new QueryClient({

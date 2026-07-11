@@ -45,6 +45,12 @@ export class Issue {
   @Column({ type: 'text' })
   description: string;
 
+  // Client diagnostics attached at intake by the cimp-connect SDK (environment,
+  // console errors, failed requests, breadcrumbs). UNTRUSTED reporter input:
+  // sanitized/size-clamped by the reporter service, rendered as text only.
+  @Column({ type: 'jsonb', nullable: true })
+  context: Record<string, unknown> | null;
+
   @Column({ type: 'enum', enum: IssueStatus, default: IssueStatus.NEW })
   status: IssueStatus;
 

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AtSign, Lock, MessageSquare, Send, UserCheck, Users,
+  ActivitySquare, AtSign, ChevronDown, Copy, Lock, MessageSquare, Send, UserCheck, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { IssueWatch, IssueLabels, IssueLinks, MergeIssueButton } from './IssueExtras';
+import { DiagnosticsView } from '@/components/DiagnosticsView';
 
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const UNASSIGNED = '__unassigned__';
@@ -262,6 +263,33 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               )}
             </CardContent>
           </Card>
+
+          {data.context && (
+            <details className="group rounded-lg border border-border/60">
+              <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-sm font-medium">
+                <ActivitySquare className="h-4 w-4 text-emerald-500" />
+                Diagnostics
+                <span className="text-xs font-normal text-muted-foreground">
+                  auto-captured by the reporting app
+                </span>
+                <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-3 border-t border-border/60 px-4 py-3">
+                <DiagnosticsView context={data.context} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(JSON.stringify(data.context, null, 2));
+                    toast.success('Diagnostics copied as JSON.');
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy JSON
+                </Button>
+              </div>
+            </details>
+          )}
 
           <Tabs defaultValue="comments">
             <TabsList>

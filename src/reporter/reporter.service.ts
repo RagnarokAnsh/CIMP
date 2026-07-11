@@ -22,6 +22,7 @@ import { HandoffContext } from '../handoff/handoff.types';
 import { StorageService } from '../storage/storage.service';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { ReporterCommentDto } from './dto/reporter-comment.dto';
+import { sanitizeContext } from './context-sanitizer';
 
 // Attachments that have cleared (or skipped) scanning may be downloaded.
 const SERVABLE_SCAN = new Set([ScanStatus.CLEAN, ScanStatus.SKIPPED]);
@@ -159,6 +160,7 @@ export class ReporterService {
         platform: { id: ctx.platformId } as any,
         reporter: { id: reporter.id } as any,
         description: dto.description,
+        context: sanitizeContext(dto.context),
       });
       const saved = await em.save(issue);
 
@@ -249,6 +251,8 @@ export class ReporterService {
       status: issue.status,
       priority: issue.priority,
       description: issue.description,
+      // The reporter's own diagnostics — shown back so they know what was sent.
+      context: issue.context ?? null,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       attachments: (issue.attachments ?? []).map((a) => ({

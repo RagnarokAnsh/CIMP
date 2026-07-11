@@ -14,8 +14,8 @@ updated: 2026-07-07
 - Sibling repos: `D:\cimp-connect` ([[cimp-connect Package]]), `D:\FAFICS` ([[FAFICS Integration]]).
 
 ## State (green)
-- **108 unit + 21 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
-- **Shipped from the differentiator track:** duplicate merge (2026-07-10, [[Plan 02 - Duplicate Merge Flow]]), outbound webhooks — Slack descoped (2026-07-11, [[Plan 01 - Outbound Webhooks and Slack]]). Remaining plans in `05 Features/Plans/` ([[Plan 00 - How to Execute These Plans]]).
+- **113 unit + 21 e2e tests pass**; `npm run build` (backend) + frontend build clean. Verify: `npm test && npm run test:e2e`.
+- **Shipped from the differentiator track:** duplicate merge (2026-07-10, [[Plan 02 - Duplicate Merge Flow]]), outbound webhooks — Slack descoped (2026-07-11, [[Plan 01 - Outbound Webhooks and Slack]]), SDK context capture (2026-07-11, [[Plan 03 - SDK Context Capture]], cimp-connect v0.5.0). Next per [[Plan 00 - How to Execute These Plans]]: Plan 05 (AI triage) → 06 (CSAT) → 04 (deflection) → 07 (palette/triage inbox).
 - **Local dev ports:** FAFICS now squats :3000 (web) and :3001 (api) — run the CIMP backend with `PORT=<free> npm run start:dev` when both are up.
 - **Security:** ~42/57 audit findings fixed. Tracker: `SECURITY_AUDIT.md`. → [[Security Audit and Hardening]].
 - **Features shipped:** issue links, labels, watchers (backend+tests+**UI**); automation rules, scoped API tokens (backend+tests, **UI pending**); board WIP limits (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). → [[Features - Shipped]] / [[Module - Authz]].

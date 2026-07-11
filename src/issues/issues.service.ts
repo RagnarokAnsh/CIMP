@@ -118,6 +118,7 @@ export class IssuesService {
       version: issue.version,
       ...computeSla(issue),
       description: issue.description,
+      context: issue.context ?? null,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       resolvedAt: issue.resolvedAt,

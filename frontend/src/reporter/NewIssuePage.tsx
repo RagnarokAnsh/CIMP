@@ -1,15 +1,20 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Paperclip } from 'lucide-react';
+import { ActivitySquare, Paperclip, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { reporterApi } from '@/api/client';
 import { getHandoffToken } from '@/api/handoff';
+import { clearDiagnostics, loadDiagnostics } from '@/api/diagnostics';
 import type { ReporterIssueDetail } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
 } from '@/components/ui/card';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
+import { DiagnosticsView } from '@/components/DiagnosticsView';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -40,18 +45,27 @@ export function NewIssuePage() {
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<FileList | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  // Diagnostics handed over by the portal's SDK (from the URL fragment) —
+  // shown to the reporter, removable, sent only if still attached on submit.
+  const [diagnostics, setDiagnostics] = useState<Record<string, unknown> | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    void loadDiagnostics().then(setDiagnostics);
+  }, []);
 
   const mutation = useMutation({
     mutationFn: async () => {
       const form = new FormData();
       form.append('description', description);
+      if (diagnostics) form.append('context', JSON.stringify(diagnostics));
       if (files) Array.from(files).forEach((f) => form.append('files', f));
       const { data } = await reporterApi.post<ReporterIssueDetail>('/issues', form);
       return data;
     },
     onSuccess: (issue) => {
+      clearDiagnostics();
       queryClient.invalidateQueries({ queryKey: ['reporter', 'issues'] });
       toast.success(`Issue ${issue.referenceNo} submitted.`);
       navigate(`/reporter/issues/${issue.id}`);
@@ -122,6 +136,30 @@ export function NewIssuePage() {
             </p>
             {fileError && <p className="text-xs text-destructive">{fileError}</p>}
           </div>
+
+          {diagnostics && (
+            <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
+              <ActivitySquare className="h-4 w-4 shrink-0 text-emerald-500" />
+              <span>Technical diagnostics from your app will be included.</span>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button type="button" className="text-primary hover:underline">view</button>
+                </DialogTrigger>
+                <DialogContent className="max-h-[80vh] overflow-y-auto">
+                  <DialogHeader><DialogTitle>Diagnostics to be sent</DialogTitle></DialogHeader>
+                  <DiagnosticsView context={diagnostics} />
+                </DialogContent>
+              </Dialog>
+              <button
+                type="button"
+                className="ml-auto text-muted-foreground hover:text-destructive"
+                title="Remove diagnostics"
+                onClick={() => { setDiagnostics(null); clearDiagnostics(); }}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
 
           {mutation.isError && (
             <Alert variant="destructive">

@@ -3,8 +3,18 @@ title: Plan 03 - SDK Context Capture
 tags: [cimp, plan, cimp-connect, diagnostics]
 updated: 2026-07-10
 effort: M (1-2 weeks, spans two repos)
-status: planned
+status: done (2026-07-11)
 ---
+
+> **Implemented as specified.** cimp-connect v0.5.0 ships `initCimpDiagnostics`
+> / `collectContext` / `encodeContextFragment` / `appendContextToUrl` wired
+> into both fetch-mode buttons. CIMP side: `issues.context` jsonb (migration
+> #14), multipart-aware DTO (`context` travels as a JSON *string* form field —
+> plan originally said `@IsObject`, impossible under multer), pure
+> `sanitizeContext` (+5 unit tests), reporter chip with view/remove dialog,
+> staff Diagnostics panel with Copy JSON. Verified live: SDK-encoded fragment
+> → lossless decode → intake → sanitized storage → staff detail; malformed
+> context dropped without failing intake; >64KB context → 400.
 # Plan 03 — SDK context capture (pre-diagnosed reports)
 ← [[Plan 00 - How to Execute These Plans]] · [[cimp-connect Package]]
 

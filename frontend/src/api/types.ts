@@ -24,6 +24,7 @@ export interface ReporterIssueDetail {
   status: IssueStatus;
   priority: Priority;
   description: string;
+  context: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
   attachments: {
@@ -70,6 +71,8 @@ export interface StaffIssueDetail extends StaffIssueSummary {
   closedAt: string | null;
   jiraIssueKey: string | null;
   jiraSyncStatus: string;
+  /** SDK-captured diagnostics attached at intake (untrusted reporter input). */
+  context: Record<string, unknown> | null;
   /** Set when this issue was merged into a canonical issue as a duplicate. */
   duplicateOf: { id: string; referenceNo: string } | null;
   /** Issues merged into this one as duplicates. */

@@ -96,8 +96,10 @@ export class MergeService {
         .insert()
         .into(IssueLink)
         .values({
-          sourceIssue: { id: duplicate.id } as Issue,
-          targetIssue: { id: canonicalId } as Issue,
+          // `as any`: the jsonb context column on Issue defeats TypeORM's
+          // QueryDeepPartialEntity inference for id-only relation stubs.
+          sourceIssue: { id: duplicate.id } as any,
+          targetIssue: { id: canonicalId } as any,
           type: IssueLinkType.DUPLICATES,
           createdBy: staff.id,
         })
