@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle, CheckCircle2, CircleDot, Clock, FolderKanban, Gauge, Inbox,
-  ListTodo, ShieldCheck, TrendingDown, TrendingUp,
+  ListTodo, ShieldCheck, ThumbsUp, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { staffApi } from '@/api/client';
 import type { DashboardSummary, IssueStatus } from '@/api/types';
@@ -119,6 +119,16 @@ export function DashboardPage() {
           icon={<Gauge className="h-5 w-5" />}
           value={<AnimatedNumber value={resolved14} className="tabular-nums" />}
           sub="closed out in the last 14 days"
+        />
+        <KpiCard
+          label="CSAT (30d)"
+          icon={<ThumbsUp className="h-5 w-5" />}
+          value={data.csat.positiveRate === null ? '—' : `${data.csat.positiveRate}%`}
+          sub={data.csat.count > 0
+            ? `${data.csat.count} rating${data.csat.count === 1 ? '' : 's'} from reporters`
+            : 'no reporter ratings yet'}
+          progress={data.csat.positiveRate ?? 0}
+          progressClass={data.csat.positiveRate !== null && data.csat.positiveRate < 60 ? 'bg-amber-500' : 'bg-emerald-500'}
         />
       </Reveal>
 

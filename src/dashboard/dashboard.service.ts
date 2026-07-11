@@ -26,13 +26,14 @@ export class DashboardService {
       return this.empty();
     }
 
-    const [byStatus, byPriority, byPlatform, byAssignee, trend, sla] = await Promise.all([
+    const [byStatus, byPriority, byPlatform, byAssignee, trend, sla, csat] = await Promise.all([
       this.groupCount(scope, 'issue.status', 'status'),
       this.groupCount(scope, 'issue.priority', 'priority'),
       this.byPlatform(scope),
       this.byAssignee(scope),
       this.trend(scope),
       this.slaCounts(scope),
+      this.csat(scope),
     ]);
 
     const total = byStatus.reduce((sum, r) => sum + r.count, 0);
@@ -48,6 +49,26 @@ export class DashboardService {
       byAssignee,
       trend,
       sla,
+      csat,
+    };
+  }
+
+  // Reporter satisfaction over the last 30 days: share of 👍 among all
+  // responses in scope. Null rate when there are no responses yet.
+  private async csat(scope: string[] | 'ALL') {
+    const qb = this.issues.manager
+      .createQueryBuilder()
+      .select('COUNT(*)', 'count')
+      .addSelect('COALESCE(AVG(c.score), -1)', 'rate')
+      .from('csat_responses', 'c')
+      .innerJoin('issues', 'i', 'i.id = c.issue_id')
+      .where("c.created_at >= now() - interval '30 days'");
+    if (scope !== 'ALL') qb.andWhere('i.platform_id IN (:...ids)', { ids: scope });
+    const row = await qb.getRawOne<{ count: string; rate: string }>();
+    const count = Number(row?.count ?? 0);
+    return {
+      count,
+      positiveRate: count > 0 ? Math.round(Number(row!.rate) * 100) : null,
     };
   }
 
@@ -139,6 +160,7 @@ export class DashboardService {
       byAssignee: [],
       trend: { created: [], resolved: [] },
       sla: { overdue: 0, atRisk: 0 },
+      csat: { count: 0, positiveRate: null as number | null },
     };
   }
 }

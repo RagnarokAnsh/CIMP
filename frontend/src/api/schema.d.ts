@@ -947,6 +947,90 @@ export interface paths {
         patch: operations["WebhooksController_update"];
         trace?: never;
     };
+    "/api/reporter/issues/{id}/csat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CsatController_submit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reporter/similar-issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Privacy-safe matches for a draft description (status/age/count only). */
+        get: operations["DeflectionReporterController_similar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reporter/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Follow an existing issue instead of filing a duplicate. */
+        post: operations["DeflectionReporterController_subscribe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/staff/issues/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Publish/unpublish this issue in the public known-issues feed. */
+        patch: operations["PublishController_publish"];
+        trace?: never;
+    };
+    "/api/public/platforms/{key}/known-issues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Published known issues for a platform (public, curated titles only). */
+        get: operations["PublicKnownIssuesController_knownIssues"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1111,12 +1195,27 @@ export interface components {
             /** @description Scope to one platform (omit for all platforms). */
             platformId?: string;
             /** @description Event names to deliver (omit or empty for all). */
-            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged")[];
+            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged" | "csat.received")[];
         };
         UpdateWebhookDto: {
             url?: string;
-            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged")[];
+            events?: ("issue.created" | "issue.status_changed" | "issue.priority_changed" | "issue.assigned" | "comment.added" | "issue.attachments_scanned" | "issue.merged" | "csat.received")[];
             enabled?: boolean;
+        };
+        SubmitCsatDto: {
+            /** @enum {string} */
+            score: "up" | "down";
+            comment?: string;
+        };
+        SubscribeDto: {
+            /** @description Opaque subscribe token from the similar-issues response. */
+            token: string;
+        };
+        PublishIssueDto: {
+            /** @description Show this issue in the public known-issues feed. */
+            publiclyVisible: boolean;
+            /** @description Curated public title (required to publish). */
+            publicTitle?: string;
         };
     };
     responses: never;
@@ -2520,6 +2619,112 @@ export interface operations {
                 "application/json": components["schemas"]["UpdateWebhookDto"];
             };
         };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CsatController_submit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitCsatDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeflectionReporterController_similar: {
+        parameters: {
+            query: {
+                /** @description Draft description text (min 15 chars to avoid noise). */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeflectionReporterController_subscribe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubscribeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PublishController_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishIssueDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PublicKnownIssuesController_knownIssues: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {

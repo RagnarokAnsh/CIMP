@@ -30,6 +30,8 @@ import { WatchersModule } from './issues/watchers.module';
 import { AutomationModule } from './issues/automation.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { CsatModule } from './csat/csat.module';
+import { DeflectionModule } from './deflection/deflection.module';
 
 @Module({
   imports: [
@@ -81,6 +83,8 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     AutomationModule,
     IntegrationsModule,
     WebhooksModule,
+    CsatModule,
+    DeflectionModule,
   ],
   providers: [
     // Global rate limiting; intake route tightens this further.

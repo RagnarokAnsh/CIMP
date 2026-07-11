@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ActivitySquare, AtSign, ChevronDown, Copy, Lock, MessageSquare, Send, UserCheck, Users,
+  ActivitySquare, AtSign, ChevronDown, Copy, Lock, Megaphone, MessageSquare, Send,
+  ThumbsDown, ThumbsUp, UserCheck, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
@@ -150,6 +151,19 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
     onSuccess: () => { toast.success('Assignment updated.'); refresh(); invalidateLists(); },
     onError,
   });
+  const [publishTitle, setPublishTitle] = useState('');
+  const publish = useMutation({
+    mutationFn: (publiclyVisible: boolean) =>
+      staffApi.patch(`/staff/issues/${id}/publish`, {
+        publiclyVisible,
+        ...(publiclyVisible && publishTitle.trim() ? { publicTitle: publishTitle.trim() } : {}),
+      }),
+    onSuccess: (_, published) => {
+      toast.success(published ? 'Published as a known issue.' : 'Removed from known issues.');
+      refresh();
+    },
+    onError,
+  });
 
   if (isLoading) return <div className="space-y-4">{toolbar}<Skeleton className="h-96 w-full" /></div>;
   if (isError || !data) {
@@ -237,6 +251,23 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           <PriorityBadge priority={data.priority} />
           <SlaBadge slaState={data.slaState} dueAt={data.dueAt} />
           {data.jiraIssueKey && <Badge variant="secondary">Jira {data.jiraIssueKey}</Badge>}
+          {data.csat && (
+            <Badge
+              variant="outline"
+              title={data.csat.comment ?? undefined}
+              className={data.csat.score === 1
+                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-500'
+                : 'border-destructive/20 bg-destructive/10 text-destructive'}
+            >
+              {data.csat.score === 1 ? <ThumbsUp className="mr-1 h-3 w-3" /> : <ThumbsDown className="mr-1 h-3 w-3" />}
+              CSAT
+            </Badge>
+          )}
+          {data.publiclyVisible && (
+            <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-400">
+              <Megaphone className="mr-1 h-3 w-3" /> Published
+            </Badge>
+          )}
           <div className="ml-auto"><IssueWatch issueId={id} /></div>
         </div>
       </div>
@@ -512,6 +543,49 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                   </SelectContent>
                 </Select>
               </div>
+            </CardContent>
+          </Card>
+          )}
+
+          {canWrite && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Megaphone className="h-4 w-4" /> Known issue
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {data.publiclyVisible ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Published as “{data.publicTitle}” — visible in connected apps.
+                  </p>
+                  <Button size="sm" variant="outline" disabled={publish.isPending} onClick={() => publish.mutate(false)}>
+                    Unpublish
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Publish a curated title to the platform's public known-issues feed (deflects duplicate reports).
+                  </p>
+                  <input
+                    value={publishTitle}
+                    onChange={(e) => setPublishTitle(e.target.value)}
+                    placeholder={data.publicTitle ?? 'Public title (e.g. "Login is degraded")'}
+                    maxLength={140}
+                    className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={publish.isPending || (!publishTitle.trim() && !data.publicTitle)}
+                    onClick={() => publish.mutate(true)}
+                  >
+                    {publish.isPending && <Spinner />} Publish
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
           )}

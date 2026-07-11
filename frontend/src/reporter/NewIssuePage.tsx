@@ -6,7 +6,10 @@ import { toast } from 'sonner';
 import { reporterApi } from '@/api/client';
 import { getHandoffToken } from '@/api/handoff';
 import { clearDiagnostics, loadDiagnostics } from '@/api/diagnostics';
-import type { ReporterIssueDetail } from '@/api/types';
+import type { ReporterIssueDetail, SimilarIssue } from '@/api/types';
+import { useQuery } from '@tanstack/react-query';
+import { StatusBadge } from '@/components/StatusBadge';
+import { relativeTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -39,6 +42,80 @@ function validateFiles(files: FileList | null): string | null {
     }
   }
   return null;
+}
+
+// "Looks like this is already being tracked" — privacy-safe matches for the
+// draft description (status/age/count only), each with a one-click subscribe.
+function SimilarIssuesPanel({ description }: { description: string }) {
+  const [debounced, setDebounced] = useState('');
+  const [dismissed, setDismissed] = useState(false);
+  const [subscribedTokens, setSubscribedTokens] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(description.trim()), 600);
+    return () => clearTimeout(t);
+  }, [description]);
+
+  const { data: matches } = useQuery({
+    queryKey: ['reporter', 'similar', debounced],
+    queryFn: async () =>
+      (await reporterApi.get<SimilarIssue[]>(`/similar-issues?q=${encodeURIComponent(debounced.slice(0, 500))}`)).data,
+    enabled: debounced.length >= 15 && !dismissed,
+    staleTime: 30_000,
+  });
+
+  const subscribe = useMutation({
+    mutationFn: async (token: string) => {
+      await reporterApi.post('/subscriptions', { token });
+      return token;
+    },
+    onSuccess: (token) => {
+      setSubscribedTokens((prev) => new Set(prev).add(token));
+      toast.success("You'll be notified when it's resolved.");
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Could not subscribe.'),
+  });
+
+  if (dismissed || !matches || matches.length === 0) return null;
+
+  return (
+    <Alert>
+      <AlertTitle className="flex items-center justify-between">
+        This might already be tracked
+        <button type="button" className="text-xs font-normal text-muted-foreground hover:underline" onClick={() => setDismissed(true)}>
+          dismiss
+        </button>
+      </AlertTitle>
+      <AlertDescription>
+        <ul className="mt-2 space-y-2">
+          {matches.map((m) => (
+            <li key={m.subscribeToken} className="flex flex-wrap items-center gap-2 text-sm">
+              <StatusBadge status={m.status} />
+              <span className="text-muted-foreground">
+                first reported {relativeTime(m.firstReportedAt)} · {m.reportCount} report{m.reportCount === 1 ? '' : 's'}
+              </span>
+              {subscribedTokens.has(m.subscribeToken) ? (
+                <span className="text-emerald-600 dark:text-emerald-400">✓ You'll be notified</span>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={subscribe.isPending}
+                  onClick={() => subscribe.mutate(m.subscribeToken)}
+                >
+                  Notify me instead
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-xs text-muted-foreground">
+          If yours is different, just continue with the form below.
+        </p>
+      </AlertDescription>
+    </Alert>
+  );
 }
 
 export function NewIssuePage() {
@@ -116,6 +193,8 @@ export function NewIssuePage() {
               {description.length}/5000 — at least 10 characters.
             </p>
           </div>
+
+          <SimilarIssuesPanel description={description} />
 
           <div className="space-y-2">
             <Label htmlFor="files">Attachments (optional)</Label>

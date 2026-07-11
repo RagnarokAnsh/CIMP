@@ -16,7 +16,7 @@ import {
   ActorType, CommentVisibility, ScanStatus,
 } from '../common/enums';
 import {
-  Attachment, AuditEvent, Comment, Issue, Reporter, ReporterIssueView,
+  Attachment, AuditEvent, Comment, CsatResponse, Issue, Reporter, ReporterIssueView,
 } from '../entities';
 import { HandoffContext } from '../handoff/handoff.types';
 import { StorageService } from '../storage/storage.service';
@@ -37,6 +37,7 @@ export class ReporterService {
     private readonly storage: StorageService,
     private readonly dataSource: DataSource,
     private readonly events: EventEmitter2,
+    @InjectRepository(CsatResponse) private readonly csatResponses?: Repository<CsatResponse>,
   ) {}
 
   // Auto-provision (or refresh) the reporter identity from the verified token.
@@ -233,6 +234,12 @@ export class ReporterService {
     });
     if (!issue) throw new NotFoundException('Issue not found');
 
+    // Existing CSAT rating, so the portal widget can show submitted state.
+    // (Optional dep: legacy specs construct this service without it.)
+    const csat = this.csatResponses
+      ? await this.csatResponses.findOne({ where: { issue: { id: issueId } } })
+      : null;
+
     // Only reporter-visible comments are exposed; internal notes stay hidden.
     // The reporter's own replies are labelled "You"; staff replies "Support".
     const visibleComments = (issue.comments ?? [])
@@ -253,6 +260,7 @@ export class ReporterService {
       description: issue.description,
       // The reporter's own diagnostics — shown back so they know what was sent.
       context: issue.context ?? null,
+      csat: csat ? { score: csat.score, comment: csat.comment } : null,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       attachments: (issue.attachments ?? []).map((a) => ({

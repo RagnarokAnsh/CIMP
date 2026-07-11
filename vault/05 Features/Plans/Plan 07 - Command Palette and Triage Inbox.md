@@ -3,7 +3,7 @@ title: Plan 07 - Command Palette and Triage Inbox
 tags: [cimp, plan, frontend, ux]
 updated: 2026-07-10
 effort: M (1 week, frontend-only)
-status: planned
+status: done (2026-07-12) — palette already existed; triage inbox built
 ---
 # Plan 07 — Command palette (Ctrl+K) + keyboard triage inbox
 ← [[Plan 00 - How to Execute These Plans]]

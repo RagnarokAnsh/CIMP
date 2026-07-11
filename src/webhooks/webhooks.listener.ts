@@ -4,8 +4,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Issue } from '../entities';
 import {
-  CommentAddedEvent, IssueAssignedEvent, IssueCreatedEvent, IssueEvents,
-  IssueMergedEvent, IssuePriorityChangedEvent, IssueStatusChangedEvent,
+  CommentAddedEvent, CsatReceivedEvent, IssueAssignedEvent, IssueCreatedEvent,
+  IssueEvents, IssueMergedEvent, IssuePriorityChangedEvent, IssueStatusChangedEvent,
 } from '../events/issue-events';
 import { WebhooksService } from './webhooks.service';
 
@@ -58,6 +58,13 @@ export class WebhooksListener {
   onMerged(evt: IssueMergedEvent): Promise<void> {
     return this.forward(IssueEvents.MERGED, evt.duplicateIssueId, evt.platformId, {
       canonicalIssueId: evt.canonicalIssueId,
+    });
+  }
+
+  @OnEvent(IssueEvents.CSAT_RECEIVED, { async: true })
+  onCsat(evt: CsatReceivedEvent): Promise<void> {
+    return this.forward(IssueEvents.CSAT_RECEIVED, evt.issueId, evt.platformId, {
+      score: evt.score,
     });
   }
 

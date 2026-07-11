@@ -15,6 +15,8 @@ export const IssueEvents = {
   // Deliberately NOT a STATUS_CHANGED (the merge close must not trigger
   // status automation rules or the standard status notifications).
   MERGED: 'issue.merged',
+  // Emitted when a reporter rates a resolution (CSAT 👍/👎).
+  CSAT_RECEIVED: 'csat.received',
 } as const;
 
 export interface IssueCreatedEvent {
@@ -63,4 +65,10 @@ export interface IssueMergedEvent {
   canonicalIssueId: string;
   platformId: string;
   actorStaffId: string;
+}
+
+export interface CsatReceivedEvent {
+  issueId: string;
+  platformId: string;
+  score: number; // 1 = positive, 0 = negative
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ChevronsLeft, LayoutDashboard, LifeBuoy, ListChecks, LogOut,
+  ChevronsLeft, Inbox, LayoutDashboard, LifeBuoy, ListChecks, LogOut,
   Menu, ScrollText, Search, Settings, Trello,
 } from 'lucide-react';
 import { staffApi } from '@/api/client';
@@ -143,6 +143,7 @@ export function StaffLayout({
 }
 
 const NAV_ITEMS = [
+  { to: '/staff/triage', icon: Inbox, label: 'Triage' },
   { to: '/staff/issues', icon: ListChecks, label: 'Issues' },
   { to: '/staff/board', icon: Trello, label: 'Board' },
   { to: '/staff/dashboard', icon: LayoutDashboard, label: 'Dashboard' },

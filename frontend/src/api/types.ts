@@ -25,12 +25,20 @@ export interface ReporterIssueDetail {
   priority: Priority;
   description: string;
   context: Record<string, unknown> | null;
+  csat: { score: number; comment: string | null } | null;
   createdAt: string;
   updatedAt: string;
   attachments: {
     id: string; filename: string; contentType: string; sizeBytes: number; downloadable: boolean;
   }[];
   updates: { body: string; createdAt: string; author: string; fromReporter: boolean }[];
+}
+
+export interface SimilarIssue {
+  status: IssueStatus;
+  firstReportedAt: string;
+  reportCount: number;
+  subscribeToken: string;
 }
 
 export interface StaffMe {
@@ -73,6 +81,11 @@ export interface StaffIssueDetail extends StaffIssueSummary {
   jiraSyncStatus: string;
   /** SDK-captured diagnostics attached at intake (untrusted reporter input). */
   context: Record<string, unknown> | null;
+  /** Reporter's resolution rating (1 = 👍, 0 = 👎). */
+  csat: { score: number; comment: string | null; createdAt: string } | null;
+  /** Known-issue publication state (deflection). */
+  publiclyVisible?: boolean;
+  publicTitle?: string | null;
   /** Set when this issue was merged into a canonical issue as a duplicate. */
   duplicateOf: { id: string; referenceNo: string } | null;
   /** Issues merged into this one as duplicates. */
@@ -103,6 +116,7 @@ export interface DashboardSummary {
   byAssignee: { assigneeId: string; name: string; count: number }[];
   trend: { created: { day: string; count: number }[]; resolved: { day: string; count: number }[] };
   sla: { overdue: number; atRisk: number };
+  csat: { count: number; positiveRate: number | null };
 }
 
 export interface AssigneeOption {

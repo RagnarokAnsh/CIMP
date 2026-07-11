@@ -45,6 +45,15 @@ export class Issue {
   @Column({ type: 'text' })
   description: string;
 
+  // Known-issue publication (deflection): staff opt-in per issue with a
+  // curated public title. Only these two fields ever leave via the
+  // unauthenticated known-issues endpoint.
+  @Column({ name: 'publicly_visible', default: false })
+  publiclyVisible: boolean;
+
+  @Column({ name: 'public_title', type: 'varchar', length: 140, nullable: true })
+  publicTitle: string | null;
+
   // Client diagnostics attached at intake by the cimp-connect SDK (environment,
   // console errors, failed requests, breadcrumbs). UNTRUSTED reporter input:
   // sanitized/size-clamped by the reporter service, rendered as text only.

@@ -3,7 +3,7 @@ title: Plan 04 - Known-Issues Deflection
 tags: [cimp, plan, reporter, deflection]
 updated: 2026-07-10
 effort: M (1-2 weeks)
-status: planned
+status: done (2026-07-12)
 depends: Plan 02 (merge), pairs with Plan 05 (same FTS reuse)
 ---
 # Plan 04 — Known-issues deflection (before + inside the connected apps)

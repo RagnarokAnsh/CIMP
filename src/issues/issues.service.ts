@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Brackets, DataSource, Repository } from 'typeorm';
 import { AccountStatus, ActorType, IssueStatus, Priority, Role } from '../common/enums';
-import { Issue, Platform, StaffUser, UserPlatformRole } from '../entities';
+import { CsatResponse, Issue, Platform, StaffUser, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { AuthService } from '../auth/auth.service';
 import { ScopeService } from '../authz/scope.service';
@@ -23,6 +23,7 @@ import { UpdatePriorityDto } from './dto/update-priority.dto';
 import { BulkOp, BulkUpdateDto } from './dto/bulk-update.dto';
 import { canTransition } from './status-machine';
 import { computeSla } from './sla';
+import { buildPrefixTsQuery } from './search-terms';
 
 // Upper bound on rows a single CSV export may materialize in memory.
 const EXPORT_MAX_ROWS = 50_000;
@@ -110,6 +111,9 @@ export class IssuesService {
       where: { duplicateOf: { id: issueId } },
       select: { id: true, referenceNo: true, status: true },
     });
+    const csat = await this.issues.manager.getRepository(CsatResponse).findOne({
+      where: { issue: { id: issueId } },
+    });
     return {
       id: issue.id,
       referenceNo: issue.referenceNo,
@@ -135,6 +139,9 @@ export class IssuesService {
         referenceNo: d.referenceNo,
         status: d.status,
       })),
+      csat: csat ? { score: csat.score, comment: csat.comment, createdAt: csat.createdAt } : null,
+      publiclyVisible: issue.publiclyVisible,
+      publicTitle: issue.publicTitle,
       platform: { id: issue.platform.id, key: issue.platform.key, name: issue.platform.name },
       reporter: issue.reporter
         ? { id: issue.reporter.id, name: issue.reporter.name, email: issue.reporter.email }
@@ -496,21 +503,15 @@ export class IssuesService {
     return qb;
   }
 
-  // Turns a raw search string into a prefix full-text query (`foo:* & bar:*`) and
-  // a reference-number LIKE pattern. Stripping non-alphanumerics keeps the
-  // to_tsquery input safe from syntax errors.
+  // Turns a raw search string into a prefix full-text query (shared with the
+  // deflection similar-search) and a reference-number LIKE pattern.
   private searchParams(q: string): { tsq: string; likeRef: string } {
     const raw = q.trim();
-    const terms = raw
-      .toLowerCase()
-      .split(/\s+/)
-      .map((t) => t.replace(/[^a-z0-9]/g, ''))
-      .filter(Boolean);
     // Escape LIKE metacharacters so a search of "%" or "_" matches literally
     // (Postgres' default ESCAPE is backslash) instead of acting as a wildcard
     // that scans the whole reference-number space.
     const likeEscaped = raw.replace(/[\\%_]/g, '\\$&');
-    return { tsq: terms.map((t) => `${t}:*`).join(' & '), likeRef: `%${likeEscaped}%` };
+    return { tsq: buildPrefixTsQuery(raw), likeRef: `%${likeEscaped}%` };
   }
 
   // A single-line snippet of the description so list rows read like a summary

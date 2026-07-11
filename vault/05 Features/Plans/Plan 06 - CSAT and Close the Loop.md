@@ -3,7 +3,7 @@ title: Plan 06 - CSAT and Close the Loop
 tags: [cimp, plan, csat, reporter]
 updated: 2026-07-10
 effort: S-M (3-5 days)
-status: planned
+status: done (2026-07-12) — email links descoped (OD-02)
 ---
 # Plan 06 — CSAT + close-the-loop
 ← [[Plan 00 - How to Execute These Plans]]

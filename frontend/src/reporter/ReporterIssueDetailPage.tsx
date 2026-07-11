@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, MessageSquare, Send } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { toast } from 'sonner';
 import { reporterApi } from '@/api/client';
 import type { ReporterIssueDetail } from '@/api/types';
@@ -16,6 +16,83 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { firstLine, relativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
+
+// One-click resolution rating. 👎 invites an optional comment; the rating can
+// be changed (latest wins, the server upserts).
+function CsatWidget({ issueId, existing }: {
+  issueId: string;
+  existing: { score: number; comment: string | null } | null;
+}) {
+  const queryClient = useQueryClient();
+  const [pendingDown, setPendingDown] = useState(false);
+  const [comment, setComment] = useState('');
+
+  const submit = useMutation({
+    mutationFn: async (score: 'up' | 'down') =>
+      reporterApi.post(`/issues/${issueId}/csat`, {
+        score,
+        comment: score === 'down' && comment.trim() ? comment.trim() : undefined,
+      }),
+    onSuccess: () => {
+      setPendingDown(false);
+      setComment('');
+      toast.success('Thanks for the feedback!');
+      queryClient.invalidateQueries({ queryKey: ['reporter', 'issue', issueId] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Could not record your rating.'),
+  });
+
+  if (existing) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
+        {existing.score === 1
+          ? <ThumbsUp className="h-4 w-4 text-emerald-500" />
+          : <ThumbsDown className="h-4 w-4 text-destructive" />}
+        <span>You rated this resolution. Thanks for the feedback!</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2.5">
+      <div className="flex items-center gap-3 text-sm">
+        <span>Did this resolve your problem?</span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          disabled={submit.isPending}
+          onClick={() => submit.mutate('up')}
+        >
+          <ThumbsUp className="h-3.5 w-3.5" /> Yes
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          disabled={submit.isPending}
+          onClick={() => setPendingDown(true)}
+        >
+          <ThumbsDown className="h-3.5 w-3.5" /> No
+        </Button>
+      </div>
+      {pendingDown && (
+        <div className="space-y-2">
+          <Textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="What's still wrong? (optional)"
+            className="min-h-16"
+            maxLength={500}
+          />
+          <Button size="sm" disabled={submit.isPending} onClick={() => submit.mutate('down')}>
+            {submit.isPending && <Spinner />} Send feedback
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ReporterIssueDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -74,6 +151,10 @@ export function ReporterIssueDetailPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {(data.status === 'RESOLVED' || data.status === 'CLOSED') && (
+            <CsatWidget issueId={id!} existing={data.csat} />
+          )}
+
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{data.description}</p>
 
           {data.attachments.length > 0 && (
