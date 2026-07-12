@@ -44,6 +44,16 @@ export class ListIssuesDto {
   @MaxLength(200)
   q?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'AND-only filter query, e.g. `status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me`. '
+      + 'Fields: status, priority, platform, assignee, reporter, label, created, updated, text.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  jql?: string;
+
   @ApiPropertyOptional({ description: 'Created on/after this ISO timestamp.' })
   @IsOptional()
   @IsISO8601()

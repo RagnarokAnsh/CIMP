@@ -24,6 +24,7 @@ import { BulkOp, BulkUpdateDto } from './dto/bulk-update.dto';
 import { canTransition } from './status-machine';
 import { computeSla } from './sla';
 import { buildPrefixTsQuery } from './search-terms';
+import { applyJqlFilters, parseJql } from './jql';
 
 // Upper bound on rows a single CSV export may materialize in memory.
 const EXPORT_MAX_ROWS = 50_000;
@@ -480,6 +481,11 @@ export class IssuesService {
     if (dto.assigneeId) qb.andWhere('assignee.id = :assigneeId', { assigneeId: dto.assigneeId });
     if (dto.from) qb.andWhere('issue.created_at >= :from', { from: dto.from });
     if (dto.to) qb.andWhere('issue.created_at <= :to', { to: dto.to });
+
+    // JQL rides ON TOP of the scope filter above — it can narrow, never widen.
+    if (dto.jql) {
+      applyJqlFilters(qb, parseJql(dto.jql), staff.id);
+    }
 
     if (dto.q) {
       // Match the reference number (prefix/substring, for "jump to issue") OR

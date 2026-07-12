@@ -57,6 +57,7 @@ interface Filters {
   status: string;
   priority: string;
   q: string;
+  jql: string;
   assignedToMe: boolean;
   platformId: string;
   from: string;
@@ -65,7 +66,7 @@ interface Filters {
   order: Order;
 }
 const DEFAULT_FILTERS: Filters = {
-  status: '', priority: '', q: '', assignedToMe: false,
+  status: '', priority: '', q: '', jql: '', assignedToMe: false,
   platformId: '', from: '', to: '', sort: 'createdAt', order: 'DESC',
 };
 
@@ -73,6 +74,7 @@ export function IssuesListPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [qInput, setQInput] = useState('');
+  const [jqlInput, setJqlInput] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saveOpen, setSaveOpen] = useState(false);
@@ -122,7 +124,7 @@ export function IssuesListPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['staff', 'issues', filters, page, me?.id],
     placeholderData: keepPreviousData,
     queryFn: async () =>
@@ -131,6 +133,7 @@ export function IssuesListPage() {
           status: filters.status || undefined,
           priority: filters.priority || undefined,
           q: filters.q || undefined,
+          jql: filters.jql || undefined,
           assigneeId: filters.assignedToMe ? me?.id : undefined,
           platformId: filters.platformId || undefined,
           from: filters.from ? new Date(filters.from).toISOString() : undefined,
@@ -200,8 +203,8 @@ export function IssuesListPage() {
   }
 
   function applyView(v: SavedViewDto) {
-    const f = v.filters as unknown as Filters;
-    setFilters(f); setQInput(f.q ?? ''); setPage(1);
+    const f = { ...DEFAULT_FILTERS, ...(v.filters as unknown as Filters) };
+    setFilters(f); setQInput(f.q ?? ''); setJqlInput(f.jql ?? ''); setPage(1);
   }
   function saveView() {
     const name = viewName.trim();
@@ -220,7 +223,13 @@ export function IssuesListPage() {
 
   const activeFilterCount =
     (filters.status ? 1 : 0) + (filters.priority ? 1 : 0) + (filters.q ? 1 : 0) +
+    (filters.jql ? 1 : 0) +
     (filters.assignedToMe ? 1 : 0) + (filters.platformId ? 1 : 0) + (filters.from || filters.to ? 1 : 0);
+
+  // Server-side JQL parse errors come back as 400s — surface them inline.
+  const jqlError = filters.jql && isError
+    ? ((error as any)?.response?.data?.message ?? 'Invalid query.')
+    : null;
 
   const selectedIdx = rows.findIndex((r) => r.id === selectedId);
 
@@ -344,11 +353,34 @@ export function IssuesListPage() {
               variant="ghost"
               size="sm"
               className="text-muted-foreground"
-              onClick={() => { setFilters(DEFAULT_FILTERS); setQInput(''); setPage(1); }}
+              onClick={() => { setFilters(DEFAULT_FILTERS); setQInput(''); setJqlInput(''); setPage(1); }}
             >
               <X className="h-4 w-4" /> Clear
             </Button>
           )}
+
+          <form
+            className="flex w-full items-center gap-2"
+            onSubmit={(e) => { e.preventDefault(); patch({ jql: jqlInput.trim() }); }}
+          >
+            <Input
+              value={jqlInput}
+              onChange={(e) => setJqlInput(e.target.value)}
+              placeholder='Query: status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me AND label = bug'
+              className={cn('flex-1 font-mono text-xs', jqlError && 'border-destructive')}
+              aria-label="Filter query"
+              title="Fields: status, priority, platform, assignee, reporter, label, created, updated, text — AND-only; quote values with spaces"
+            />
+            <Button type="submit" size="sm" variant="secondary" disabled={jqlInput.trim() === filters.jql}>
+              Apply query
+            </Button>
+            {filters.jql && (
+              <Button type="button" size="sm" variant="ghost" onClick={() => { setJqlInput(''); patch({ jql: '' }); }}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </form>
+          {jqlError && <p className="w-full text-xs text-destructive">{Array.isArray(jqlError) ? jqlError.join(' ') : jqlError}</p>}
         </CardContent>
       </Card>
 

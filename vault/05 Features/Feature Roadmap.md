@@ -18,12 +18,12 @@ feature-parity items below when prioritizing.
 
 ## Remaining backend features
 1. ~~SLA policies + escalations~~ — **DONE 2026-07-12**: per-platform `sla_policy` jsonb (UI: Admin → Platforms → SLA), L8 fixed via `sla_started_at` baseline (reopen resets the clock), 5-min breach sweep (`sla-escalation.service.ts`, marks `sla_breached_at` once → email escalation + webhook + SYSTEM audit). Business-hours calendars descoped.
-2. **JQL-like saved filters** — a query grammar/parser on top of the existing `SavedView` entity → translate to the issues list query.
+2. ~~JQL-like saved filters~~ — **DONE 2026-07-12**: AND-only grammar (`src/issues/jql.ts`, 9 unit tests) over status/priority/platform/assignee/reporter/label/created/updated/text with `me`/`unassigned` sentinels; `jql` param on the issues list (400s with pointed parse errors), query input on the list page, persists through SavedViews.
 3. **Email-to-issue intake** *(do last)* — inbound-email parsing (mail provider webhook) → reporter intake. Needs a provider decision.
 
 ## Remaining UI
 - ~~Automation rules / API tokens config screens~~ — **DONE 2026-07-12**: Admin → Integrations tab (platform-scoped rules + tokens) and Admin → Webhooks tab (`AdminIntegrations.tsx`).
-- **Board swimlanes** — group board by assignee/priority. Needs a dnd-kit **droppable-id-per-lane** refactor (current board uses `status` as the droppable id; swimlanes would collide). Simplest: render grouped static columns using the existing move-menu (no drag) in swimlane mode.
+- ~~Board swimlanes~~ — **DONE 2026-07-12**: Group-by select (None/Assignee/Priority); lanes render static status columns with dragging disabled (per-lane droppable ids avoid the collision) — cards move via the existing per-card menu.
 - **Sub-tasks** (extends issue links), **components/custom fields** (extends labels), **activity feed** (read over `AuditEvent`), **@mention autocomplete** for reporters.
 
 ## Decision-gated security (from [[Security Audit and Hardening]])

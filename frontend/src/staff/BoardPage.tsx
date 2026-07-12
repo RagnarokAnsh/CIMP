@@ -9,7 +9,10 @@ import {
 import { Inbox, MoveRight, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
-import type { IssueStatus, Paginated, StaffIssueSummary, StaffMe } from '@/api/types';
+import type { IssueStatus, Paginated, Priority, StaffIssueSummary, StaffMe } from '@/api/types';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { BOARD_STATUS_ORDER, STATUS_TRANSITIONS, canTransition } from '@/lib/issue-status';
 import { STATUS_META } from '@/lib/issue-meta';
 import { canWriteOn } from '@/lib/permissions';
@@ -31,6 +34,13 @@ import {
 import { cn } from '@/lib/utils';
 
 const BOARD_PAGE_SIZE = 100; // backend caps pageSize at 100.
+
+// Swimlane grouping. In a grouped board dragging is disabled (status columns
+// repeat per lane, so droppable ids would collide) - cards move via the same
+// per-card menu the keyboard path uses.
+type GroupBy = 'none' | 'assignee' | 'priority';
+const GROUP_KEY = 'cimp_board_group';
+const PRIORITY_LANES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
 // Soft work-in-progress limits: the column badge turns red once a column is at
 // or over its limit, nudging the team to finish work before pulling in more.
@@ -66,6 +76,39 @@ export function BoardPage() {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIssue = items.find((i) => i.id === activeId) ?? null;
+
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    () => (localStorage.getItem(GROUP_KEY) as GroupBy) || 'none',
+  );
+  useEffect(() => { localStorage.setItem(GROUP_KEY, groupBy); }, [groupBy]);
+
+  // Swimlanes: a lane per assignee (plus Unassigned) or per priority, each
+  // holding its own status-grouped card map. Empty lanes are skipped.
+  const lanes = useMemo(() => {
+    if (groupBy === 'none') return null;
+    const emptyGroups = (): Record<IssueStatus, StaffIssueSummary[]> => ({
+      NEW: [], REOPENED: [], IN_PROGRESS: [], ON_HOLD: [], RESOLVED: [], CLOSED: [],
+    });
+    const byLane = new Map<string, { label: string; groups: Record<IssueStatus, StaffIssueSummary[]>; count: number }>();
+    const laneOf = (it: StaffIssueSummary): { key: string; label: string } =>
+      groupBy === 'priority'
+        ? { key: it.priority, label: it.priority }
+        : { key: it.assignee?.id ?? '__none__', label: it.assignee?.name ?? 'Unassigned' };
+    for (const it of items) {
+      const { key, label } = laneOf(it);
+      let lane = byLane.get(key);
+      if (!lane) { lane = { label, groups: emptyGroups(), count: 0 }; byLane.set(key, lane); }
+      lane.groups[it.status].push(it);
+      lane.count += 1;
+    }
+    const entries = [...byLane.entries()];
+    if (groupBy === 'priority') {
+      entries.sort((a, b) => PRIORITY_LANES.indexOf(a[0] as Priority) - PRIORITY_LANES.indexOf(b[0] as Priority));
+    } else {
+      entries.sort((a, b) => (a[0] === '__none__' ? 1 : b[0] === '__none__' ? -1 : a[1].label.localeCompare(b[1].label)));
+    }
+    return entries.map(([key, lane]) => ({ key, ...lane }));
+  }, [groupBy, items]);
 
   const sensors = useSensors(
     // A small distance threshold so a plain click still opens the issue.
@@ -182,13 +225,30 @@ export function BoardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Board</h1>
-        <p className="text-sm text-muted-foreground">
-          {isLoading
-            ? 'Loading…'
-            : `Drag a card between columns to change its status.${capped ? ` Showing the ${items.length} most recently updated of ${data!.total}.` : ''}`}
-        </p>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Board</h1>
+          <p className="text-sm text-muted-foreground">
+            {isLoading
+              ? 'Loading…'
+              : `${groupBy === 'none'
+                  ? 'Drag a card between columns to change its status.'
+                  : 'Grouped board — move cards with each card’s menu.'}${capped ? ` Showing the ${items.length} most recently updated of ${data!.total}.` : ''}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Group by</span>
+          <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+            <SelectTrigger size="sm" className="w-36" aria-label="Group board by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              <SelectItem value="assignee">Assignee</SelectItem>
+              <SelectItem value="priority">Priority</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {!isLoading && items.length === 0 ? (
@@ -209,6 +269,7 @@ export function BoardPage() {
         onDragEnd={onDragEnd}
         onDragCancel={() => setActiveId(null)}
       >
+        {lanes === null ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:h-[calc(100vh-13rem)] xl:grid-cols-6">
           {BOARD_STATUS_ORDER.map((status) => (
             <Column
@@ -226,6 +287,38 @@ export function BoardPage() {
             />
           ))}
         </div>
+        ) : (
+        <div className="space-y-6">
+          {lanes.map((lane) => (
+            <section key={lane.key} className="space-y-2">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold">{lane.label}</h2>
+                <Badge variant="secondary" className="tabular-nums">{lane.count}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+                {BOARD_STATUS_ORDER.map((status) => (
+                  <Column
+                    key={status}
+                    droppableId={`${lane.key}::${status}`}
+                    status={status}
+                    issues={lane.groups[status]}
+                    loading={isLoading}
+                    compact
+                    dragDisabled
+                    onOpen={(id) => navigate(`/staff/issues/${id}`)}
+                    onMove={moveIssue}
+                    onAssignToMe={assignToMe}
+                    canAssignToMe={canAssignToMe}
+                    canMove={canMove}
+                    isDropTarget={false}
+                    isInvalidTarget={false}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+        )}
 
         <DragOverlay dropAnimation={null}>
           {activeIssue ? <div className="w-64"><IssueCard issue={activeIssue} dragging /></div> : null}
@@ -238,6 +331,7 @@ export function BoardPage() {
 
 function Column({
   status, issues, loading, onOpen, onMove, onAssignToMe, canAssignToMe, canMove, isDropTarget, isInvalidTarget,
+  droppableId, compact = false, dragDisabled = false,
 }: {
   status: IssueStatus;
   issues: StaffIssueSummary[];
@@ -249,17 +343,21 @@ function Column({
   canMove: (issue: StaffIssueSummary) => boolean;
   isDropTarget: boolean;
   isInvalidTarget: boolean;
+  /** Unique droppable id - status columns repeat per swimlane. */
+  droppableId?: string;
+  compact?: boolean;
+  dragDisabled?: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId ?? status, disabled: dragDisabled });
   const meta = STATUS_META[status];
 
   return (
-    <div className="flex min-w-0 flex-col rounded-xl border border-border bg-sidebar/40 xl:h-full xl:overflow-hidden">
+    <div className={cn('flex min-w-0 flex-col rounded-xl border border-border bg-sidebar/40', !compact && 'xl:h-full xl:overflow-hidden')}>
       <div className="flex items-center gap-2 rounded-t-xl border-b border-border bg-sidebar/80 px-3 py-2.5 backdrop-blur">
         <span className={cn('size-2 shrink-0 rounded-full', meta.dot)} aria-hidden />
         <span className="truncate text-sm font-semibold">{meta.label}</span>
         {(() => {
-          const limit = WIP_LIMITS[status];
+          const limit = compact ? undefined : WIP_LIMITS[status];
           const over = limit !== undefined && issues.length >= limit;
           return (
             <Badge
@@ -276,7 +374,9 @@ function Column({
       <div
         ref={setNodeRef}
         className={cn(
-          'flex min-h-72 flex-col gap-2 rounded-b-xl p-2 transition-colors xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
+          compact
+            ? 'flex min-h-24 flex-col gap-2 rounded-b-xl p-2 transition-colors'
+            : 'flex min-h-72 flex-col gap-2 rounded-b-xl p-2 transition-colors xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
           isOver && isDropTarget && 'bg-primary/5 ring-2 ring-inset ring-primary/40',
           isOver && isInvalidTarget && 'bg-destructive/5 ring-2 ring-inset ring-destructive/40',
         )}
@@ -299,6 +399,7 @@ function Column({
             onAssignToMe={onAssignToMe}
             canAssignToMe={canAssignToMe(issue)}
             canMove={canMove(issue)}
+            dragDisabled={dragDisabled}
           />
         ))}
       </div>
@@ -307,7 +408,7 @@ function Column({
 }
 
 function DraggableCard({
-  issue, onOpen, onMove, onAssignToMe, canAssignToMe, canMove,
+  issue, onOpen, onMove, onAssignToMe, canAssignToMe, canMove, dragDisabled = false,
 }: {
   issue: StaffIssueSummary;
   onOpen: (id: string) => void;
@@ -315,8 +416,12 @@ function DraggableCard({
   onAssignToMe: (issue: StaffIssueSummary) => void;
   canAssignToMe: boolean;
   canMove: boolean;
+  /** Swimlane mode: the move-menu still works, only dragging is off. */
+  dragDisabled?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: issue.id, disabled: !canMove });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: issue.id, disabled: !canMove || dragDisabled,
+  });
   const targets = STATUS_TRANSITIONS[issue.status];
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
@@ -329,7 +434,7 @@ function DraggableCard({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(issue.id); }}
-      className={cn(canMove && 'cursor-grab active:cursor-grabbing', 'touch-none', isDragging && 'opacity-40')}
+      className={cn(canMove && !dragDisabled && 'cursor-grab active:cursor-grabbing', 'touch-none', isDragging && 'opacity-40')}
     >
       <IssueCard
         issue={issue}
