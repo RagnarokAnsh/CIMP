@@ -15,6 +15,7 @@ updated: 2026-07-07
 
 ## State (green)
 - **147 unit + 21 e2e (backend) + 6 Playwright e2e (frontend) pass**; both builds clean. Verify: `npm test && npm run test:e2e` (root) and `cd frontend && npm run test:e2e` (needs dev Postgres up; boots API on :3972 + Vite on :5199).
+- **2026-07-13 audit pass done** (auth hardening + dedup — see Changelog). Top remaining engineering gaps, in order: **CI pipeline** (174 tests, nothing runs them automatically), error monitoring, then deploy dev→main (migrations 12-17) + domain/TLS.
 - **Differentiator track COMPLETE except Plan 05 (AI triage — user deferred):** merge (02), webhooks (01), SDK context capture (03, v0.5.0), CSAT (06), deflection (04, v0.6.0), triage inbox (07). PLUS 2026-07-12: **SLA policies/escalations (L8 fixed), Admin Integrations UI, ops analytics + weekly digest, screenshots (cimp-connect v0.7.0)**. All live-verified. Migrations now #17 (`AddSlaPolicy`). New deps: `@nestjs/schedule`.
 - **Deploy note:** dev is many features ahead of the AWS `main` deploy — merging dev→main runs migrations 12-17 and ships all new surfaces at once. New env (optional): `SLA_SWEEP_ENABLED`, `DIGEST_ENABLED` (both default on).
 - **Local dev ports:** FAFICS now squats :3000 (web) and :3001 (api) — run the CIMP backend with `PORT=<free> npm run start:dev` when both are up.
