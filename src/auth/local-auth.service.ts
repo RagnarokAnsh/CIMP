@@ -83,6 +83,11 @@ export class LocalAuthService {
         email?: string;
         tv?: number;
       };
+      // Other token kinds are signed with the same JWT_SECRET (SSE tickets,
+      // deflection subscribe tokens). None of them carry `sub`, and a lookup
+      // with an undefined idpSubject would silently match an arbitrary row
+      // (TypeORM drops undefined where-conditions) - reject them outright.
+      if (typeof claims.sub !== 'string' || claims.sub.length === 0) return null;
       return await this.auth.upsertFromClaims({
         sub: claims.sub,
         name: claims.name,

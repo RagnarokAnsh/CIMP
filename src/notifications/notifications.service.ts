@@ -30,12 +30,7 @@ export class NotificationsService {
     const issue = await this.loadIssue(issueId);
     if (!issue) return;
 
-    // Focal points scoped to this platform (global focal points don't exist).
-    const grants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: platformId } },
-      relations: { staffUser: true },
-    });
-    const recipients = this.activeRecipients(grants.map((g) => g.staffUser));
+    const recipients = this.activeRecipients(await this.focalPointsFor(platformId));
 
     const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
     for (const r of recipients) {
@@ -82,17 +77,14 @@ export class NotificationsService {
     });
     if (!issue) return;
 
-    const focalGrants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
-      relations: { staffUser: true },
-    });
+    const focalPoints = await this.focalPointsFor(issue.platform.id);
     const watcherRows = await this.watchers.find({
       where: { issue: { id: issueId } },
       relations: { staffUser: true },
     });
     const candidates = [
       issue.assignee,
-      ...focalGrants.map((g) => g.staffUser),
+      ...focalPoints,
       ...watcherRows.map((w) => w.staffUser),
     ];
     const recipients = this.activeRecipients(candidates).filter((r) => r.id !== actorStaffId);
@@ -119,17 +111,14 @@ export class NotificationsService {
     });
     if (!issue) return;
 
-    const focalGrants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
-      relations: { staffUser: true },
-    });
+    const focalPoints = await this.focalPointsFor(issue.platform.id);
     const watcherRows = await this.watchers.find({
       where: { issue: { id: issueId } },
       relations: { staffUser: true },
     });
     const recipients = this.activeRecipients([
       issue.assignee,
-      ...focalGrants.map((g) => g.staffUser),
+      ...focalPoints,
       ...watcherRows.map((w) => w.staffUser),
     ]);
 
@@ -154,11 +143,8 @@ export class NotificationsService {
     });
     if (!issue) return;
 
-    const focalGrants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
-      relations: { staffUser: true },
-    });
-    const recipients = this.activeRecipients([issue.assignee, ...focalGrants.map((g) => g.staffUser)]);
+    const focalPoints = await this.focalPointsFor(issue.platform.id);
+    const recipients = this.activeRecipients([issue.assignee, ...focalPoints]);
     if (recipients.length === 0) return;
 
     const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
@@ -232,6 +218,15 @@ export class NotificationsService {
       { readAt: new Date() },
     );
     return { unread: 0 };
+  }
+
+  // Focal points scoped to a platform (global focal points don't exist).
+  private async focalPointsFor(platformId: string): Promise<StaffUser[]> {
+    const grants = await this.roles.find({
+      where: { role: Role.FOCAL_POINT, platform: { id: platformId } },
+      relations: { staffUser: true },
+    });
+    return grants.map((g) => g.staffUser);
   }
 
   private async dispatch(

@@ -23,6 +23,7 @@ import { StorageService } from '../storage/storage.service';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { ReporterCommentDto } from './dto/reporter-comment.dto';
 import { sanitizeContext } from './context-sanitizer';
+import { upsertReporter } from './reporter-upsert';
 
 // Attachments that have cleared (or skipped) scanning may be downloaded.
 const SERVABLE_SCAN = new Set([ScanStatus.CLEAN, ScanStatus.SKIPPED]);
@@ -40,35 +41,12 @@ export class ReporterService {
     @InjectRepository(CsatResponse) private readonly csatResponses?: Repository<CsatResponse>,
   ) {}
 
-  // Auto-provision (or refresh) the reporter identity from the verified token.
+  // Auto-provision (or refresh) the reporter identity from the verified token
+  // (shared with deflection subscriptions — see reporter-upsert.ts).
   private async upsertReporter(ctx: HandoffContext): Promise<Reporter> {
-    let reporter = await this.reporters.findOne({
-      where: { platform: { id: ctx.platformId }, portalUserId: ctx.reporter.portalUserId },
-    });
-    if (!reporter) {
-      reporter = this.reporters.create({
-        platform: { id: ctx.platformId } as any,
-        portalUserId: ctx.reporter.portalUserId,
-        name: ctx.reporter.name,
-        email: ctx.reporter.email,
-      });
-    } else {
-      reporter.name = ctx.reporter.name;
-      reporter.email = ctx.reporter.email;
-    }
-
-    try {
-      return await this.reporters.save(reporter);
-    } catch (e) {
-      // Concurrent first-time submit: another request inserted this reporter
-      // between our findOne and save (unique on platform + portalUserId). Re-read
-      // and use the existing row instead of surfacing a 500.
-      if (this.isUniqueViolation(e)) {
-        const existing = await this.findReporter(ctx);
-        if (existing) return existing;
-      }
-      throw e;
-    }
+    const reporter = await upsertReporter(this.reporters, ctx);
+    if (!reporter) throw new Error('Reporter upsert race could not be resolved.');
+    return reporter;
   }
 
   // Validates count/size and sniffs each file's REAL content type from its magic

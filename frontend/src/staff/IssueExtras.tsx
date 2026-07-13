@@ -20,10 +20,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
-const onError = (e: any) => {
-  const msg = e?.response?.data?.message ?? 'Action failed.';
-  toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
-};
+import { toastApiError as onError } from '@/lib/toast-error';
 
 // ── Watch toggle ──────────────────────────────────────────────────────────
 export function IssueWatch({ issueId }: { issueId: string }) {

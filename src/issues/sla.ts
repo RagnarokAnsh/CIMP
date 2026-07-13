@@ -1,4 +1,5 @@
 import { IssueStatus, Priority } from '../common/enums';
+import { OPEN_ISSUE_STATUSES } from '../common/constants';
 
 // Resolution SLA: hours-from-baseline target per priority. Env defaults below
 // (SLA_HOURS_*), overridable PER PLATFORM via `platforms.sla_policy` jsonb
@@ -33,9 +34,7 @@ export type SlaState = 'on_track' | 'at_risk' | 'breached' | null;
 export type SlaPolicy = Partial<Record<Priority, number>>;
 
 // SLA is tracked for live work only; resolved/closed issues report no state.
-const OPEN_STATUSES: ReadonlySet<IssueStatus> = new Set([
-  IssueStatus.NEW, IssueStatus.IN_PROGRESS, IssueStatus.ON_HOLD, IssueStatus.REOPENED,
-]);
+const OPEN_STATUSES: ReadonlySet<IssueStatus> = new Set(OPEN_ISSUE_STATUSES);
 
 export function slaWindowHours(
   priority: Priority,

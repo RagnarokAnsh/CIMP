@@ -3,15 +3,14 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { IsNull, Repository } from 'typeorm';
-import { ActorType, IssueStatus } from '../common/enums';
+import { ActorType } from '../common/enums';
+import { OPEN_ISSUE_STATUSES } from '../common/constants';
 import { Issue } from '../entities';
 import { AuditService } from '../audit/audit.service';
 import { IssueEvents, IssueSlaBreachedEvent } from '../events/issue-events';
 import { slaDueSql } from './sla';
 
-const OPEN_STATUSES = [
-  IssueStatus.NEW, IssueStatus.IN_PROGRESS, IssueStatus.ON_HOLD, IssueStatus.REOPENED,
-];
+const OPEN_STATUSES = OPEN_ISSUE_STATUSES;
 
 // Escalation sweep: every 5 minutes, find open issues past their (per-platform
 // or default) SLA window that haven't been escalated this cycle, mark them

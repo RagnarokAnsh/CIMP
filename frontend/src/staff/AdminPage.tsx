@@ -25,6 +25,7 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { initials } from '@/lib/format';
+import { toastApiError } from '@/lib/toast-error';
 import { roleLabel } from '@/lib/issue-meta';
 import { Spinner } from '@/components/ui/spinner';
 import { IntegrationsTab, WebhooksTab } from './AdminIntegrations';
@@ -72,7 +73,7 @@ function PlatformsTab() {
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'platforms'] });
-  const onError = (e: any) => toast.error(e?.response?.data?.message ?? 'Action failed.');
+  const onError = toastApiError;
 
   const create = useMutation({
     mutationFn: () => staffApi.post('/admin/platforms', { key, name }),
@@ -204,10 +205,7 @@ function SlaPolicyDialog({ platform, onSaved }: { platform: PlatformItem; onSave
       });
     },
     onSuccess: () => { setOpen(false); toast.success('SLA policy saved.'); onSaved(); },
-    onError: (e: any) => {
-      const msg = e?.response?.data?.message ?? 'Save failed.';
-      toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
-    },
+    onError: toastApiError,
   });
 
   const invalid = SLA_PRIORITIES.some((p) => {
@@ -278,7 +276,7 @@ function StaffTab() {
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'staff'] });
-  const onError = (e: any) => toast.error(e?.response?.data?.message ?? 'Action failed.');
+  const onError = toastApiError;
 
   const createStaff = useMutation({
     mutationFn: () => staffApi.post('/admin/staff', { name: newName, email: newEmail, password: newPassword }),

@@ -22,6 +22,10 @@ export class AuthService {
   // These are re-checked on EVERY request, so revocation is immediate rather
   // than deferred to token expiry.
   async upsertFromClaims(claims: TokenClaims): Promise<AuthenticatedStaff | null> {
+    // Defense in depth (verifyToken already rejects these): an undefined sub
+    // must never reach the idpSubject lookup below - TypeORM would drop the
+    // condition and match an arbitrary staff row.
+    if (!claims.sub) return null;
     const name = claims.name ?? claims.sub;
     const email = claims.email ?? '';
 

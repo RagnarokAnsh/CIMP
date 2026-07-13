@@ -2,14 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { IssueStatus } from '../common/enums';
+import { OPEN_ISSUE_STATUSES } from '../common/constants';
 import { Issue } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
 import { SLA_AT_RISK_FRACTION, slaDueSql } from '../issues/sla';
 
-const OPEN_STATUSES = [
-  IssueStatus.NEW, IssueStatus.IN_PROGRESS, IssueStatus.ON_HOLD, IssueStatus.REOPENED,
-];
+const OPEN_STATUSES = OPEN_ISSUE_STATUSES;
 
 // Aggregated counts for the staff dashboard, always limited to the caller's
 // platform scope.

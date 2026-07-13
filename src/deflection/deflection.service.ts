@@ -6,16 +6,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as jwt from 'jsonwebtoken';
 import { ActorType, IssueStatus, PlatformStatus } from '../common/enums';
+import { OPEN_ISSUE_STATUSES } from '../common/constants';
 import { Issue, Platform, Reporter, ReporterSubscription } from '../entities';
 import { HandoffContext } from '../handoff/handoff.types';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { AuditService } from '../audit/audit.service';
 import { buildPrefixTsQuery } from '../issues/search-terms';
+import { upsertReporter } from '../reporter/reporter-upsert';
 import { PublishIssueDto } from './dto/publish-issue.dto';
 
-const OPEN_STATUSES = [
-  IssueStatus.NEW, IssueStatus.IN_PROGRESS, IssueStatus.ON_HOLD, IssueStatus.REOPENED,
-];
+const OPEN_STATUSES = OPEN_ISSUE_STATUSES;
 
 // Deflection: steer reporters to already-tracked problems before they file a
 // duplicate, and let connected apps show staff-published known issues.
@@ -172,29 +172,9 @@ export class DeflectionService {
     }));
   }
 
-  // Mirrors ReporterService.upsertReporter — subscribers may have never filed
-  // an issue, so the reporter row may not exist yet.
   private async upsertReporter(ctx: HandoffContext): Promise<Reporter> {
-    const existing = await this.reporters.findOne({
-      where: { platform: { id: ctx.platformId }, portalUserId: ctx.reporter.portalUserId },
-    });
-    if (existing) return existing;
-    try {
-      return await this.reporters.save(
-        this.reporters.create({
-          platform: { id: ctx.platformId } as any,
-          portalUserId: ctx.reporter.portalUserId,
-          name: ctx.reporter.name,
-          email: ctx.reporter.email,
-        }),
-      );
-    } catch {
-      // Concurrent insert on the unique (platform, portalUserId) — re-read.
-      const raced = await this.reporters.findOne({
-        where: { platform: { id: ctx.platformId }, portalUserId: ctx.reporter.portalUserId },
-      });
-      if (!raced) throw new NotFoundException('Issue not found');
-      return raced;
-    }
+    const reporter = await upsertReporter(this.reporters, ctx);
+    if (!reporter) throw new NotFoundException('Issue not found');
+    return reporter;
   }
 }

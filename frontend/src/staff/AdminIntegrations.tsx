@@ -21,10 +21,7 @@ import {
 } from '@/components/ui/select';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 
-const onError = (e: any) => {
-  const msg = e?.response?.data?.message ?? 'Action failed.';
-  toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
-};
+import { toastApiError as onError } from '@/lib/toast-error';
 
 const EVENT_NAMES = [
   'issue.created', 'issue.status_changed', 'issue.priority_changed', 'issue.assigned',
