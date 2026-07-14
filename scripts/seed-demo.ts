@@ -109,12 +109,16 @@ async function main() {
   const ds = await AppDataSource.initialize();
 
   console.log('Wiping existing data…');
-  await ds.query(
-    `TRUNCATE TABLE
-      notification_logs, reporter_issue_views, audit_events, comments,
-      attachments, issues, reporters, user_platform_roles, staff_users, platforms
-     RESTART IDENTITY CASCADE`,
+  // Discover every app table dynamically so new entities (csat, webhooks,
+  // subscriptions, labels, …) are always covered by the wipe.
+  const tables: { tablename: string }[] = await ds.query(
+    `SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'migrations'`,
   );
+  if (tables.length > 0) {
+    await ds.query(
+      `TRUNCATE TABLE ${tables.map((t) => `"${t.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`,
+    );
+  }
 
   // Platforms
   const platforms = await ds.getRepository(Platform).save(
@@ -241,6 +245,9 @@ async function main() {
           priority,
           resolvedAt,
           closedAt,
+          // Back-date the SLA baseline to match created_at — otherwise it
+          // defaults to now() and no issue ever shows overdue/at-risk.
+          slaStartedAt: createdAt,
         }),
       );
       issueCount++;
