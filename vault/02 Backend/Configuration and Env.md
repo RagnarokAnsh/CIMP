@@ -1,7 +1,7 @@
 ---
 title: Configuration and Env
 tags: [cimp, config, ops, security]
-updated: 2026-07-06
+updated: 2026-07-13
 ---
 # Configuration and Env
 ← [[CIMP - Home]]
@@ -25,7 +25,8 @@ Swagger + verbose errors are also disabled in production.
 - **Scanning:** `SCAN_DRIVER` (noop|clamav), `ALLOW_UNSCANNED_UPLOADS`, `CLAMAV_*`.
 - **Rate limit:** `THROTTLE_TTL/LIMIT/INTAKE_LIMIT`.
 - **Mail:** `SMTP_*` (blank = log instead of send), `MAIL_FROM`, `APP_URL`.
-- **SLA:** `SLA_HOURS_CRITICAL/HIGH/MEDIUM/LOW`, `SLA_AT_RISK_FRACTION`.
+- **SLA:** `SLA_HOURS_CRITICAL/HIGH/MEDIUM/LOW`, `SLA_AT_RISK_FRACTION` (env defaults). Per-platform overrides live in the DB (`platforms.sla_policy` jsonb, set via Admin → Platforms → SLA), not env.
+- **Cron sweeps:** `SLA_SWEEP_ENABLED` (breach escalation every 5 min) and `DIGEST_ENABLED` (Mon 08:00 weekly digest) — **both default on**; set `=false` to disable. → [[Backend Modules and API|Scheduled jobs]].
 - **Jira:** `JIRA_BASE_URL/EMAIL/API_TOKEN/WEBHOOK_SECRET` (blank = disabled).
 - **Policy:** `FOCAL_POINT_CAN_TRANSITION` (OD-09, default false).
 - **Self-support:** `SELF_SUPPORT_PLATFORM_KEY` (default `cimp`) → [[Integrations]].

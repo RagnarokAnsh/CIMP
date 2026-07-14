@@ -2,17 +2,24 @@
 title: Changelog
 tags: [cimp, changelog, updates]
 type: log
-updated: 2026-07-07
+updated: 2026-07-14
 ---
 # Changelog / Updates Log
 ← [[CIMP - Home]] · [[Session Handoff]]
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-14 — External-review fixes (5) + SSE 401-storm root cause
+- **Verified & fixed the 5 `/code-review` findings** (commit e5ecf8c, +7 tests, **154 unit green**): (1) **SSRF** — `assertSafeUrl` rejects all IPv6 literals wholesale (`host.includes(':')`), closing the IPv4-mapped `[::ffff:169.254.169.254]` → cloud-metadata bypass (real webhook receivers are DNS-named); (2) **SSE-ticket escalation** — `verifyToken` now rejects any token carrying `aud`, so a 30s SSE ticket can no longer double as a staff session; the three `JWT_SECRET` tokens (session/SSE/subscribe) are now mutually non-interchangeable; (3) `#cimpctx=` fragment strip keeps a trailing `&b=2`; (4) screenshot-dropped toast; (5) digest open-status SQL built from `OPEN_ISSUE_STATUSES`. → [[Module - Auth]]
+- **SSE 401 storm fixed** (`GET /api/staff/events` every 3s): frontend `realtime.ts` hardened (token re-read per reconnect, exponential backoff 3→30s, stop-on-401). **Root cause** was in `upsertFromClaims`: the SSE path passes only `{sub,tv}`, so `email = claims.email ?? ''` clobbered the stored row to `email=''`/`name=sub`; with `staff_users.email` unique+not-null this broke password login and 401-stormed once a second staff email collided on `''`. Fix: partial claims now refresh only the fields they carry (SSE `{sub,tv}` leaves `name`/`email` intact), and the INSERT-race catch matches PG code `23505` per [[Module - Reporter|reporter-upsert]]; +7 `auth.service.spec.ts` regression tests (**161 unit green**). → [[Module - Auth]]
+- **JWT_SECRET inventory audited (Q):** only session/SSE/subscribe use it; handoff + self-support use the per-portal `handoffSecret`; webhook signatures are per-endpoint HMAC. Nothing unaudited remains.
+- **Seeders refreshed for the current schema** (`scripts/seed-presentation.ts`, `seed-demo.ts`): **dynamic table-discovery wipe** (no more hard-coded TRUNCATE list that silently skipped new tables) and the **`sla_started_at` back-dating fix** (was defaulting to `now()`, so nothing ever showed overdue/at-risk). The presentation seeder now also seeds the differentiator features — CSAT ratings, a published known-issue + reporter subscription (deflection), a duplicate merge (linked+closed), SDK diagnostics context, labels + watchers, per-platform SLA policy, and one automation rule / API token / webhook — plus a JQL saved view. `seed.ts` and `seed-prod.ts` were already schema-correct (no issue rows). Ran `seed:presentation` green (33 issues; overdue SLA work now renders).
+
 ## 2026-07-13 — Full audit pass: auth hardening + dedup consolidation
 - **Security fix (real finding):** three token kinds share `JWT_SECRET` (staff, SSE tickets, deflection subscribe tokens). A sub-less token presented as a staff Bearer reached `upsertFromClaims`, where TypeORM **drops undefined where-conditions** — `findOne({ idpSubject: undefined })` matched an arbitrary staff row; only the tokenVersion mismatch prevented authentication. `verifyToken` now rejects tokens without a string `sub`; `upsertFromClaims` guards as defense in depth.
 - **Dedup:** `OPEN_ISSUE_STATUSES` (1 definition replaces 4 — sla/dashboard/deflection/sla-escalation); shared `reporter-upsert.ts` (replaces two divergent copies; deflection subscribers now get the name/email refresh); `focalPointsFor()` helper in notifications (replaces 4 repeated grant queries); frontend `lib/toast-error.ts` (replaces 5 toast handlers — kept single-param deliberately: a second param poisons TanStack's mutation-variables inference).
 - **Audit verdicts recorded:** no injection paths (all raw SQL parameterized); migrations 1-17 match entities; over-engineering check on the new modules came back clean. Known gaps (accepted, tracked): no CI, no error monitoring, in-process webhook retries (M8), memory-buffered uploads + local storage driver (M6), server-local cron timezones, CSV export ignores `jql`. Method note: single-reviewer inline audit (multi-agent run blocked by session limits) — run `/code-review ultra` for an independent pass.
+- **Doc-sync:** the structured reference notes (which had lagged the changelog since ~07-06) were brought current with the shipped features — [[Backend Modules and API]], [[Frontend Overview]], [[Configuration and Env]], [[Features - Shipped]], [[Entity Reference]] (17→20 entities), [[Migrations Log]] (#12–#17), and [[Session Handoff]] "what's next".
 
 ## 2026-07-12 — JQL saved filters, board swimlanes, Playwright e2e harness
 - **JQL filters** — AND-only grammar in `src/issues/jql.ts` (test-first, 9 specs): `status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me AND label = bug AND created >= 2026-07-01 AND text ~ "login"`; fields status/priority/platform(key)/assignee/reporter/label/created/updated/text, `me`/`unassigned` sentinels, quoted values; parse errors → 400 with pointed messages. Applied on top of the scope filter (narrow-only). List page gains a monospace query input with inline error display; SavedViews persist the query.
@@ -106,4 +113,4 @@ Multi-agent OWASP audit → 57 findings; ~42 fixed with tests. Highlights:
 - **CI/CD**: `.github/workflows/deploy.yml` + `scripts/deploy.sh` — push to `main` → SSH deploy to AWS EC2 (pm2 + nginx). → [[Deployment, CI-CD and Dev Workflow]]
 
 ## Still open → [[Feature Roadmap]]
-SLA policies + escalations (invasive), JQL-like filters, email-to-issue intake (do last), automation/API-token config UIs, full board swimlanes; decision-gated security (Redis throttler M8, disk-streaming uploads M6).
+Engineering: CI pipeline (nothing runs the 174 tests), error monitoring, deploy `dev → main` (migrations 12–17). Features: AI triage (Plan 05, deferred), email-to-issue intake (do last), sub-tasks/components/activity feed. Decision-gated security: Redis throttler (M8), disk-streaming uploads (M6).

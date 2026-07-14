@@ -1,7 +1,7 @@
 ---
 title: Feature Roadmap
 tags: [cimp, features, roadmap]
-updated: 2026-07-10
+updated: 2026-07-12
 ---
 # Feature Roadmap
 ← [[CIMP - Home]] · shipped → [[Features - Shipped]]

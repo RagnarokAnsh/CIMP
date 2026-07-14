@@ -1,7 +1,7 @@
 ---
 title: Session Handoff
 tags: [cimp, handoff, resume]
-updated: 2026-07-07
+updated: 2026-07-13
 ---
 # Session Handoff — read this first when resuming
 ← [[CIMP - Home]]
@@ -20,15 +20,16 @@ updated: 2026-07-07
 - **Deploy note:** dev is many features ahead of the AWS `main` deploy — merging dev→main runs migrations 12-17 and ships all new surfaces at once. New env (optional): `SLA_SWEEP_ENABLED`, `DIGEST_ENABLED` (both default on).
 - **Local dev ports:** FAFICS now squats :3000 (web) and :3001 (api) — run the CIMP backend with `PORT=<free> npm run start:dev` when both are up.
 - **Security:** ~42/57 audit findings fixed. Tracker: `SECURITY_AUDIT.md`. → [[Security Audit and Hardening]].
-- **Features shipped:** issue links, labels, watchers (backend+tests+**UI**); automation rules, scoped API tokens (backend+tests, **UI pending**); board WIP limits (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). → [[Features - Shipped]] / [[Module - Authz]].
+- **Features shipped:** issue links, labels, watchers, automation rules, scoped API tokens (all backend+tests+**UI** — automation/token UIs now live in Admin → Integrations); board WIP limits **+ swimlanes** (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). Plus the differentiator track: merge, webhooks, SDK context capture, CSAT, deflection, triage inbox, SLA policies/escalations, ops analytics/digest, JQL. → [[Features - Shipped]] / [[Module - Authz]].
 
 ## What's next (priority order) → [[Feature Roadmap]]
-1. **SLA policies + escalations** — *test-first, invasive* (rewires `computeSla`); also fix L8 reopen baseline.
-2. **Automation-rules + API-token config UIs** (backends done).
-3. **Board swimlanes** (needs dnd-kit droppable-id-per-lane refactor).
-4. **JQL-like filters** (query grammar on `SavedView`).
+The differentiator + JIRA-like feature tracks are **done** (SLA policies/escalations, automation/API-token UIs, board swimlanes, JQL all shipped — see [[Features - Shipped]]). Remaining, in order:
+1. **CI pipeline** — 174 tests (147 unit + 21 e2e + 6 Playwright), nothing runs them automatically yet.
+2. **Error monitoring** (no runtime observability).
+3. **Deploy `dev → main`** — runs migrations 12–17, ships all new surfaces at once; needs the prod env set (incl. optional `SLA_SWEEP_ENABLED`/`DIGEST_ENABLED`) + domain/TLS. → [[Configuration and Env]].
+4. **AI triage (Plan 05)** — user-deferred. → [[Plan 05 - AI Triage Pluggable and Free]].
 5. **Email-to-issue intake** — **do LAST** (user directive); needs a mail-provider decision.
-- Decision-gated security: Redis throttler (M8), disk-streaming uploads (M6).
+- Decision-gated security: Redis throttler (M8), disk-streaming uploads (M6); known gap — webhook SSRF guard is hostname-string only (admin-gated).
 
 ## Gotchas before merging `dev → main` (which deploys)
 - Config is **fail-closed**: prod needs `NODE_ENV=production`, `DB_SYNCHRONIZE=false`, explicit `CORS_ORIGINS`, `JWT_SECRET`≥32, `SCAN_DRIVER=clamav` (or `ALLOW_UNSCANNED_UPLOADS=true`) — or it won't boot. → [[Configuration and Env]].

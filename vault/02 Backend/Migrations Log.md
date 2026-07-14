@@ -1,7 +1,7 @@
 ---
 title: Migrations Log
 tags: [cimp, backend, database, migrations]
-updated: 2026-07-07
+updated: 2026-07-13
 ---
 # Migrations Log (`src/migrations/`)
 ← [[Backend Modules and API]] · [[CIMP - Home]]
@@ -21,6 +21,12 @@ updated: 2026-07-07
 | 9 | `1719300000000-AddAutomationRules.ts` | `automation_rules` + trigger/action enums. |
 | 10 | `1719400000000-AddApiTokens.ts` | `api_tokens` (hash unique, platform FK). |
 | 11 | `1719500000000-AddWatcherRole.ts` | `ALTER TYPE role_enum ADD VALUE IF NOT EXISTS 'WATCHER'` (read-only staff role). Down is a no-op — Postgres can't drop enum values. |
+| 12 | `1719600000000-AddIssueDuplicateOf.ts` | `issues.duplicate_of_id` (self-FK `ON DELETE SET NULL`) + index. Duplicate merge flow → [[Features - Shipped|Duplicate merge]]. |
+| 13 | `1719700000000-AddWebhookEndpoints.ts` | `webhook_endpoints` (url/secret/events jsonb/enabled/platform FK CASCADE, platform-nullable = global) + platform index. → [[Features - Shipped|Outbound webhooks]]. |
+| 14 | `1719800000000-AddIssueContext.ts` | `issues.context` jsonb (unindexed) — SDK diagnostics, sanitized before write. → [[Features - Shipped|SDK context capture]]. |
+| 15 | `1719900000000-AddCsatResponses.ts` | `csat_responses` (issue FK **unique** + reporter FK, smallint score, comment, CASCADE). → [[Features - Shipped|CSAT]]. |
+| 16 | `1720000000000-AddDeflection.ts` | `issues.publicly_visible`/`public_title` + `reporter_subscriptions` (issue+reporter unique, CASCADE, index). → [[Features - Shipped|Known-issues deflection]]. |
+| 17 | `1720100000000-AddSlaPolicy.ts` | `platforms.sla_policy` jsonb + `issues.sla_started_at` (backfilled from `created_at`) + `sla_breached_at` + partial index `WHERE sla_breached_at IS NULL`. → [[Features - Shipped|SLA policies + escalations]]. |
 
 ## Gotchas
 - **`search_vector` FTS only works where migration #2 ran (prod).** Under dev `synchronize` the column is NULL → description search returns nothing (reference-number search still works). See [[Session Handoff]].
