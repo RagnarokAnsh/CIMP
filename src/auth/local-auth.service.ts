@@ -82,11 +82,16 @@ export class LocalAuthService {
         name?: string;
         email?: string;
         tv?: number;
+        aud?: string | string[];
       };
-      // Other token kinds are signed with the same JWT_SECRET (SSE tickets,
-      // deflection subscribe tokens). None of them carry `sub`, and a lookup
-      // with an undefined idpSubject would silently match an arbitrary row
-      // (TypeORM drops undefined where-conditions) - reject them outright.
+      // Single-purpose tokens share JWT_SECRET but differ in shape: SSE
+      // tickets are audience-scoped (and DO carry sub + a valid tv, so
+      // without this check a leaked 30s ticket would double as a session),
+      // and deflection subscribe tokens are sub-less (an undefined
+      // idpSubject lookup would match an arbitrary row - TypeORM drops
+      // undefined where-conditions). Session tokens are minted with a sub
+      // and no audience; accept exactly that shape.
+      if (claims.aud !== undefined) return null;
       if (typeof claims.sub !== 'string' || claims.sub.length === 0) return null;
       return await this.auth.upsertFromClaims({
         sub: claims.sub,

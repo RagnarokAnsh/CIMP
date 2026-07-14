@@ -47,6 +47,10 @@ describe('WebhooksService', () => {
       'https://172.31.255.1/hook',
       'https://169.254.169.254/latest/meta-data',
       'https://[::1]/hook',
+      'https://[::ffff:169.254.169.254]/latest/meta-data', // IPv4-mapped v6 → metadata IP
+      'https://[::ffff:7f00:1]/hook', // IPv4-mapped v6 → 127.0.0.1
+      'https://[fe80::1]/hook', // link-local v6
+      'https://[fc00::1]/hook', // unique-local v6
       'https://0.0.0.0/hook',
       'not a url',
     ])('rejects %s', (url) => {

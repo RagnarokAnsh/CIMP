@@ -3,8 +3,13 @@ import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { AccountStatus, PlatformStatus, Role } from '../common/enums';
+import { OPEN_ISSUE_STATUSES } from '../common/constants';
 import { Platform, StaffUser, UserPlatformRole } from '../entities';
 import { MailService } from './mail.service';
+
+// SQL literal list built from the shared constant (enum values, injection-safe)
+// so the digest can never drift from the canonical open-status definition.
+const OPEN_SQL = OPEN_ISSUE_STATUSES.map((s) => `'${s}'`).join(',');
 
 // Monday-morning digest per platform: last week's intake/resolution numbers,
 // current open + breached counts, and CSAT — mailed to the platform's focal
@@ -44,8 +49,8 @@ export class DigestService {
       `SELECT
          COUNT(*) FILTER (WHERE created_at >= now() - interval '7 days') AS created,
          COUNT(*) FILTER (WHERE resolved_at >= now() - interval '7 days') AS resolved,
-         COUNT(*) FILTER (WHERE status IN ('NEW','IN_PROGRESS','ON_HOLD','REOPENED')) AS open,
-         COUNT(*) FILTER (WHERE status IN ('NEW','IN_PROGRESS','ON_HOLD','REOPENED') AND sla_breached_at IS NOT NULL) AS breached
+         COUNT(*) FILTER (WHERE status IN (${OPEN_SQL})) AS open,
+         COUNT(*) FILTER (WHERE status IN (${OPEN_SQL}) AND sla_breached_at IS NOT NULL) AS breached
        FROM issues WHERE platform_id = $1`,
       [platform.id],
     ) as [{ created: string; resolved: string; open: string; breached: string }];

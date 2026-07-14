@@ -15,12 +15,11 @@ export function captureDiagnosticsFragment(): void {
   const m = hash.match(/[#&]cimpctx=([^&]+)/);
   if (!m) return;
   sessionStorage.setItem(KEY, m[1]);
-  const stripped = hash.replace(/[#&]cimpctx=[^&]+/, '').replace(/^#$/, '');
-  window.history.replaceState(
-    {},
-    '',
-    window.location.pathname + window.location.search + (stripped.startsWith('#') ? stripped : ''),
-  );
+  // Strip only our parameter — '#cimpctx=x&b=2' must keep '#b=2'.
+  let stripped = hash.replace(/[#&]cimpctx=[^&]+/, '');
+  if (stripped && !stripped.startsWith('#')) stripped = `#${stripped.replace(/^&/, '')}`;
+  if (stripped === '#') stripped = '';
+  window.history.replaceState({}, '', window.location.pathname + window.location.search + stripped);
 }
 
 function base64UrlDecode(s: string): Uint8Array {

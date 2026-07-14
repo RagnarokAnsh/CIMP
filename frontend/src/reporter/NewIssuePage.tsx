@@ -146,9 +146,13 @@ export function NewIssuePage() {
       form.append('description', description);
       if (diagnostics) form.append('context', JSON.stringify(diagnostics));
       if (files) Array.from(files).forEach((f) => form.append('files', f));
-      if (screenshot && (files?.length ?? 0) < MAX_FILES) {
-        const blob = await (await fetch(screenshot)).blob();
-        form.append('files', new File([blob], 'screenshot.jpg', { type: 'image/jpeg' }));
+      if (screenshot) {
+        if ((files?.length ?? 0) < MAX_FILES) {
+          const blob = await (await fetch(screenshot)).blob();
+          form.append('files', new File([blob], 'screenshot.jpg', { type: 'image/jpeg' }));
+        } else {
+          toast.warning('Screenshot not attached — the file limit is already used by your attachments.');
+        }
       }
       const { data } = await reporterApi.post<ReporterIssueDetail>('/issues', form);
       return data;

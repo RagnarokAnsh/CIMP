@@ -50,10 +50,18 @@ export class WebhooksService {
       throw new BadRequestException('Webhook URLs must use https.');
     }
     const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    // IPv6 literals are rejected wholesale: classifying every non-global v6
+    // range (IPv4-mapped ::ffff:a9fe:a9fe reaches the cloud metadata IP,
+    // fc00::/7, fe80::/10, ...) is error-prone, and real webhook receivers
+    // are reached by DNS name. IPv4 literals keep the explicit checks below.
+    if (host.includes(':')) {
+      throw new BadRequestException(
+        'Webhook URLs must use a DNS hostname or public IPv4 address (IPv6 literals are not supported).',
+      );
+    }
     const isPrivate =
       host === 'localhost'
       || host.endsWith('.localhost')
-      || host === '::1'
       || host === '0.0.0.0'
       || /^127\./.test(host)
       || /^10\./.test(host)
