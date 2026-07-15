@@ -2,12 +2,18 @@
 title: Changelog
 tags: [cimp, changelog, updates]
 type: log
-updated: 2026-07-14
+updated: 2026-07-15
 ---
 # Changelog / Updates Log
 ← [[CIMP - Home]] · [[Session Handoff]]
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+
+## 2026-07-15 — Deploy workflow hardening (3 fixes)
+- **`deploy.yml` reworked** (deploy.sh itself unchanged — review found no bugs in it): (1) **SSH host-key pinning** — new required `SSH_KNOWN_HOSTS` secret replaces the trust-on-first-use `ssh-keyscan` (which made `StrictHostKeyChecking=yes` decorative); workflow fails with setup instructions if unset. (2) **Backend e2e in the verify gate** — the 21 e2e tests are DB-free (repos stubbed), verified green in isolation; gate now runs 161 unit + 21 e2e. (3) **`RUN_MIGRATIONS` is no longer a secret** — manual deploys get a `workflow_dispatch` checkbox; push deploys read the repo *variable* `RUN_MIGRATIONS` (default false). **Action needed before next deploy:** create the `SSH_KNOWN_HOSTS` secret, delete the old `RUN_MIGRATIONS` secret, optionally set the variable to `true` (recommended — no-op when nothing pending). → [[Deployment, CI-CD and Dev Workflow]]
+
+## 2026-07-15 — User manual
+- **`CIMP-User-Manual.docx`** written to the repo root (uncommitted): 21-page end-user manual covering all four audiences (reporter / staff / admin / integrator) — roles matrix, lifecycle + transition matrix, JQL reference, triage shortcuts, SLA + escalations, cimp-connect integration (diagnostics/screenshots/known-issues), webhook verification, env reference, troubleshooting. Content cross-checked against `status-machine.ts`, `enums.ts`, `sla.ts`, `issue-events.ts`, `TriagePage.tsx`. Regenerate: the build script lives in the session scratchpad; content sources are [[Features - Shipped]] + this changelog.
 
 ## 2026-07-14 — External-review fixes (5) + SSE 401-storm root cause
 - **Verified & fixed the 5 `/code-review` findings** (commit e5ecf8c, +7 tests, **154 unit green**): (1) **SSRF** — `assertSafeUrl` rejects all IPv6 literals wholesale (`host.includes(':')`), closing the IPv4-mapped `[::ffff:169.254.169.254]` → cloud-metadata bypass (real webhook receivers are DNS-named); (2) **SSE-ticket escalation** — `verifyToken` now rejects any token carrying `aud`, so a 30s SSE ticket can no longer double as a staff session; the three `JWT_SECRET` tokens (session/SSE/subscribe) are now mutually non-interchangeable; (3) `#cimpctx=` fragment strip keeps a trailing `&b=2`; (4) screenshot-dropped toast; (5) digest open-status SQL built from `OPEN_ISSUE_STATUSES`. → [[Module - Auth]]
