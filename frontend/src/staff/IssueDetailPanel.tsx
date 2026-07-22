@@ -459,6 +459,17 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               </Card>
             </TabsContent>
           </Tabs>
+
+          {/* Labels and links sit under the discussion rather than in the
+              sidebar. They are issue *content*, not controls, and moving them
+              here balances the two columns — the sidebar was running ~630px
+              longer than the main column, leaving a long dead gap beside it.
+              Side by side once the panel is wide enough (container query, since
+              this renders both full-page and in the narrower split view). */}
+          <div className="grid gap-6 @3xl:grid-cols-2">
+            <IssueLabels issueId={id} platformId={data.platform?.id} readOnly={!canWrite} />
+            <IssueLinks issueId={id} readOnly={!canWrite} />
+          </div>
         </div>
 
         <div className="space-y-6">
@@ -609,8 +620,6 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           </Card>
           )}
 
-          <IssueLabels issueId={id} platformId={data.platform?.id} readOnly={!canWrite} />
-          <IssueLinks issueId={id} readOnly={!canWrite} />
         </div>
       </div>
     </div>

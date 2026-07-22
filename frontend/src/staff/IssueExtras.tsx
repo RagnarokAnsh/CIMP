@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Eye, GitMerge, Link2, Plus, Tag, X } from 'lucide-react';
+import { Eye, GitMerge, Link2, Plus, Tag, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
@@ -328,17 +328,16 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
   const count = (links ?? []).length;
 
   return (
-    // Collapsed when there are no links: expanded it is ~185px of controls for a
-    // relationship most issues never have, and it sat under four other cards in
-    // a sidebar already much taller than the main column.
+    // Full card again, not a <details>: it was collapsed only to shorten an
+    // over-long sidebar, and it now lives in the main column where there is room.
     <Card>
-      <details open={count > 0} className="group">
-        <summary className="flex cursor-pointer select-none items-center gap-2 px-6 py-4 text-base font-semibold">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
           <Link2 className="h-4 w-4" /> Linked issues
           {count > 0 && <Badge variant="secondary" className="text-[10px] tabular-nums">{count}</Badge>}
-          <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="space-y-3 px-6 pb-6">
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
         <div className="space-y-1.5">
           {count === 0 && <span className="text-sm text-muted-foreground">No links.</span>}
           {(links ?? []).map((l) => (
@@ -389,8 +388,7 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
           </Button>
         </div>
         )}
-        </div>
-      </details>
+      </CardContent>
     </Card>
   );
 }
