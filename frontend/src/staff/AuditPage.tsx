@@ -9,12 +9,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { dateTime } from '@/lib/format';
+import { Pager } from '@/components/Pager';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
@@ -138,16 +138,14 @@ export function AuditPage() {
           </Table>
         </CardContent>
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border px-4 py-3">
-            <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </Button>
-            </div>
+          <div className="border-t border-border px-4 py-3">
+            <Pager
+              page={page}
+              totalPages={totalPages}
+              total={data?.total ?? 0}
+              pageSize={data?.pageSize ?? 0}
+              onPage={setPage}
+            />
           </div>
         )}
       </Card>

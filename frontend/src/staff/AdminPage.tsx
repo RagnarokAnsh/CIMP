@@ -32,6 +32,7 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { Spinner } from '@/components/ui/spinner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SecretOnceDialog } from '@/components/SecretOnce';
 import { initials } from '@/lib/format';
@@ -72,7 +73,7 @@ function PlatformsTab() {
   const [name, setName] = useState('');
   const [rotatedSecret, setRotatedSecret] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'platforms'],
     queryFn: async () => (await staffApi.get<PlatformItem[]>('/admin/platforms')).data,
   });
@@ -158,6 +159,13 @@ function PlatformsTab() {
 
         {isLoading ? (
           <Skeleton className="h-32 w-full" />
+        ) : isError ? (
+          // Without this a failed request fell through to the empty state and
+          // read as "No platforms yet" — which on an admin screen invites
+          // re-creating a platform that already exists.
+          <Alert variant="destructive">
+            <AlertDescription>Could not load platforms. Retry in a moment.</AlertDescription>
+          </Alert>
         ) : data && data.length === 0 ? (
           <Empty className="py-10">
             <EmptyHeader>
@@ -394,7 +402,7 @@ function StaffTab() {
   const [newPassword, setNewPassword] = useState('');
   const [filter, setFilter] = useState('');
 
-  const { data: staff, isLoading } = useQuery({
+  const { data: staff, isLoading, isError } = useQuery({
     queryKey: ['admin', 'staff'],
     queryFn: async () => (await staffApi.get<StaffWithRoles[]>('/admin/staff')).data,
   });
@@ -507,6 +515,10 @@ function StaffTab() {
         <CardContent className="pt-6">
           {isLoading ? (
             <Skeleton className="h-32 w-full" />
+          ) : isError ? (
+            <Alert variant="destructive">
+              <AlertDescription>Could not load staff accounts. Retry in a moment.</AlertDescription>
+            </Alert>
           ) : visible.length === 0 ? (
             <Empty className="py-10">
               <EmptyHeader>

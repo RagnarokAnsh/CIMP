@@ -9,6 +9,14 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-22 — Shared paginator, JQL bar hidden, failed loads no longer read as "empty"
+
+- **One paginator.** The good one lived inside `IssuesListPage` while the audit log hand-rolled its own — "Page 2 of 3" with text Previous/Next buttons — so the two diverged in both capability and appearance and neither said how many records existed. Extracted to `components/Pager.tsx` and used by both. Verified identical: *"Showing 1–20 of 59 · page 1 of 3"* and *"Showing 1–50 of 345 · page 1 of 7"*. Dropped the hard-coded word "issues" from the summary now that it also serves audit events.
+- **JQL query bar hidden** behind `false &&` in `IssuesListPage` — the dropdown filters cover what people reach for, and a raw query language under them read as clutter. Everything else stays wired: the backend grammar (`src/issues/jql.ts` + its specs), the `jql` filter field, error surfacing, and saved-view persistence. Restoring it is deleting the `false &&`. Its Playwright test is `test.skip` with a comment pointing at the flag.
+- **A failed fetch used to render as an empty state on two screens.** `TriagePage` showed **"Inbox zero"** and `AdminPage` showed **"No platforms yet" / "No staff accounts yet"** when the request had actually failed — worse than showing nothing, and on the admin screen it invites re-creating a platform that already exists. Both now check `isError` before the empty branch, matching Issues / Audit / Board / Dashboard / My issues, which already did.
+
+**Swept and consistent:** page headers (all six use the same `text-2xl font-semibold` + subtitle), skeleton-on-load across every list, and `Empty` for genuine no-data states.
+
 ## 2026-07-22 — Board goes full-bleed: the width cap, not the sidebar, was the constraint
 
 Reported as "collapsing the sidebar should remove the board's horizontal scroll on a big screen". It didn't — and measurement showed why: **`<main>`'s `max-w-screen-2xl` (1536px) bound before the sidebar or the viewport ever did.** Six 17rem columns plus gaps need 1692px; the capped container leaves 1472px. Overflow was **exactly 220px in all four cases** — 1920 and 2560, expanded and collapsed. A 2560px monitor gained nothing, and the board could never show all six columns at any width.

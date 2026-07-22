@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
-  Bookmark, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown,
+  Bookmark, ChevronDown, ChevronUp, ChevronsUpDown,
   Columns2, Download, List, Maximize2, Search, SearchX, Trash2, UserCheck, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,6 +16,7 @@ import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { canWriteAnywhere } from '@/lib/permissions';
 import { SlaBadge } from '@/components/SlaBadge';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { Pager } from '@/components/Pager';
 import { IssueDetailPanel } from './IssueDetailPanel';
 import { relativeTime, initials } from '@/lib/format';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -351,28 +352,38 @@ export function IssuesListPage() {
             </Button>
           )}
 
-          <form
-            className="flex w-full items-center gap-2"
-            onSubmit={(e) => { e.preventDefault(); patch({ jql: jqlInput.trim() }); }}
-          >
-            <Input
-              value={jqlInput}
-              onChange={(e) => setJqlInput(e.target.value)}
-              placeholder='Query: status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me AND label = bug'
-              className={cn('flex-1 font-mono text-xs', jqlError && 'border-destructive')}
-              aria-label="Filter query"
-              title="Fields: status, priority, platform, assignee, reporter, label, created, updated, text — AND-only; quote values with spaces"
-            />
-            <Button type="submit" size="sm" variant="secondary" disabled={jqlInput.trim() === filters.jql}>
-              Apply query
-            </Button>
-            {filters.jql && (
-              <Button type="button" size="sm" variant="ghost" onClick={() => { setJqlInput(''); patch({ jql: '' }); }}>
-                <X className="h-4 w-4" />
+          {/* JQL query bar — hidden for now.
+              The dropdown filters cover what people actually reach for, and a
+              raw query language sitting under them mostly read as clutter. The
+              backend grammar (src/issues/jql.ts), the `jql` filter field, its
+              error surfacing, and saved-view persistence all remain wired, so
+              restoring this is deleting the `false &&` below. */}
+          {false && (
+          <>
+            <form
+              className="flex w-full items-center gap-2"
+              onSubmit={(e) => { e.preventDefault(); patch({ jql: jqlInput.trim() }); }}
+            >
+              <Input
+                value={jqlInput}
+                onChange={(e) => setJqlInput(e.target.value)}
+                placeholder='Query: status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me AND label = bug'
+                className={cn('flex-1 font-mono text-xs', jqlError && 'border-destructive')}
+                aria-label="Filter query"
+                title="Fields: status, priority, platform, assignee, reporter, label, created, updated, text — AND-only; quote values with spaces"
+              />
+              <Button type="submit" size="sm" variant="secondary" disabled={jqlInput.trim() === filters.jql}>
+                Apply query
               </Button>
-            )}
-          </form>
-          {jqlError && <p className="w-full text-xs text-destructive">{Array.isArray(jqlError) ? jqlError.join(' ') : jqlError}</p>}
+              {filters.jql && (
+                <Button type="button" size="sm" variant="ghost" onClick={() => { setJqlInput(''); patch({ jql: '' }); }}>
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </form>
+            {jqlError && <p className="w-full text-xs text-destructive">{Array.isArray(jqlError) ? jqlError.join(' ') : jqlError}</p>}
+          </>
+          )}
         </CardContent>
       </Card>
 
@@ -615,74 +626,6 @@ export function IssuesListPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// Numbered pager with first/last + current window and ellipses.
-function pageRange(page: number, total: number): (number | '…')[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const out: (number | '…')[] = [1];
-  const start = Math.max(2, page - 1);
-  const end = Math.min(total - 1, page + 1);
-  if (start > 2) out.push('…');
-  for (let p = start; p <= end; p += 1) out.push(p);
-  if (end < total - 1) out.push('…');
-  out.push(total);
-  return out;
-}
-
-function Pager({
-  page, totalPages, total, pageSize, onPage, compact,
-}: {
-  page: number;
-  totalPages: number;
-  /** Row count across all pages — "Page 2 of 3" alone never says how many. */
-  total: number;
-  pageSize: number;
-  onPage: (p: number) => void;
-  compact?: boolean;
-}) {
-  if (totalPages <= 1) return null;
-  const first = (page - 1) * pageSize + 1;
-  const last = Math.min(page * pageSize, total);
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {compact ? (
-          <>{first}–{last} of {total.toLocaleString()}</>
-        ) : (
-          <>
-            Showing <span className="font-medium text-foreground">{first}–{last}</span>
-            {' of '}<span className="font-medium text-foreground">{total.toLocaleString()}</span>
-            {' issues · page '}{page} of {totalPages}
-          </>
-        )}
-      </span>
-      <div className="flex items-center gap-1">
-        <Button variant="outline" size="icon-sm" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        {!compact && pageRange(page, totalPages).map((p, i) =>
-          p === '…' ? (
-            <span key={`e${i}`} className="px-1 text-xs text-muted-foreground">…</span>
-          ) : (
-            <Button
-              key={p}
-              variant={p === page ? 'default' : 'ghost'}
-              size="icon-sm"
-              className="min-w-8 tabular-nums"
-              aria-current={p === page ? 'page' : undefined}
-              onClick={() => onPage(p)}
-            >
-              {p}
-            </Button>
-          ),
-        )}
-        <Button variant="outline" size="icon-sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label="Next page">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
     </div>
   );
 }

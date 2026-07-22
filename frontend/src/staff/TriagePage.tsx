@@ -18,6 +18,7 @@ import { relativeTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
@@ -33,7 +34,7 @@ export function TriagePage() {
   const [index, setIndex] = useState(0);
   const [showKeys, setShowKeys] = useState(false);
 
-  const { data: queue, isLoading } = useQuery({
+  const { data: queue, isLoading, isError } = useQuery({
     queryKey: ['staff', 'triage', 'queue'],
     queryFn: async () =>
       (await staffApi.get<Paginated<StaffIssueSummary>>(
@@ -113,6 +114,16 @@ export function TriagePage() {
   useHotkeys(hotkeys);
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
+
+  // Before this, a failed fetch fell through to the empty state below and told
+  // the operator "Inbox zero" — reporting an outage as an empty queue.
+  if (isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Could not load the triage queue. Retry in a moment.</AlertDescription>
+      </Alert>
+    );
+  }
 
   if (items.length === 0) {
     return (

@@ -12,7 +12,11 @@ test.describe('staff workspace', () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 
-  test('JQL: a valid query filters, an invalid one surfaces the parse error', async ({ page }) => {
+  // The JQL bar is hidden behind `false &&` in IssuesListPage — the dropdown
+  // filters cover the real use and the raw query box read as clutter. The
+  // backend grammar and the `jql` filter are still wired, so this un-skips
+  // together with that flag. Backend coverage lives in src/issues/jql.spec.ts.
+  test.skip('JQL: a valid query filters, an invalid one surfaces the parse error', async ({ page }) => {
     await page.goto('/staff/issues');
     const jql = page.getByLabel('Filter query');
 
