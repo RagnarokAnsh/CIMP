@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ActivitySquare, Paperclip, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { TEXT_TONE } from '@/lib/issue-meta';
 import { toast } from 'sonner';
 import { reporterApi } from '@/api/client';
 import { getHandoffToken } from '@/api/handoff';
@@ -107,7 +109,7 @@ function SimilarIssuesPanel({ description }: { description: string }) {
                 </span>
               </span>
               {subscribedTokens.has(m.subscribeToken) ? (
-                <span className="shrink-0 text-emerald-600 dark:text-emerald-400">✓ You&apos;ll be notified</span>
+                <span className={cn('shrink-0', TEXT_TONE.success)}>✓ You&apos;ll be notified</span>
               ) : (
                 <Button
                   type="button"

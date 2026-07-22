@@ -17,7 +17,7 @@ Shared UI, hooks, and the API clients used by both the [[Frontend - Staff Worksp
 | `SecretOnce.tsx` | `SecretOnce` (inline banner) + `SecretOnceDialog` (must-acknowledge modal) for values shown exactly once — API tokens, webhook secrets, rotated hand-off keys. |
 | `AttachmentGallery.tsx` | Grid of attachments with scan-gated download. |
 | `AttachmentPreview.tsx` | Inline preview; **PDFs render in a `sandbox=""` iframe** (opaque origin, no scripts — audit M5). |
-| `StatusBadge.tsx` / `SlaBadge.tsx` | Status/priority + SLA state badges. **`SlaBadge` renders nothing for on-track/terminal issues** — an empty SLA column means everything is on track, not a bug. |
+| `StatusBadge.tsx` / `SlaBadge.tsx` | Status/priority + SLA state badges, both built on `lib/issue-meta.ts`. **`SlaBadge` renders nothing for on-track/terminal issues** — an empty SLA column means everything is on track, not a bug. |
 | `AnimatedNumber.tsx`, `Reveal.tsx`, `GlobalLoadingBar.tsx`, `ThemeToggle.tsx`, `theme-provider.tsx` | Motion/UX + theming. |
 
 ## `lib/`
@@ -25,7 +25,7 @@ Shared UI, hooks, and the API clients used by both the [[Frontend - Staff Worksp
 |---|---|
 | `realtime.ts` | **`useStaffRealtime`** — fetches a short-lived SSE **ticket** (bearer header), opens `EventSource`, invalidates TanStack caches on events; re-fetches a ticket on reconnect. → [[Auth and Authorization]] |
 | `issue-status.ts` | `STATUS_TRANSITIONS`, `canTransition`, `BOARD_STATUS_ORDER` (mirrors server status machine). |
-| `issue-meta.ts` | Status/priority labels + colors. |
+| `issue-meta.ts` | Status/priority labels + colours, **and `BADGE_TONE` / `TEXT_TONE` — the single source for success/info/warning/danger styling.** Reach for these instead of hand-rolling `bg-emerald-500/10 text-emerald-400`-style classes: every ad-hoc recipe that existed was written in dark mode and measured 1.7–3.5 against a 4.5 AA requirement in light. `tests/e2e/design-tokens.spec.ts` pins all 17 recipes in both themes. The raw Tailwind palette (rather than the `--success`/`--warning` tokens) is deliberate here — 6 statuses × 4 priorities need more distinct hues than the semantic tokens provide. |
 | `format.ts`, `download.ts`, `motion.ts`, `utils.ts` | Formatting, file download, command-palette open, `cn`. |
 
 ## `api/`

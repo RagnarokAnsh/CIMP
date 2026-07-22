@@ -139,7 +139,7 @@ export function ReporterIssueDetailPage() {
         <CardHeader className="gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="font-mono">{data.referenceNo}</span>
-            <span className="text-muted-foreground/40">·</span>
+            <span aria-hidden className="text-muted-foreground/70">·</span>
             <span>Raised {relativeTime(data.createdAt)}</span>
           </div>
           <CardTitle className="leading-snug text-balance">

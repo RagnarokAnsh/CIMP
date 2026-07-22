@@ -5,6 +5,33 @@ import type { IssueStatus, Priority, Role } from '@/api/types';
 // dark) plus a scan-friendly dot/icon, so status and priority never rely on
 // color alone. Soft fill + saturated text is reliable across themes.
 
+/**
+ * Shared semantic badge tones.
+ *
+ * These exist because the same meanings were being re-invented per component —
+ * `bg-emerald-500/10 text-emerald-400` here, `text-emerald-500` there — each
+ * picked while working in dark mode and none re-checked in light, where they
+ * measured 1.7–3.5 against a 4.5 requirement. The recipe below is the same
+ * soft-fill + saturated-text shape as STATUS_META, which does pass both themes.
+ *
+ * Use these for any success/info/warning/danger badge. The design tokens
+ * (--success, --warning, --info) stay reserved for solid-fill surfaces; badges
+ * need the tinted pair.
+ */
+export const BADGE_TONE = {
+  success: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/20',
+  info: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/20',
+  warning: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/20',
+  danger: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/20',
+} as const;
+
+/** Standalone coloured text (no fill) — inline notes and confirmations. */
+export const TEXT_TONE = {
+  success: 'text-emerald-700 dark:text-emerald-400',
+  warning: 'text-amber-700 dark:text-amber-400',
+  danger: 'text-red-700 dark:text-red-400',
+} as const;
+
 export const STATUS_META: Record<
   IssueStatus,
   { label: string; className: string; dot: string }
@@ -32,7 +59,9 @@ export const STATUS_META: Record<
   CLOSED: {
     label: 'Closed',
     dot: 'bg-zinc-400',
-    className: 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-zinc-400/12 dark:text-zinc-400 dark:border-zinc-400/15',
+    // zinc-600, not zinc-500: the lighter shade measured 4.39 against a 4.5
+    // requirement in light mode — the only status badge that missed.
+    className: 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-400/12 dark:text-zinc-400 dark:border-zinc-400/15',
   },
   REOPENED: {
     label: 'Reopened',

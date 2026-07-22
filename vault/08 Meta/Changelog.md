@@ -9,6 +9,31 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-22 — UI review pass 3: semantic colour centralisation + AA contrast audit
+
+Systematic sweep rather than fixing reported symptoms. Built a scripted audit that measures **rendered** WCAG contrast (resolving each element's effective background by compositing translucent ancestors) across every staff route in **both themes**, plus checks for heading order, unnamed controls, target sizes and unstyled native controls.
+
+**The finding.** `index.css` defines `--success`/`--warning`/`--info` tokens that almost nothing consumed; instead 23 call sites hand-rolled the same meanings, and they disagreed with each other (`text-emerald-500` here, `text-emerald-400` there, `text-emerald-600` elsewhere — for one concept). Because that work happened in dark mode, **every ad-hoc recipe failed AA in light mode and passed in dark**:
+
+| Recipe | Light | Need | Used by |
+|---|---|---|---|
+| `bg-emerald-500/10 text-emerald-400` | 1.69 | 4.5 | reporter-visible comment badge |
+| `text-muted-foreground/40` | 1.75 | 4.5 | breadcrumb separators (×5) |
+| `bg-emerald-500/10 text-emerald-500` | 2.15 | 4.5 | CSAT badge, triage diagnostics |
+| `bg-blue-500/10 text-blue-400` | 2.25 | 4.5 | Published + Reporter badges |
+| `text-amber-600` | 3.07 | 4.5 | admin email-change warning |
+| `text-emerald-600` | 3.50 | 4.5 | reporter subscribe confirmation |
+| `STATUS_META.CLOSED` (`text-zinc-500`) | 4.39 | 4.5 | every Closed badge |
+
+- **Fix:** `BADGE_TONE` (success/info/warning/danger) and `TEXT_TONE` in `lib/issue-meta.ts`, using the same soft-fill + saturated-text recipe as `STATUS_META` — which already passed both themes. All 7 call sites converted; `SlaBadge` now shares the tones instead of hand-copying `PRIORITY_META.CRITICAL`'s exact classes (two sources that could drift). `STATUS_META.CLOSED` moved to `text-zinc-600`.
+- **Separators** (`/`, `·`) went to `/70` and are now `aria-hidden` — they are decoration between already-labelled text, so the contrast rule does not apply, but 1.75 was too faint to see either way.
+- **Regression guard shipped:** `frontend/tests/e2e/design-tokens.spec.ts` asserts all 17 badge recipes clear 4.5:1 in both themes (~1.4s each). The next hand-rolled recipe fails there instead of shipping. It deliberately does **not** log in — `POST /api/auth/login` is throttled to 10/min and the suite already nearly exhausts that; two extra logins made an unrelated test fail.
+- **Also:** three icon-only triage controls had only a `title`, which is not reliably announced — given real `aria-label`s.
+
+**Probe caveats worth knowing** (each produced wrong answers before being fixed): a regex over `rgb()` silently skips every token colour, because Chrome keeps `oklch()` verbatim in computed styles — resolve colours by painting to a canvas instead. `getImageData` returns *straight* alpha, so dividing by alpha corrupts translucent colours (legible text measured 1.2). And gradient (`background-image`) backgrounds cannot be reduced to one colour — skip them rather than emit false hits.
+
+**Swept clean:** no unnamed interactive elements, no heading-order skips, no unstyled native controls outside popovers/dialogs, and no remaining page-level contrast failures in either theme.
+
 ## 2026-07-22 — UI review pass 2: split-view layout, container queries, target sizes
 
 Second pass, driven by reported breakage. Two items were **regressions from pass 1**.

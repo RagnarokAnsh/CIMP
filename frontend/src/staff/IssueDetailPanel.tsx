@@ -13,7 +13,7 @@ import type {
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
-import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
+import { STATUS_META, PRIORITY_META, BADGE_TONE } from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
 import { canWriteOn } from '@/lib/permissions';
 import { firstLine } from '@/lib/format';
@@ -236,7 +236,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
       <div className="space-y-3">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className="truncate">{data.platform?.name ?? 'Unknown platform'}</span>
-          <span className="text-muted-foreground/40">/</span>
+          <span aria-hidden className="text-muted-foreground/70">/</span>
           <span className="font-mono">{data.referenceNo}</span>
         </div>
         {data.duplicateOf && (
@@ -262,16 +262,14 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
             <Badge
               variant="outline"
               title={data.csat.comment ?? undefined}
-              className={data.csat.score === 1
-                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-500'
-                : 'border-destructive/20 bg-destructive/10 text-destructive'}
+              className={data.csat.score === 1 ? BADGE_TONE.success : BADGE_TONE.danger}
             >
               {data.csat.score === 1 ? <ThumbsUp className="mr-1 h-3 w-3" /> : <ThumbsDown className="mr-1 h-3 w-3" />}
               CSAT
             </Badge>
           )}
           {data.publiclyVisible && (
-            <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-400">
+            <Badge variant="outline" className={BADGE_TONE.info}>
               <Megaphone className="mr-1 h-3 w-3" /> Published
             </Badge>
           )}
@@ -358,12 +356,12 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                           {c.author?.name ?? (c.authorType === 'REPORTER' ? 'Reporter' : 'System')}
                         </span>
                         {c.authorType === 'REPORTER' && (
-                          <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-400">
+                          <Badge variant="outline" className={BADGE_TONE.info}>
                             Reporter
                           </Badge>
                         )}
                         {c.visibility === 'REPORTER_VISIBLE' ? (
-                          <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                          <Badge variant="outline" className={BADGE_TONE.success}>
                             <Users className="mr-1 h-3 w-3" /> Reporter-visible
                           </Badge>
                         ) : (

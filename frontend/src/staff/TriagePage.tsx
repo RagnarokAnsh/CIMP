@@ -10,7 +10,7 @@ import type {
   AssigneeOption, IssueStatus, Paginated, Priority, StaffIssueDetail, StaffIssueSummary, StaffMe,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
-import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
+import { STATUS_META, PRIORITY_META, BADGE_TONE } from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
 import { canWriteOn } from '@/lib/permissions';
 import { useHotkeys } from '@/lib/use-hotkeys';
@@ -136,13 +136,26 @@ export function TriagePage() {
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" title="Shortcuts (?)" onClick={() => setShowKeys((s) => !s)}>
+          {/* aria-label as well as title: `title` alone is not reliably
+              announced, so these icon-only controls were unnamed to a screen
+              reader. */}
+          <Button
+            variant="ghost" size="icon-sm" title="Shortcuts (?)"
+            aria-label="Show keyboard shortcuts" aria-expanded={showKeys}
+            onClick={() => setShowKeys((s) => !s)}
+          >
             <Keyboard className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon-sm" disabled={index === 0} onClick={() => setIndex((i) => i - 1)} title="Previous (k)">
+          <Button
+            variant="ghost" size="icon-sm" title="Previous (k)" aria-label="Previous issue"
+            disabled={index === 0} onClick={() => setIndex((i) => i - 1)}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon-sm" disabled={index >= items.length - 1} onClick={() => setIndex((i) => i + 1)} title="Next (j)">
+          <Button
+            variant="ghost" size="icon-sm" title="Next (j)" aria-label="Next issue"
+            disabled={index >= items.length - 1} onClick={() => setIndex((i) => i + 1)}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -161,13 +174,13 @@ export function TriagePage() {
           <CardHeader className="gap-2">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span>{current.platform?.name}</span>
-              <span className="text-muted-foreground/40">/</span>
+              <span aria-hidden className="text-muted-foreground/70">/</span>
               <Link to={`/staff/issues/${current.id}`} className="font-mono text-primary hover:underline">
                 {current.referenceNo}
               </Link>
-              <span className="text-muted-foreground/40">·</span>
+              <span aria-hidden className="text-muted-foreground/70">·</span>
               <span>{relativeTime(current.createdAt)}</span>
-              <span className="text-muted-foreground/40">·</span>
+              <span aria-hidden className="text-muted-foreground/70">·</span>
               <span>{current.reporter?.name}</span>
             </div>
             <CardTitle className="leading-snug text-balance">{current.descriptionPreview}</CardTitle>
@@ -175,7 +188,7 @@ export function TriagePage() {
               <StatusBadge status={detail?.status ?? current.status} />
               <PriorityBadge priority={detail?.priority ?? current.priority} />
               {detail?.context ? (
-                <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-500">
+                <Badge variant="outline" className={BADGE_TONE.success}>
                   <ActivitySquare className="mr-1 h-3 w-3" /> Diagnostics
                 </Badge>
               ) : null}

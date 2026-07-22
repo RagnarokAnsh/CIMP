@@ -1,6 +1,7 @@
 import { AlertTriangle, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { BADGE_TONE } from '@/lib/issue-meta';
 import type { SlaState } from '@/api/types';
 
 // Surfaces SLA state for live issues. Only at-risk and breached render — on-track
@@ -18,32 +19,18 @@ export function SlaBadge({
   const due = dueAt ? new Date(dueAt) : null;
   const title = due ? `Due ${due.toLocaleString()}` : undefined;
 
+  // Shared tones rather than a hand-copied recipe: this badge previously
+  // duplicated PRIORITY_META.CRITICAL's exact classes, so the two could drift.
   if (slaState === 'breached') {
     return (
-      <Badge
-        variant="outline"
-        title={title}
-        className={cn(
-          'gap-1 font-medium',
-          'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/20',
-          className,
-        )}
-      >
+      <Badge variant="outline" title={title} className={cn('gap-1 font-medium', BADGE_TONE.danger, className)}>
         <AlertTriangle className="size-3" aria-hidden /> Overdue
       </Badge>
     );
   }
 
   return (
-    <Badge
-      variant="outline"
-      title={title}
-      className={cn(
-        'gap-1 font-medium',
-        'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/20',
-        className,
-      )}
-    >
+    <Badge variant="outline" title={title} className={cn('gap-1 font-medium', BADGE_TONE.warning, className)}>
       <Clock className="size-3" aria-hidden /> Due soon
     </Badge>
   );

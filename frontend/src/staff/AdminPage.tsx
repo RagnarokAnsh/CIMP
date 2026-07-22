@@ -36,7 +36,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SecretOnceDialog } from '@/components/SecretOnce';
 import { initials } from '@/lib/format';
 import { toastApiError } from '@/lib/toast-error';
-import { roleLabel } from '@/lib/issue-meta';
+import { cn } from '@/lib/utils';
+import { roleLabel, TEXT_TONE } from '@/lib/issue-meta';
 import { IntegrationsTab, WebhooksTab } from './AdminIntegrations';
 
 export function AdminPage() {
@@ -875,7 +876,7 @@ function EditStaffDialog({
               onChange={(e) => setEmail(e.target.value)}
             />
             {emailChanged && (
-              <p className="text-xs text-amber-600 dark:text-amber-500">
+              <p className={cn('text-xs', TEXT_TONE.warning)}>
                 Changing the email re-keys their login and signs them out of all sessions.
               </p>
             )}
