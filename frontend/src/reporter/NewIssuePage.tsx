@@ -87,20 +87,33 @@ function SimilarIssuesPanel({ description }: { description: string }) {
         </button>
       </AlertTitle>
       <AlertDescription>
+        {/* Each row must be identifiable on its own — otherwise you are asking
+            someone to subscribe to an unnamed thing. Published issues carry a
+            staff-written title; the rest stay deliberately anonymous, so rank
+            them ("Closest match") instead of repeating one identical line. */}
         <ul className="mt-2 space-y-2">
-          {matches.map((m) => (
-            <li key={m.subscribeToken} className="flex flex-wrap items-center gap-2 text-sm">
+          {matches.map((m, i) => (
+            <li
+              key={m.subscribeToken}
+              className="flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md border border-border/60 bg-background/40 px-2.5 py-2 text-sm"
+            >
               <StatusBadge status={m.status} />
-              <span className="text-muted-foreground">
-                first reported {relativeTime(m.firstReportedAt)} · {m.reportCount} report{m.reportCount === 1 ? '' : 's'}
+              <span className="min-w-0 flex-1 basis-40">
+                <span className="block truncate font-medium text-foreground">
+                  {m.title ?? (i === 0 ? 'Closest match' : `Similar report #${i + 1}`)}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  first reported {relativeTime(m.firstReportedAt)} · {m.reportCount} report{m.reportCount === 1 ? '' : 's'}
+                </span>
               </span>
               {subscribedTokens.has(m.subscribeToken) ? (
-                <span className="text-emerald-600 dark:text-emerald-400">✓ You'll be notified</span>
+                <span className="shrink-0 text-emerald-600 dark:text-emerald-400">✓ You&apos;ll be notified</span>
               ) : (
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
+                  className="shrink-0"
                   disabled={subscribe.isPending}
                   onClick={() => subscribe.mutate(m.subscribeToken)}
                 >

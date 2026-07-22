@@ -35,6 +35,12 @@ export interface ReporterIssueDetail {
 }
 
 export interface SimilarIssue {
+  /**
+   * Staff-curated public title, present only for an explicitly published
+   * known issue. Null keeps an unpublished issue anonymous — the similar-issue
+   * search never discloses another reporter's own words.
+   */
+  title: string | null;
   status: IssueStatus;
   firstReportedAt: string;
   reportCount: number;

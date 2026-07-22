@@ -90,6 +90,13 @@ export class DeflectionService {
     const dupCount = new Map(counts.map((c) => [c.canonicalId, Number(c.count)]));
 
     return rows.map((issue) => ({
+      // Staff-curated public title, and ONLY for an explicitly published issue —
+      // exactly the field the unauthenticated known-issues feed already returns,
+      // so this adds no disclosure. Unpublished issues stay anonymous (null),
+      // preserving the invariant above. Without this every suggestion rendered
+      // as an identical "New · 16m ago · 1 report", asking the reporter to
+      // subscribe to something they could not identify.
+      title: issue.publiclyVisible ? issue.publicTitle : null,
       status: issue.status,
       firstReportedAt: issue.createdAt,
       reportCount: 1 + (dupCount.get(issue.id) ?? 0),

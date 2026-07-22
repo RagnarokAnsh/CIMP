@@ -15,6 +15,7 @@ import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { canWriteAnywhere } from '@/lib/permissions';
 import { SlaBadge } from '@/components/SlaBadge';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { IssueDetailPanel } from './IssueDetailPanel';
 import { relativeTime, initials } from '@/lib/format';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -324,23 +325,12 @@ export function IssuesListPage() {
             </Select>
           )}
 
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="date"
-              value={filters.from}
-              onChange={(e) => patch({ from: e.target.value })}
-              className="w-[8.5rem]"
-              aria-label="Created from"
-            />
-            <span className="text-xs text-muted-foreground">→</span>
-            <Input
-              type="date"
-              value={filters.to}
-              onChange={(e) => patch({ to: e.target.value })}
-              className="w-[8.5rem]"
-              aria-label="Created to"
-            />
-          </div>
+          <DateRangeFilter
+            from={filters.from}
+            to={filters.to}
+            onChange={(range) => patch(range)}
+            className="w-[13rem]"
+          />
 
           <Button
             variant={filters.assignedToMe ? 'default' : 'outline'}

@@ -55,10 +55,48 @@ describe('DeflectionService', () => {
       ]);
       issueQb.getRawMany.mockResolvedValue([{ canonicalId: 'i1', count: '3' }]);
       const [hit] = await service.findSimilar(ctx, 'payment page crashes on submit');
-      expect(Object.keys(hit).sort()).toEqual(['firstReportedAt', 'reportCount', 'status', 'subscribeToken']);
+      expect(Object.keys(hit).sort()).toEqual([
+        'firstReportedAt', 'reportCount', 'status', 'subscribeToken', 'title',
+      ]);
       expect(hit.reportCount).toBe(4); // 1 + 3 duplicates
       const claims = jwt.verify(hit.subscribeToken, SECRET) as any;
       expect(claims).toMatchObject({ purpose: 'subscribe', issueId: 'i1', platformId: 'pA' });
+    });
+
+    // The title is what makes a suggestion identifiable, but it may only ever be
+    // the staff-curated public one — never the reporter's own description.
+    it('exposes publicTitle only for an explicitly published issue', async () => {
+      issueQb.getMany.mockResolvedValue([
+        {
+          id: 'i1',
+          status: IssueStatus.IN_PROGRESS,
+          createdAt: new Date('2026-07-01'),
+          description: 'my card was declined at 14:02, order #55123',
+          publiclyVisible: true,
+          publicTitle: 'Card payments failing for some banks',
+        },
+      ]);
+      const [hit] = await service.findSimilar(ctx, 'payment page crashes on submit');
+      expect(hit.title).toBe('Card payments failing for some banks');
+      expect(JSON.stringify(hit)).not.toContain('order #55123');
+    });
+
+    it('keeps an unpublished issue anonymous even when it has a stale title', async () => {
+      issueQb.getMany.mockResolvedValue([
+        {
+          id: 'i1',
+          status: IssueStatus.NEW,
+          createdAt: new Date('2026-07-01'),
+          description: 'private reporter wording',
+          publiclyVisible: false,
+          // Left over from a previous publish/unpublish cycle — must not leak.
+          publicTitle: 'Previously published title',
+        },
+      ]);
+      const [hit] = await service.findSimilar(ctx, 'payment page crashes on submit');
+      expect(hit.title).toBeNull();
+      expect(JSON.stringify(hit)).not.toContain('Previously published');
+      expect(JSON.stringify(hit)).not.toContain('private reporter wording');
     });
   });
 

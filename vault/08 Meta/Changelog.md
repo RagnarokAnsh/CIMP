@@ -23,7 +23,11 @@ Reviewed every surface **as rendered** — Playwright captures at 1440px and 390
 
 **Checked and deliberately left alone:** the empty SLA column on the issues list is correct — `SlaBadge` renders only `at_risk`/`breached`, and all 22 open issues are on track. The board's WIP badge turning red *at* the limit (not just over) is documented intent in `BoardPage.tsx`.
 
-**Known, not yet addressed:** board card titles truncate to near-uselessness at 6 columns (~180px each); the reporter deflection panel shows no issue titles, so its rows are mutually indistinguishable (`SimilarIssue` omits description by design — published known-issues have a public title that could be surfaced); the issues-list date filters are raw native pickers.
+**Follow-up (same day) — the three items left open above are now done:**
+
+- **Board card titles.** Six equal columns left ~160px of text, so two clamped lines held ~40 characters ("API rate-limit headers (X-…"). The board is now one horizontally-scrolling track (`BOARD_TRACK`) with a 17rem column floor that only stretches once all six fit — the standard Kanban trade of overview for readability. Titles clamp at 3 lines with a `title` tooltip. Four columns are visible at 1440px; the rest scroll.
+- **Deflection titles.** `findSimilar` now returns `title`, set to `publicTitle` **only when `publiclyVisible`** — the same staff-curated field the unauthenticated known-issues feed already exposes, so it adds no disclosure and the privacy invariant ("never another reporter's own words") holds. Unpublished issues stay `null`. The panel renders titled matches by name and ranks the anonymous ones ("Closest match", "Similar report #2") instead of repeating one identical `New · 16m ago · 1 report` line three times — previously you were asked to subscribe to something you could not identify. +2 specs pinning that an unpublished issue leaks neither its description nor a stale `publicTitle` left over from an earlier publish/unpublish cycle.
+- **Date filters.** Two bare `<input type="date">` controls (browser-native widget, raw `dd-mm-yyyy` mask that read as an error state) replaced by `DateRangeFilter` — a Popover with Last 7/30/90 days + This month presets over exact From/To fields, and a trigger that summarises the active range. Added a `popover.tsx` primitive from the already-installed unified `radix-ui` package; **no new dependency**.
 
 ## 2026-07-22 — Admin CRUD completion: platform/staff lifecycle, lockout guards, destructive-action UX
 

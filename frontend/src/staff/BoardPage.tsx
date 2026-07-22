@@ -49,6 +49,12 @@ const WIP_LIMITS: Partial<Record<IssueStatus, number>> = {
   ON_HOLD: 4,
 };
 
+// One horizontally-scrolling track. Columns keep a readable floor (issue titles
+// need it) and only stretch once there is room for all six — so a wide monitor
+// fills the width, and anything narrower scrolls instead of crushing the text.
+// `pb-2` leaves room for the scrollbar so it never overlaps the last card.
+const BOARD_TRACK = 'flex gap-3 overflow-x-auto pb-2 [&>*]:w-[17rem] [&>*]:shrink-0 xl:[&>*]:w-auto xl:[&>*]:min-w-[17rem] xl:[&>*]:flex-1';
+
 export function BoardPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -270,7 +276,11 @@ export function BoardPage() {
         onDragCancel={() => setActiveId(null)}
       >
         {lanes === null ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:h-[calc(100vh-13rem)] xl:grid-cols-6">
+        // Six equal columns squeezed the title to ~160px of text — two clamped
+        // lines held about 40 characters, so "API rate-limit headers (X-…" told
+        // you nothing. Columns now hold a readable floor and the track scrolls,
+        // which is how every Kanban handles more columns than fit.
+        <div className={cn(BOARD_TRACK, 'xl:h-[calc(100vh-13rem)]')}>
           {BOARD_STATUS_ORDER.map((status) => (
             <Column
               key={status}
@@ -295,7 +305,7 @@ export function BoardPage() {
                 <h2 className="text-sm font-semibold">{lane.label}</h2>
                 <Badge variant="secondary" className="tabular-nums">{lane.count}</Badge>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              <div className={BOARD_TRACK}>
                 {BOARD_STATUS_ORDER.map((status) => (
                   <Column
                     key={status}
@@ -497,7 +507,10 @@ function IssueCard({
       )}
     >
       <div className="flex items-start gap-2">
-        <p className="line-clamp-2 flex-1 text-sm font-medium leading-snug">
+        <p
+          className="line-clamp-3 min-w-0 flex-1 text-sm font-medium leading-snug"
+          title={issue.descriptionPreview || issue.referenceNo}
+        >
           {issue.descriptionPreview || issue.referenceNo}
         </p>
         {actions}
