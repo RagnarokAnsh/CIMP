@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronsLeft, Inbox, LayoutDashboard, LifeBuoy, ListChecks, LogOut,
@@ -44,6 +44,13 @@ export function StaffLayout({
 
   // Live updates over SSE — keeps the board, lists, detail and bell fresh.
   useStaffRealtime();
+
+  // Reading surfaces are capped at max-w-screen-2xl so lines stay a comfortable
+  // measure. The board is not a reading surface: it needs 1692px for six
+  // 17rem columns, and the 1536px cap bound before the sidebar or the viewport
+  // ever did — so it overflowed by exactly 220px on a 1920 *and* a 2560 screen,
+  // collapsed or not. Full-bleed lets the width people actually have do its job.
+  const fullBleed = useLocation().pathname.startsWith('/staff/board');
 
   const isAdmin = me?.roles.some((r) => r.role === 'ADMIN') ?? false;
   const [collapsed, setCollapsed] = useState(
@@ -133,7 +140,9 @@ export function StaffLayout({
         </header>
 
         <main className="flex-1 overflow-auto">
-          <div className="mx-auto w-full max-w-screen-2xl p-4 sm:p-6 lg:p-8">{children}</div>
+          <div className={cn('mx-auto w-full p-4 sm:p-6 lg:p-8', !fullBleed && 'max-w-screen-2xl')}>
+            {children}
+          </div>
         </main>
       </div>
 

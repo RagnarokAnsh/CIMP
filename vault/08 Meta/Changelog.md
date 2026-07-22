@@ -9,6 +9,13 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-22 — Board goes full-bleed: the width cap, not the sidebar, was the constraint
+
+Reported as "collapsing the sidebar should remove the board's horizontal scroll on a big screen". It didn't — and measurement showed why: **`<main>`'s `max-w-screen-2xl` (1536px) bound before the sidebar or the viewport ever did.** Six 17rem columns plus gaps need 1692px; the capped container leaves 1472px. Overflow was **exactly 220px in all four cases** — 1920 and 2560, expanded and collapsed. A 2560px monitor gained nothing, and the board could never show all six columns at any width.
+
+- `StaffLayout` now drops the cap on `/staff/board` only. The cap exists so reading surfaces keep a comfortable line measure; a Kanban board is not a reading surface. Verified the other routes still report a 1536px container at 2560px.
+- Result: **1920 collapsed → 0 overflow** (expanded still 76px short, so collapsing is exactly the lever it should be); **2560 → 0 overflow either way**, with columns flexing to fill.
+
 ## 2026-07-22 — UI review pass 5: dialog overflow, issue-detail sidebar density
 
 - **The merge-as-duplicate dialog painted outside its own box.** The result rows put `truncate` on a flex child without `min-w-0`, so the item kept its full text width (`min-width: auto`) and pushed the list — and the search field above it — past the dialog's `max-w-lg` and onto the page. `max-w-lg` caps the box, not its contents. Fixed at the call site, and `DialogContent` now carries `[&>*]:min-w-0` so no future child can do the same. Verified: 0px overflow, down from ~230px. **Third instance of this exact bug this session** (dashboard chart, split view, now here) — `min-width: auto` on flex/grid children is the recurring trap in this codebase.
