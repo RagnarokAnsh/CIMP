@@ -11,10 +11,12 @@ Shared UI, hooks, and the API clients used by both the [[Frontend - Staff Worksp
 ## `components/`
 | File | Responsibility |
 |---|---|
-| `ui/` (shadcn) | Owned-source primitives: button, card, dialog, select, table, tabs, badge, sheet, dropdown-menu, command, input, textarea, tooltip, skeleton, empty, sonner, chart, etc. Edit freely. |
+| `ui/` (shadcn) | Owned-source primitives: button, card, dialog, **alert-dialog**, select, table, tabs, badge, sheet, dropdown-menu, command, input, textarea, tooltip, skeleton, empty, sonner, chart, etc. Edit freely. Local divergences worth knowing: **`table.tsx`** wraps the scroller in `useScrollEdges` and paints edge shadows only when there is more to reveal (plus a focusable `region` for keyboard scrolling); **`tabs.tsx`** TabsList is `max-w-full overflow-x-auto` so a 4-tab strip can't clip its last tab on a phone; **`input.tsx`** styles the `file:` picker button to match the secondary Button. |
+| `ConfirmDialog.tsx` | The confirmation gate for **every** destructive action. Uncontrolled (pass `trigger`) or controlled (`open`/`onOpenChange`) — use controlled when the action lives in a dropdown menu, or closing the menu unmounts the dialog mid-flight and an open menu leaves the page `aria-hidden`. `confirmPhrase` requires typing an exact string for irreversible actions. |
+| `SecretOnce.tsx` | `SecretOnce` (inline banner) + `SecretOnceDialog` (must-acknowledge modal) for values shown exactly once — API tokens, webhook secrets, rotated hand-off keys. |
 | `AttachmentGallery.tsx` | Grid of attachments with scan-gated download. |
 | `AttachmentPreview.tsx` | Inline preview; **PDFs render in a `sandbox=""` iframe** (opaque origin, no scripts — audit M5). |
-| `StatusBadge.tsx` / `SlaBadge.tsx` | Status/priority + SLA state badges. |
+| `StatusBadge.tsx` / `SlaBadge.tsx` | Status/priority + SLA state badges. **`SlaBadge` renders nothing for on-track/terminal issues** — an empty SLA column means everything is on track, not a bug. |
 | `AnimatedNumber.tsx`, `Reveal.tsx`, `GlobalLoadingBar.tsx`, `ThemeToggle.tsx`, `theme-provider.tsx` | Motion/UX + theming. |
 
 ## `lib/`

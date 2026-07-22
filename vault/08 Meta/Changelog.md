@@ -9,6 +9,22 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-22 — UI review pass: dashboard accuracy, chart time axis, mobile overflow
+
+Reviewed every surface **as rendered** — Playwright captures at 1440px and 390px, light and dark — rather than reading source. The design system itself (OKLCH tokens, dual themes, tinted elevation, reduced-motion) held up; the defects were in data presentation and responsive layout.
+
+- **Dashboard breakdowns were in raw `GROUP BY` order** — the priority chart read "Critical, Low, Medium, High". A severity chart in arbitrary order actively misleads. Status/priority now use domain order (`STATUS_ORDER`/`PRIORITY_ORDER` in `DashboardPage.tsx`); platform/assignee rank by count.
+- **The trend chart had a non-linear time axis.** The backend only emits days with activity, and `mergeTrend` plotted exactly those — so a 9-day quiet gap rendered the same width as a 1-day step and the slope misrepresented the rate. Now densified across the full 14-day window with UTC date math (so buckets don't shift with the viewer's timezone). The quiet stretch reads as a real drop to zero instead of a fake diagonal.
+- **CSAT was a 5th card in a 4-column grid**, alone on its own line. Moved into the operational-quality row — it's a 30-day measure like the rest.
+- **Mobile: two page-level horizontal overflows.** (1) The trend card is a grid item, which defaults to `min-width:auto`, so recharts refused to shrink — a 477px card in a 390px viewport pushed the whole page sideways; fixed with `min-w-0`. (2) The issues header action cluster overflowed by 16px, clipping Export CSV; it now wraps. Measured before/after with a scripted `scrollWidth` vs `clientWidth` probe on `<main>` — note that `document.documentElement` reports no overflow here, because `<main class="overflow-auto">` is the actual scroller.
+- **Admin tab strip was `w-fit`** and clipped "Webhooks" on a phone with no way to reach it → `max-w-full overflow-x-auto`.
+- **Tables had no scroll affordance.** They were already scrollable (the issues table is ~940px in a ~356px box), but overlay scrollbars stay hidden until you scroll, so nothing indicated Status/Assignee/Actions existed off-screen. `Table` now shows edge shadows only when there is more to reveal (`useScrollEdges`) and exposes a focusable `region` so it is keyboard-scrollable. The cue darkens rather than fades to a colour — tables sit on both `card` and `background`, and fading to either is invisible against the other.
+- **File inputs rendered the raw native "Choose Files / No file chosen"** — the one unstyled control on the reporter form. The picker button now matches the secondary Button, and chosen files are listed with name + size (the native control only ever names the first).
+
+**Checked and deliberately left alone:** the empty SLA column on the issues list is correct — `SlaBadge` renders only `at_risk`/`breached`, and all 22 open issues are on track. The board's WIP badge turning red *at* the limit (not just over) is documented intent in `BoardPage.tsx`.
+
+**Known, not yet addressed:** board card titles truncate to near-uselessness at 6 columns (~180px each); the reporter deflection panel shows no issue titles, so its rows are mutually indistinguishable (`SimilarIssue` omits description by design — published known-issues have a public title that could be surfaced); the issues-list date filters are raw native pickers.
+
 ## 2026-07-22 — Admin CRUD completion: platform/staff lifecycle, lockout guards, destructive-action UX
 
 **The gap.** `StaffUser.status` was enforced everywhere (login refused, live tokens rejected per request, excluded from assignee pickers and notifications) but **nothing in the codebase could ever set it to `DISABLED`** — offboarding was impossible; the best you could do was revoke role grants one at a time while the person kept a valid session. Platforms had no delete and no UI for `status` at all. `POST /admin/staff/:id/password` worked but the frontend never called it. And an admin could revoke their own last `ADMIN` grant in one unconfirmed click — permanent lockout, DB-access-only recovery. Verified live: this deployment had exactly **one** admin.
