@@ -126,20 +126,12 @@ export function DashboardPage() {
           value={<AnimatedNumber value={resolved14} className="tabular-nums" />}
           sub="closed out in the last 14 days"
         />
-        <KpiCard
-          label="CSAT (30d)"
-          icon={<ThumbsUp className="h-5 w-5" />}
-          value={data.csat.positiveRate === null ? '—' : `${data.csat.positiveRate}%`}
-          sub={data.csat.count > 0
-            ? `${data.csat.count} rating${data.csat.count === 1 ? '' : 's'} from reporters`
-            : 'no reporter ratings yet'}
-          progress={data.csat.positiveRate ?? 0}
-          progressClass={data.csat.positiveRate !== null && data.csat.positiveRate < 60 ? 'bg-amber-500' : 'bg-emerald-500'}
-        />
       </Reveal>
 
-      {/* Operational quality (last 30 days). */}
-      <Reveal className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Operational quality (last 30 days). CSAT lives here rather than in the
+          volume row above: it is a 30-day quality measure like the rest, and as
+          a 5th card up there it sat alone on its own line. */}
+      <Reveal className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           label="First response"
           icon={<Clock className="h-5 w-5" />}
@@ -168,11 +160,25 @@ export function DashboardPage() {
             ? `${data.ops.deflectionRate}% of would-be reports subscribed instead`
             : 'duplicate reports avoided (30d)'}
         />
+        <KpiCard
+          label="CSAT (30d)"
+          icon={<ThumbsUp className="h-5 w-5" />}
+          value={data.csat.positiveRate === null ? '—' : `${data.csat.positiveRate}%`}
+          sub={data.csat.count > 0
+            ? `${data.csat.count} rating${data.csat.count === 1 ? '' : 's'} from reporters`
+            : 'no reporter ratings yet'}
+          progress={data.csat.positiveRate ?? 0}
+          progressClass={data.csat.positiveRate !== null && data.csat.positiveRate < 60 ? 'bg-amber-500' : 'bg-emerald-500'}
+        />
       </Reveal>
 
-      {/* Trend + SLA health. */}
+      {/* Trend + SLA health.
+          min-w-0: grid items default to min-width:auto, so the recharts
+          container refused to shrink below its intrinsic width and pushed the
+          whole page into horizontal scroll on a phone (477px card in a 390px
+          viewport). */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className="min-w-0 lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -185,7 +191,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <ShieldCheck className="h-4 w-4 text-muted-foreground" /> SLA health
@@ -312,13 +318,39 @@ function SlaHealth({
   );
 }
 
+// The API returns breakdown rows in whatever order the GROUP BY produced, which
+// rendered priority as "Critical, Low, Medium, High" — a severity chart in
+// arbitrary order actively misleads. Status and priority get their domain order;
+// free-form dimensions (platform, assignee) rank by size.
+const STATUS_ORDER: IssueStatus[] = [
+  'NEW', 'REOPENED', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED',
+];
+const PRIORITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+
+function orderRows(
+  rows: { key: string; count: number }[],
+  kind: BreakdownKind,
+): { key: string; count: number }[] {
+  const domain = kind === 'status' ? (STATUS_ORDER as string[])
+    : kind === 'priority' ? PRIORITY_ORDER
+      : null;
+  if (!domain) return [...rows].sort((a, b) => b.count - a.count);
+  return [...rows].sort((a, b) => {
+    const ai = domain.indexOf(a.key);
+    const bi = domain.indexOf(b.key);
+    // Unknown keys keep a stable place at the end rather than jumping to front.
+    return (ai === -1 ? domain.length : ai) - (bi === -1 ? domain.length : bi);
+  });
+}
+
 function Breakdown({
-  title, rows, kind = 'plain',
+  title, rows: rawRows, kind = 'plain',
 }: {
   title: string;
   rows: { key: string; count: number }[];
   kind?: BreakdownKind;
 }) {
+  const rows = orderRows(rawRows, kind);
   const total = rows.reduce((s, r) => s + r.count, 0);
   const max = Math.max(1, ...rows.map((r) => r.count));
   const labelFor = (key: string) => {

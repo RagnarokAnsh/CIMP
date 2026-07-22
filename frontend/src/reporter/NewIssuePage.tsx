@@ -227,8 +227,27 @@ export function NewIssuePage() {
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Paperclip className="h-3 w-3" />
               Up to 5 files, 10&nbsp;MB each. PNG, JPEG, WEBP, PDF.
-              {fileCount > 0 && <span className="text-foreground">· {fileCount} selected</span>}
             </p>
+            {/* The native control only ever names the first file ("3 files"),
+                so list them — people need to confirm they picked the right ones. */}
+            {fileCount > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {Array.from(files ?? []).map((f) => (
+                  <li
+                    key={`${f.name}-${f.size}`}
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-xs"
+                  >
+                    <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="truncate">{f.name}</span>
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
+                      {f.size < 1024 * 1024
+                        ? `${Math.max(1, Math.round(f.size / 1024))} KB`
+                        : `${(f.size / 1024 / 1024).toFixed(1)} MB`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {fileError && <p className="text-xs text-destructive">{fileError}</p>}
           </div>
 

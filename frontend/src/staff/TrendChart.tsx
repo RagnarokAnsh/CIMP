@@ -10,19 +10,46 @@ const config = {
   resolved: { label: 'Resolved', color: 'var(--chart-3)' },
 } satisfies ChartConfig;
 
-// Merges the backend's two day-bucketed series into one dataset keyed by day,
-// so created vs resolved overlay on the same time axis (14-day window).
+const WINDOW_DAYS = 14;
+
+// `YYYY-MM-DD` arithmetic in UTC so the series never shifts a bucket when the
+// viewer's timezone differs from the server's.
+function addDays(day: string, delta: number): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Merges the backend's two day-bucketed series into one dataset keyed by day.
+//
+// The backend only emits days that had activity. Plotting those directly gave a
+// non-linear time axis — a 9-day gap rendered the same width as a 1-day step,
+// so the slope misrepresented the actual rate. Densify across the whole window
+// instead: every day present, quiet ones as zero.
 function mergeTrend(trend: DashboardSummary['trend']) {
-  const byDay = new Map<string, { day: string; created: number; resolved: number }>();
-  for (const c of trend.created) {
-    byDay.set(c.day, { day: c.day, created: c.count, resolved: 0 });
+  const byDay = new Map<string, { created: number; resolved: number }>();
+  const touch = (day: string) => byDay.get(day) ?? { created: 0, resolved: 0 };
+  for (const c of trend.created) byDay.set(c.day, { ...touch(c.day), created: c.count });
+  for (const r of trend.resolved) byDay.set(r.day, { ...touch(r.day), resolved: r.count });
+
+  const days = [...byDay.keys()].sort();
+  if (days.length === 0) return [];
+
+  // Anchor on today so the window still reads correctly when the last few days
+  // were quiet; extend back if the data reaches further than the nominal window.
+  const end = [days[days.length - 1], todayUtc()].sort().pop()!;
+  const nominalStart = addDays(end, -(WINDOW_DAYS - 1));
+  const start = [days[0], nominalStart].sort()[0];
+
+  const out: { day: string; created: number; resolved: number }[] = [];
+  for (let day = start; day <= end; day = addDays(day, 1)) {
+    out.push({ day, ...touch(day) });
   }
-  for (const r of trend.resolved) {
-    const row = byDay.get(r.day) ?? { day: r.day, created: 0, resolved: 0 };
-    row.resolved = r.count;
-    byDay.set(r.day, row);
-  }
-  return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
+  return out;
 }
 
 export function TrendChart({ trend }: { trend: DashboardSummary['trend'] }) {
