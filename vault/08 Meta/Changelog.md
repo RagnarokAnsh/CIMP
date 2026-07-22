@@ -9,6 +9,13 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-22 — UI review pass 5: dialog overflow, issue-detail sidebar density
+
+- **The merge-as-duplicate dialog painted outside its own box.** The result rows put `truncate` on a flex child without `min-w-0`, so the item kept its full text width (`min-width: auto`) and pushed the list — and the search field above it — past the dialog's `max-w-lg` and onto the page. `max-w-lg` caps the box, not its contents. Fixed at the call site, and `DialogContent` now carries `[&>*]:min-w-0` so no future child can do the same. Verified: 0px overflow, down from ~230px. **Third instance of this exact bug this session** (dashboard chart, split view, now here) — `min-width: auto` on flex/grid children is the recurring trap in this codebase.
+- **The issue-detail sidebar ran ~630px longer than the main column**, leaving a long dead gap beside it. "Known issue" (~250px of explanation for an action taken on a small minority of issues) and "Linked issues" (~185px of controls for a relationship most issues never have) now collapse to a single row unless they have content, using the same `<details>` pattern as Diagnostics. Gap down to ~455px on a comment-less issue, less on a real one. **Not eliminated** — a two-column layout where the sidebar carries more chrome than the main column carries content will always leave some; Labels was deliberately left expanded as a primary triage affordance.
+- **A hand-rolled `<input>`** in the publish form (missing focus ring and dark-mode field background) replaced with the shared `Input`. The earlier native-control sweep missed it — that probe looked for `input[type=date|file|checkbox]` and `select`, not bare text inputs bypassing the component.
+- **Four more `title`-only icon buttons** (remove link, remove label, add link, add label) given real `aria-label`s and 24px targets, matching the triage fix in pass 3.
+
 ## 2026-07-22 — UI review pass 4: date formatting, empty and loading states
 
 Continued the sweep into the classes automation can't judge — shared helpers, empty states, loading states.

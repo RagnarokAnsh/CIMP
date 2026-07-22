@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, GitMerge, Link2, Plus, Tag, X } from 'lucide-react';
+import { ChevronDown, Eye, GitMerge, Link2, Plus, Tag, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
@@ -128,7 +128,13 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
               <span className="h-2 w-2 rounded-full" style={{ background: l.color }} />
               {l.name}
               {!readOnly && (
-                <button type="button" className="ml-0.5 text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
+                <button
+                  type="button"
+                  className="ml-0.5 grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  title="Remove"
+                  aria-label={`Remove label ${l.name}`}
+                  onClick={() => remove.mutate(l.id)}
+                >
                   <X className="h-3 w-3" />
                 </button>
               )}
@@ -154,7 +160,13 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
               placeholder="New label…"
               className="h-8 text-sm"
             />
-            <Button size="sm" variant="secondary" disabled={!newName.trim() || create.isPending} onClick={submitNew}>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label="Add label"
+              disabled={!newName.trim() || create.isPending}
+              onClick={submitNew}
+            >
               {create.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             </Button>
           </div>
@@ -252,8 +264,12 @@ export function MergeIssueButton({
                   )}
                 >
                   <span className="shrink-0 font-mono text-xs">{i.referenceNo}</span>
-                  <span className="truncate text-muted-foreground">{i.descriptionPreview}</span>
-                  <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">{i.status}</Badge>
+                  {/* min-w-0 is what makes `truncate` work here. Without it the
+                      flex item keeps its full text width (min-width:auto), which
+                      pushed the whole result list — and the search box above it —
+                      out past the dialog's max-w-lg box and onto the page. */}
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{i.descriptionPreview}</span>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">{i.status}</Badge>
                 </button>
               ))}
             </div>
@@ -309,19 +325,35 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
     onError,
   });
 
+  const count = (links ?? []).length;
+
   return (
+    // Collapsed when there are no links: expanded it is ~185px of controls for a
+    // relationship most issues never have, and it sat under four other cards in
+    // a sidebar already much taller than the main column.
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" /> Linked issues</CardTitle></CardHeader>
-      <CardContent className="space-y-3">
+      <details open={count > 0} className="group">
+        <summary className="flex cursor-pointer select-none items-center gap-2 px-6 py-4 text-base font-semibold">
+          <Link2 className="h-4 w-4" /> Linked issues
+          {count > 0 && <Badge variant="secondary" className="text-[10px] tabular-nums">{count}</Badge>}
+          <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="space-y-3 px-6 pb-6">
         <div className="space-y-1.5">
-          {(links ?? []).length === 0 && <span className="text-sm text-muted-foreground">No links.</span>}
+          {count === 0 && <span className="text-sm text-muted-foreground">No links.</span>}
           {(links ?? []).map((l) => (
             <div key={l.id} className="flex items-center gap-2 text-sm">
               <span className="w-24 shrink-0 text-xs text-muted-foreground">{LINK_LABEL[l.type][l.direction]}</span>
               <a href={`/staff/issues/${l.issue.id}`} className="font-mono text-primary hover:underline">{l.issue.referenceNo}</a>
               <Badge variant="outline" className="text-[10px]">{l.issue.status}</Badge>
               {!readOnly && (
-                <button type="button" className="ml-auto text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
+                <button
+                  type="button"
+                  className="ml-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  title="Remove"
+                  aria-label={`Remove link to ${l.issue.referenceNo}`}
+                  onClick={() => remove.mutate(l.id)}
+                >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
@@ -346,12 +378,19 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
             placeholder="SUP-XXXXXXXX"
             className="h-8 font-mono text-sm"
           />
-          <Button size="sm" variant="secondary" disabled={!ref.trim() || create.isPending} onClick={() => create.mutate()}>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label="Add link"
+            disabled={!ref.trim() || create.isPending}
+            onClick={() => create.mutate()}
+          >
             {create.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
           </Button>
         </div>
         )}
-      </CardContent>
+        </div>
+      </details>
     </Card>
   );
 }

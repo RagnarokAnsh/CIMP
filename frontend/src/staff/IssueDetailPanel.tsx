@@ -20,6 +20,7 @@ import { firstLine, dateTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -554,46 +555,57 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           </Card>
           )}
 
+          {/* Collapsed unless the issue is actually published. Expanded it is a
+              ~250px block of explanation for an action taken on a small minority
+              of issues, and with four other cards below it that padding is what
+              left a long dead gap beside the main column. Same <details> pattern
+              as Diagnostics above. */}
           {canWrite && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
+            <details open={data.publiclyVisible} className="group">
+              <summary className="flex cursor-pointer select-none items-center gap-2 px-6 py-4 text-base font-semibold">
                 <Megaphone className="h-4 w-4" /> Known issue
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {data.publiclyVisible ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Published as “{data.publicTitle}” — visible in connected apps.
-                  </p>
-                  <Button size="sm" variant="outline" disabled={publish.isPending} onClick={() => publish.mutate(false)}>
-                    Unpublish
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    Publish a curated title to the platform's public known-issues feed (deflects duplicate reports).
-                  </p>
-                  <input
-                    value={publishTitle}
-                    onChange={(e) => setPublishTitle(e.target.value)}
-                    placeholder={data.publicTitle ?? 'Public title (e.g. "Login is degraded")'}
-                    maxLength={140}
-                    className="h-8 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={publish.isPending || (!publishTitle.trim() && !data.publicTitle)}
-                    onClick={() => publish.mutate(true)}
-                  >
-                    {publish.isPending && <Spinner />} Publish
-                  </Button>
-                </>
-              )}
-            </CardContent>
+                {data.publiclyVisible && (
+                  <Badge variant="outline" className={cn('text-[10px]', BADGE_TONE.info)}>Published</Badge>
+                )}
+                <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-2 px-6 pb-6">
+                {data.publiclyVisible ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Published as “{data.publicTitle}” — visible in connected apps.
+                    </p>
+                    <Button size="sm" variant="outline" disabled={publish.isPending} onClick={() => publish.mutate(false)}>
+                      Unpublish
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      Publish a curated title to the platform's public known-issues feed (deflects duplicate reports).
+                    </p>
+                    {/* Shared Input, not a hand-rolled <input> — the local copy
+                        missed the focus ring and dark-mode field background. */}
+                    <Input
+                      value={publishTitle}
+                      onChange={(e) => setPublishTitle(e.target.value)}
+                      placeholder={data.publicTitle ?? 'Public title (e.g. "Login is degraded")'}
+                      maxLength={140}
+                      className="h-8"
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={publish.isPending || (!publishTitle.trim() && !data.publicTitle)}
+                      onClick={() => publish.mutate(true)}
+                    >
+                      {publish.isPending && <Spinner />} Publish
+                    </Button>
+                  </>
+                )}
+              </div>
+            </details>
           </Card>
           )}
 
