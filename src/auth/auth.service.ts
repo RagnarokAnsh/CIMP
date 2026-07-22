@@ -3,7 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import { AccountStatus } from '../common/enums';
 import { StaffUser, UserPlatformRole } from '../entities';
-import { AuthenticatedStaff, TokenClaims, StaffRoleGrant } from './auth.types';
+import {
+  AuthenticatedStaff, LOCAL_SUBJECT_PREFIX, StaffRoleGrant, TokenClaims,
+} from './auth.types';
 
 @Injectable()
 export class AuthService {
@@ -47,6 +49,13 @@ export class AuthService {
       // First sight of this subject (self-issued signature already verified).
       // Only the session-login path (which carries name+email) creates rows;
       // the SSE ticket is minted for an existing user, so it never lands here.
+      //
+      // `local:` subjects are provisioned exclusively by POST /api/admin/staff,
+      // so a missing row means the account was DELETED (or its email re-keyed)
+      // while a token was still live. Auto-creating here would resurrect them
+      // as a role-less ghost that re-claims the freed email — silently undoing
+      // the delete. Reject instead; only external IdP subjects may self-provision.
+      if (claims.sub.startsWith(LOCAL_SUBJECT_PREFIX)) return null;
       const name = claims.name ?? claims.sub;
       const email = claims.email ?? '';
       try {

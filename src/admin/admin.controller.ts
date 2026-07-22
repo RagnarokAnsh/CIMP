@@ -15,6 +15,7 @@ import { UpdatePlatformDto } from './dto/update-platform.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { AuditQueryDto } from './dto/audit-query.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { UpdateStaffDto } from './dto/update-staff.dto';
 import { SetPasswordDto } from './dto/set-password.dto';
 
 // Admin-only. RolesGuard (not PlatformAccessGuard) because these routes carry
@@ -52,6 +53,18 @@ export class AdminController {
     return this.admin.updatePlatform(staff, id, dto);
   }
 
+  @Delete('platforms/:id')
+  @ApiOperation({
+    summary: 'Delete a platform. Only when it holds no issues — otherwise 409; '
+      + 'disable it instead (PATCH status=DISABLED) to retire it with its history.',
+  })
+  deletePlatform(
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.admin.deletePlatform(staff, id);
+  }
+
   @Post('platforms/:id/rotate-secret')
   @ApiOperation({ summary: 'Rotate the hand-off signing secret (returned once).' })
   rotateSecret(
@@ -71,6 +84,31 @@ export class AdminController {
   @ApiOperation({ summary: 'Create a staff user with a password (self-issued JWT login).' })
   createStaff(@CurrentStaff() staff: AuthenticatedStaff, @Body() dto: CreateStaffDto) {
     return this.admin.createStaff(staff, dto);
+  }
+
+  @Patch('staff/:id')
+  @ApiOperation({
+    summary: 'Update a staff user. status=DISABLED offboards them (login refused, '
+      + 'live tokens rejected on the next request); changing email re-keys their login.',
+  })
+  updateStaff(
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStaffDto,
+  ) {
+    return this.admin.updateStaff(staff, id, dto);
+  }
+
+  @Delete('staff/:id')
+  @ApiOperation({
+    summary: 'Delete a staff user permanently. Prefer PATCH status=DISABLED, which '
+      + 'ends access just as fast and keeps their comment attribution.',
+  })
+  deleteStaff(
+    @CurrentStaff() staff: AuthenticatedStaff,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.admin.deleteStaff(staff, id);
   }
 
   @Post('staff/:id/password')

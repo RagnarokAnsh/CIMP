@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, KeyRound, Plus, Trash2, Webhook, Zap } from 'lucide-react';
+import { KeyRound, Plus, Trash2, Webhook, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
@@ -12,16 +12,24 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { SecretOnce } from '@/components/SecretOnce';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 
 import { toastApiError as onError } from '@/lib/toast-error';
+
+// Shared trigger styling for the row-level destructive icon buttons below.
+// `aria-label` is set per use — `title` alone leaves them unnamed to a screen
+// reader, and the bare icon gave no hit target worth aiming at.
+const DESTRUCTIVE_ICON =
+  'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
+  + 'hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
 const EVENT_NAMES = [
   'issue.created', 'issue.status_changed', 'issue.priority_changed', 'issue.assigned',
@@ -36,26 +44,6 @@ function usePlatforms() {
     queryKey: ['admin', 'platforms'],
     queryFn: async () => (await staffApi.get<PlatformItem[]>('/admin/platforms')).data,
   });
-}
-
-// Copy-once secret banner shown after creating a token/webhook.
-function SecretOnce({ label, value }: { label: string; value: string }) {
-  return (
-    <Alert>
-      <AlertTitle>{label} — shown only once</AlertTitle>
-      <AlertDescription className="flex items-center gap-2">
-        <code className="break-all rounded bg-muted px-1.5 py-0.5 text-xs">{value}</code>
-        <Button
-          size="sm"
-          variant="outline"
-          className="shrink-0 gap-1"
-          onClick={() => { void navigator.clipboard.writeText(value); toast.success('Copied.'); }}
-        >
-          <Copy className="h-3.5 w-3.5" /> Copy
-        </Button>
-      </AlertDescription>
-    </Alert>
-  );
 }
 
 // ── Integrations tab: platform-scoped automation rules + API tokens ─────────
@@ -247,9 +235,22 @@ function AutomationRulesCard({ platformId }: { platformId: string }) {
             <Button size="sm" variant={r.enabled ? 'secondary' : 'outline'} className="h-7 text-xs" onClick={() => toggle.mutate(r)}>
               {r.enabled ? 'Enabled' : 'Disabled'}
             </Button>
-            <button type="button" className="text-muted-foreground hover:text-destructive" title="Delete" onClick={() => remove.mutate(r.id)}>
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <ConfirmDialog
+              title="Delete this automation rule?"
+              confirmLabel="Delete rule"
+              onConfirm={() => remove.mutate(r.id)}
+              description={(
+                <p>
+                  <strong>{r.name}</strong> stops applying to new issues. Issues it already
+                  changed keep those changes. To pause it instead, toggle it to Disabled.
+                </p>
+              )}
+              trigger={(
+                <button type="button" className={DESTRUCTIVE_ICON} aria-label={`Delete rule ${r.name}`}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            />
           </div>
         ))}
       </CardContent>
@@ -317,9 +318,22 @@ function ApiTokensCard({ platformId }: { platformId: string }) {
                 {t.lastUsedAt ? `used ${new Date(t.lastUsedAt).toLocaleDateString()}` : 'never used'}
               </span>
               {!t.revoked && (
-                <button type="button" className="text-muted-foreground hover:text-destructive" title="Revoke" onClick={() => revoke.mutate(t.id)}>
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <ConfirmDialog
+                  title="Revoke this API token?"
+                  confirmLabel="Revoke token"
+                  onConfirm={() => revoke.mutate(t.id)}
+                  description={(
+                    <p>
+                      Any integration still sending <strong>{t.name}</strong> (…{t.lastFour}) starts
+                      getting 401s immediately. This cannot be undone — issue a new token instead.
+                    </p>
+                  )}
+                  trigger={(
+                    <button type="button" className={DESTRUCTIVE_ICON} aria-label={`Revoke token ${t.name}`}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                />
               )}
             </div>
           ))}
@@ -451,9 +465,28 @@ export function WebhooksTab() {
               <Button size="sm" variant={w.enabled ? 'secondary' : 'outline'} className="h-7 text-xs" onClick={() => toggle.mutate(w)}>
                 {w.enabled ? 'Enabled' : 'Disabled'}
               </Button>
-              <button type="button" className="text-muted-foreground hover:text-destructive" title="Delete" onClick={() => remove.mutate(w.id)}>
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <ConfirmDialog
+                title="Delete this webhook?"
+                confirmLabel="Delete webhook"
+                onConfirm={() => remove.mutate(w.id)}
+                description={(
+                  <>
+                    <p>
+                      CIMP stops posting events to <code className="break-all">{w.url}</code>.
+                    </p>
+                    <p>
+                      Its signing secret is destroyed — recreating the endpoint later issues a new
+                      one you'll have to redeploy. To pause it, toggle it to Disabled instead.
+                    </p>
+                  </>
+                )}
+                trigger={(
+                  <button type="button" className={DESTRUCTIVE_ICON} aria-label={`Delete webhook ${w.url}`}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              />
+
             </div>
           ))}
         </div>

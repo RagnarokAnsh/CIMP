@@ -63,14 +63,28 @@ describe('AuthService.upsertFromClaims', () => {
     expect(staff.save).not.toHaveBeenCalled();
   });
 
-  it('creates a brand-new user from full session claims', async () => {
+  it('creates a brand-new user from full session claims (external IdP subject)', async () => {
     staff.findOne.mockResolvedValue(null);
     await service.upsertFromClaims({
-      sub: 'local:new@cimp.dev', tv: 1, name: 'New', email: 'new@cimp.dev',
+      sub: 'oidc|new', tv: 1, name: 'New', email: 'new@cimp.dev',
     });
     expect(staff.create).toHaveBeenCalledWith(
-      expect.objectContaining({ idpSubject: 'local:new@cimp.dev', name: 'New', email: 'new@cimp.dev' }),
+      expect.objectContaining({ idpSubject: 'oidc|new', name: 'New', email: 'new@cimp.dev' }),
     );
+  });
+
+  // A `local:` subject only exists because POST /api/admin/staff made it. If the
+  // row is gone the account was deleted (or its email re-keyed) while a token
+  // was live — auto-creating would resurrect it as a role-less ghost holding the
+  // freed email, silently undoing the delete.
+  it('refuses to auto-create a missing local: subject', async () => {
+    staff.findOne.mockResolvedValue(null);
+    const res = await service.upsertFromClaims({
+      sub: 'local:deleted@cimp.dev', tv: 1, name: 'Deleted', email: 'deleted@cimp.dev',
+    });
+    expect(res).toBeNull();
+    expect(staff.create).not.toHaveBeenCalled();
+    expect(staff.save).not.toHaveBeenCalled();
   });
 
   it('recovers from a concurrent-insert unique violation (23505) by re-fetching the winner', async () => {
@@ -78,7 +92,7 @@ describe('AuthService.upsertFromClaims', () => {
     staff.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(admin());
     staff.save.mockRejectedValueOnce(dup);
     const res = await service.upsertFromClaims({
-      sub: 'local:admin@cimp.dev', tv: 1, name: 'Admin', email: 'admin@cimp.dev',
+      sub: 'oidc|admin', tv: 1, name: 'Admin', email: 'admin@cimp.dev',
     });
     expect(res).toMatchObject({ id: 'a1' });
   });
@@ -87,7 +101,7 @@ describe('AuthService.upsertFromClaims', () => {
     staff.findOne.mockResolvedValue(null);
     staff.save.mockRejectedValue(new Error('connection reset'));
     await expect(
-      service.upsertFromClaims({ sub: 'local:x@cimp.dev', tv: 1, name: 'X', email: 'x@cimp.dev' }),
+      service.upsertFromClaims({ sub: 'oidc|x', tv: 1, name: 'X', email: 'x@cimp.dev' }),
     ).rejects.toThrow('connection reset');
   });
 });

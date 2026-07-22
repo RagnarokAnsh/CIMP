@@ -19,7 +19,7 @@ The `/staff/*` SPA surface: email/password login → triage workspace. TanStack 
 | `BoardPage.tsx` | dnd-kit Kanban by status + **per-column WIP limits** (over-limit badge turns red). Quick-move menu + optimistic moves with 409 handling. |
 | `DashboardPage.tsx` + `TrendChart.tsx` | Scoped dashboard (counts, SLA tallies, 14-day trend via recharts). |
 | `AuditPage.tsx` | Admin audit-log viewer (filter/paginate). |
-| `AdminPage.tsx` | Platforms tab (create + rotate-secret) + Staff & roles tab. |
+| `AdminPage.tsx` | Platforms tab (create · SLA · rotate-secret · **disable/enable · delete**) + Staff & roles tab (create · filter · **edit · set password · disable/enable · delete**, per-row role grant/revoke). Every destructive action goes through `ConfirmDialog`; the irreversible ones require typing the platform key / staff email. |
 | `StaffIssueDetailPage.tsx` | Route wrapper for the detail panel. |
 | `IssueDetailPanel.tsx` | Full issue detail: status/priority/assignee actions (require `version`, 409 → reload), comments with **@mention autocomplete**, history, attachments, and the extras sidebar. |
 | `IssueExtras.tsx` | **`IssueWatch` + `IssueLabels` + `IssueLinks`** — the shipped features' UI. → [[Features - Shipped]] |

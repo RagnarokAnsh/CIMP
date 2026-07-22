@@ -48,6 +48,16 @@ export interface StaffMe {
   roles: { role: Role; platformId: string | null }[];
 }
 
+/** A row from GET /admin/staff — the account plus its role grants. */
+export interface StaffWithRoles {
+  id: string;
+  name: string;
+  email: string;
+  /** AccountStatus: 'ACTIVE' | 'DISABLED'. DISABLED blocks login and revokes live tokens. */
+  status: string;
+  roles: { id: string; role: Role; platformId: string | null; platformKey: string | null }[];
+}
+
 export type SlaState = 'on_track' | 'at_risk' | 'breached' | null;
 
 export interface StaffIssueSummary {

@@ -19,7 +19,7 @@ updated: 2026-07-14
 | `jwt-auth.guard.ts` | `JwtAuthGuard` — plain `CanActivate`; verifies `Bearer` token, attaches `req.user`. |
 | `staff.controller.ts` | `StaffController` — `GET /api/staff/me` (guarded). |
 | `current-staff.decorator.ts` | `@CurrentStaff()` param decorator → `req.user as AuthenticatedStaff`. |
-| `auth.types.ts` | `AuthenticatedStaff`, `StaffRoleGrant`, `TokenClaims` interfaces. |
+| `auth.types.ts` | `AuthenticatedStaff`, `StaffRoleGrant`, `TokenClaims` interfaces + `LOCAL_SUBJECT_PREFIX` / `localSubject(email)` — the single source of truth for how password-login staff are keyed. |
 | `dto/login.dto.ts` | `LoginDto` — `email` (`@IsEmail`), `password` (`@MinLength(8)`). |
 | `auth.module.ts` | Wires providers; **exports** `AuthService`, `JwtAuthGuard`, `LocalAuthService`. |
 | `local-auth.service.spec.ts` | Unit tests for `login` (valid/wrong-pw/disabled/unknown-email/disabled-secret). |
@@ -53,6 +53,7 @@ Called on **every** authenticated request (via both guards). The DB mirrors toke
 - Looks up `StaffUser` by `idpSubject = claims.sub`.
 - **Revocation checks (return `null` → 401):** existing user not `ACTIVE`; or `claims.tv !== user.tokenVersion`. Re-checked per request, so disable/password-reset is **immediate**, not deferred to token expiry.
 - Refreshes `name`/`email` **only for fields the token actually carries** (`claims.name ?? user.name`), so partial-claims tokens can't clobber the stored profile. Creates a new `StaffUser` when absent (signature already trusted); a concurrent-insert unique violation (PG `23505`) is caught → re-fetch the winner.
+- **Never auto-creates a `local:` subject** (2026-07-22). `local:<email>` rows are provisioned only by `POST /api/admin/staff`, so a missing one means the account was **deleted, or its email re-keyed**, while a token was still live. Auto-creating would resurrect it as a role-less ghost re-claiming the freed email — silently undoing the delete. Only external IdP subjects may self-provision. Prefix + `localSubject(email)` helper live in `auth.types.ts`.
   - ✅ **Fixed 2026-07-14 — was the SSE 401-storm root cause.** The SSE ticket passes only `{sub,tv}`; the old `email = claims.email ?? ''` overwrote the stored row to `email=''`/`name=sub` on every connect. With `email` unique+not-null that broke password login and 401-stormed once two rows collided on `''`. Now partial claims leave stored fields intact (regression: `auth.service.spec.ts`).
 - Returns `AuthenticatedStaff` with `roles` from `loadRoles`.
 - `loadRoles(staffUserId)` → reads `UserPlatformRole` (relation `platform`), maps to `StaffRoleGrant[]` where `platformId: null` means **global scope**.

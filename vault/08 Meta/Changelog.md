@@ -2,12 +2,25 @@
 title: Changelog
 tags: [cimp, changelog, updates]
 type: log
-updated: 2026-07-15
+updated: 2026-07-22
 ---
 # Changelog / Updates Log
 ← [[CIMP - Home]] · [[Session Handoff]]
 
-> Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~18 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+> Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+
+## 2026-07-22 — Admin CRUD completion: platform/staff lifecycle, lockout guards, destructive-action UX
+
+**The gap.** `StaffUser.status` was enforced everywhere (login refused, live tokens rejected per request, excluded from assignee pickers and notifications) but **nothing in the codebase could ever set it to `DISABLED`** — offboarding was impossible; the best you could do was revoke role grants one at a time while the person kept a valid session. Platforms had no delete and no UI for `status` at all. `POST /admin/staff/:id/password` worked but the frontend never called it. And an admin could revoke their own last `ADMIN` grant in one unconfirmed click — permanent lockout, DB-access-only recovery. Verified live: this deployment had exactly **one** admin.
+
+- **Backend — lifecycle routes.** `DELETE /api/admin/platforms/:id` (409 naming the issue count when non-empty, since `Issue.platform` is `ON DELETE RESTRICT` — points at disabling instead), `PATCH /api/admin/staff/:id` (name/email/status), `DELETE /api/admin/staff/:id`. New `UpdateStaffDto`. `AdminModule` now reads `Issue`.
+- **Backend — lockout guards.** `assertNotLastAdmin()` blocks removing the last `ACTIVE` ADMIN grant via disable, delete, *or* `revokeRole`; self-disable and self-delete are refused outright (400). All live-verified against the dev DB.
+- **Backend — ghost-account fix** (`auth.service.ts`). `upsertFromClaims` no longer auto-creates a missing `local:` subject. Without this, deleting a staff member (or re-keying their email) while a token was live would **resurrect them as a role-less row re-claiming the freed email**, silently undoing the delete. Corroborated in the wild: the dev DB's `admin@cimp.dev` was a password-less, role-less row created 2026-07-14 by exactly that path. External IdP subjects still self-provision. → [[Module - Auth]]
+- **Frontend — reachable CRUD.** Row action menus on both tables: platform disable/enable/delete + secret rotation; staff edit, set password (endpoint had no UI before), disable/enable, delete, and **per-row role granting** (replaces the detached "pick a person from a dropdown" form). Staff table gains the `status` column, a name/email filter, and an empty state.
+- **Frontend — destructive-action UX.** New `alert-dialog` primitive + `ConfirmDialog`; **every** delete/revoke in the workspace now confirms (previously zero `AlertDialog`/`confirm()` existed anywhere — webhooks, API tokens, automation rules and role revokes all fired on one click). Irreversible ones require typing the platform key / staff email. Rotated hand-off secrets moved from a **12-second toast** into a copyable dialog you must acknowledge. Self/last-admin actions render disabled with the reason. A11y: named `aria-label`s and real hit targets on the icon buttons; the saved-view delete is no longer invisible to keyboard users.
+- **Dialog-in-menu correctness.** Dialogs opened from a row menu render *outside* it and are state-driven — nesting them left the menu open afterwards, which marks the rest of the page `aria-hidden` and pushes the table out of the accessibility tree. Caught by the new Playwright suite.
+- **Seed self-healing.** `npm run seed` now repairs `portal-a` drift (rotated hand-off secret, non-ACTIVE status) instead of just reporting "already exists" — rotating that platform from the UI otherwise silently breaks every local reporter flow and the Playwright fixtures.
+- **Tests: 147→180 unit, 21→40 backend e2e, 6→11 Playwright (231 total, all green).** New `admin.service.spec.ts` (the module had **zero** unit tests) and `test/admin.e2e-spec.ts` (ADMIN gating + ValidationPipe rejection on the new routes); `auth.service.spec.ts` updated for the ghost fix. Swagger client regenerated.
 
 ## 2026-07-15 — Deploy workflow hardening (3 fixes)
 - **`deploy.yml` reworked** (deploy.sh itself unchanged — review found no bugs in it): (1) **SSH host-key pinning** — new required `SSH_KNOWN_HOSTS` secret replaces the trust-on-first-use `ssh-keyscan` (which made `StrictHostKeyChecking=yes` decorative); workflow fails with setup instructions if unset. (2) **Backend e2e in the verify gate** — the 21 e2e tests are DB-free (repos stubbed), verified green in isolation; gate now runs 161 unit + 21 e2e. (3) **`RUN_MIGRATIONS` is no longer a secret** — manual deploys get a `workflow_dispatch` checkbox; push deploys read the repo *variable* `RUN_MIGRATIONS` (default false). **Action needed before next deploy:** create the `SSH_KNOWN_HOSTS` secret, delete the old `RUN_MIGRATIONS` secret, optionally set the variable to `true` (recommended — no-op when nothing pending). → [[Deployment, CI-CD and Dev Workflow]]

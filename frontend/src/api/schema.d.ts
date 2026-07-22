@@ -435,7 +435,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete a platform. Only when it holds no issues — otherwise 409; disable it instead (PATCH status=DISABLED) to retire it with its history. */
+        delete: operations["AdminController_deletePlatform"];
         options?: never;
         head?: never;
         /** Update a platform. */
@@ -475,6 +476,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/admin/staff/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a staff user permanently. Prefer PATCH status=DISABLED, which ends access just as fast and keeps their comment attribution. */
+        delete: operations["AdminController_deleteStaff"];
+        options?: never;
+        head?: never;
+        /** Update a staff user. status=DISABLED offboards them (login refused, live tokens rejected on the next request); changing email re-keys their login. */
+        patch: operations["AdminController_updateStaff"];
         trace?: never;
     };
     "/api/admin/staff/{id}/password": {
@@ -1122,6 +1141,13 @@ export interface components {
             /** @description Initial password (bcrypt-hashed at rest). */
             password: string;
         };
+        UpdateStaffDto: {
+            name?: string;
+            /** @description Re-keys the login subject and signs the user out. */
+            email?: string;
+            /** @enum {string} */
+            status?: "ACTIVE" | "DISABLED";
+        };
         SetPasswordDto: {
             password: string;
         };
@@ -1396,6 +1422,8 @@ export interface operations {
                 assigneeId?: string;
                 /** @description Keyword search over description and comments. */
                 q?: string;
+                /** @description AND-only filter query, e.g. `status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me`. Fields: status, priority, platform, assignee, reporter, label, created, updated, text. */
+                jql?: string;
                 /** @description Created on/after this ISO timestamp. */
                 from?: string;
                 /** @description Created on/before this ISO timestamp. */
@@ -1428,6 +1456,8 @@ export interface operations {
                 assigneeId?: string;
                 /** @description Keyword search over description and comments. */
                 q?: string;
+                /** @description AND-only filter query, e.g. `status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me`. Fields: status, priority, platform, assignee, reporter, label, created, updated, text. */
+                jql?: string;
                 /** @description Created on/after this ISO timestamp. */
                 from?: string;
                 /** @description Created on/before this ISO timestamp. */
@@ -1790,6 +1820,25 @@ export interface operations {
             };
         };
     };
+    AdminController_deletePlatform: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     AdminController_updatePlatform: {
         parameters: {
             query?: never;
@@ -1863,6 +1912,48 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_deleteStaff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AdminController_updateStaff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStaffDto"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -717,8 +717,10 @@ function SavedViewsMenu({
             className="group flex items-center justify-between gap-2"
           >
             <span className="truncate">{v.name}</span>
+            {/* focus-visible:opacity-100 — the button is tabbable, so revealing
+                it on hover alone left it invisible to keyboard users. */}
             <button
-              className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+              className="rounded text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none group-hover:opacity-100"
               aria-label={`Delete ${v.name}`}
               onClick={(e) => { e.stopPropagation(); onDelete(v.id); }}
             >
