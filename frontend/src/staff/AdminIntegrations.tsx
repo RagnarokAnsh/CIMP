@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -21,6 +22,7 @@ import {
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SecretOnce } from '@/components/SecretOnce';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
+import { shortDate } from '@/lib/format';
 
 import { toastApiError as onError } from '@/lib/toast-error';
 
@@ -30,6 +32,40 @@ import { toastApiError as onError } from '@/lib/toast-error';
 const DESTRUCTIVE_ICON =
   'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
   + 'hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
+
+/**
+ * Compact empty state for the small cards on this screen.
+ *
+ * Every other list surface uses the shared `Empty` component; these three used
+ * a bare `<p>` (and the API-tokens list had no empty state at all, rendering a
+ * blank area). `Empty`'s full medallion is too heavy inside a half-width card,
+ * so this keeps the same icon + title + explanation shape at a smaller scale.
+ */
+function CompactEmpty({
+  icon, title, children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-md border border-dashed border-border/70 px-4 py-6 text-center">
+      <span className="mb-1 rounded-full bg-muted p-2 text-muted-foreground [&_svg]:size-4">{icon}</span>
+      <p className="text-sm font-medium">{title}</p>
+      <p className="text-xs text-muted-foreground">{children}</p>
+    </div>
+  );
+}
+
+// These cards previously rendered blank while their queries were in flight —
+// the only surfaces in the workspace without a loading state.
+function ListSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="space-y-1.5">
+      {Array.from({ length: rows }).map((_, i) => <Skeleton key={i} className="h-11 w-full" />)}
+    </div>
+  );
+}
 
 const EVENT_NAMES = [
   'issue.created', 'issue.status_changed', 'issue.priority_changed', 'issue.assigned',
@@ -81,7 +117,7 @@ export function IntegrationsTab() {
 function AutomationRulesCard({ platformId }: { platformId: string }) {
   const qc = useQueryClient();
   const key = ['admin', 'automation', platformId];
-  const { data: rules } = useQuery({
+  const { data: rules, isLoading: rulesLoading } = useQuery({
     queryKey: key,
     queryFn: async () =>
       (await staffApi.get<AutomationRuleView[]>(`/staff/platforms/${platformId}/automation-rules`)).data,
@@ -220,8 +256,11 @@ function AutomationRulesCard({ platformId }: { platformId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {(rules ?? []).length === 0 && (
-          <p className="text-sm text-muted-foreground">No rules — new issues stay exactly as reported.</p>
+        {rulesLoading && <ListSkeleton rows={2} />}
+        {!rulesLoading && (rules ?? []).length === 0 && (
+          <CompactEmpty icon={<Zap />} title="No automation rules">
+            New issues stay exactly as reported.
+          </CompactEmpty>
         )}
         {(rules ?? []).map((r) => (
           <div key={r.id} className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2 text-sm">
@@ -264,7 +303,7 @@ function ApiTokensCard({ platformId }: { platformId: string }) {
   const [name, setName] = useState('');
   const [freshToken, setFreshToken] = useState<string | null>(null);
 
-  const { data: tokens } = useQuery({
+  const { data: tokens, isLoading: tokensLoading } = useQuery({
     queryKey: key,
     queryFn: async () =>
       (await staffApi.get<ApiTokenView[]>(`/staff/platforms/${platformId}/api-tokens`)).data,
@@ -309,13 +348,19 @@ function ApiTokensCard({ platformId }: { platformId: string }) {
           </Button>
         </div>
         <div className="space-y-1.5">
+          {tokensLoading && <ListSkeleton rows={2} />}
+          {!tokensLoading && (tokens ?? []).length === 0 && (
+            <CompactEmpty icon={<KeyRound />} title="No API tokens">
+              Issue one to give a system read-only access to this platform&apos;s issues.
+            </CompactEmpty>
+          )}
           {(tokens ?? []).map((t) => (
             <div key={t.id} className="flex items-center gap-2 rounded-md border border-border/60 px-3 py-2 text-sm">
               <span className="font-medium">{t.name}</span>
               <code className="text-xs text-muted-foreground">…{t.lastFour}</code>
               {t.revoked && <Badge variant="outline" className="text-muted-foreground">revoked</Badge>}
               <span className="ml-auto text-xs text-muted-foreground">
-                {t.lastUsedAt ? `used ${new Date(t.lastUsedAt).toLocaleDateString()}` : 'never used'}
+                {t.lastUsedAt ? `used ${shortDate(t.lastUsedAt)}` : 'never used'}
               </span>
               {!t.revoked && (
                 <ConfirmDialog
@@ -354,7 +399,7 @@ export function WebhooksTab() {
   const [events, setEvents] = useState<Set<string>>(new Set());
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
 
-  const { data: hooks } = useQuery({
+  const { data: hooks, isLoading: hooksLoading } = useQuery({
     queryKey: key,
     queryFn: async () => (await staffApi.get<WebhookView[]>('/admin/webhooks')).data,
   });
@@ -450,8 +495,11 @@ export function WebhooksTab() {
         {freshSecret && <SecretOnce label="Signing secret" value={freshSecret} />}
 
         <div className="space-y-1.5">
-          {(hooks ?? []).length === 0 && (
-            <p className="text-sm text-muted-foreground">No webhooks configured.</p>
+          {hooksLoading && <ListSkeleton rows={2} />}
+          {!hooksLoading && (hooks ?? []).length === 0 && (
+            <CompactEmpty icon={<Webhook />} title="No webhooks configured">
+              Add one to push signed issue events to your own systems.
+            </CompactEmpty>
           )}
           {(hooks ?? []).map((w) => (
             <div key={w.id} className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2 text-sm">

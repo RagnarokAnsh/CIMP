@@ -14,7 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
-import { firstLine, relativeTime } from '@/lib/format';
+import { firstLine, relativeTime, dateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 // One-click resolution rating. 👎 invites an optional comment; the rating can
@@ -201,7 +201,7 @@ export function ReporterIssueDetailPage() {
                       {u.fromReporter ? 'You' : u.author}
                     </p>
                     <p className="mt-1 whitespace-pre-wrap text-sm">{u.body}</p>
-                    <p className="mt-1 text-xs text-muted-foreground" title={new Date(u.createdAt).toLocaleString()}>
+                    <p className="mt-1 text-xs text-muted-foreground" title={dateTime(u.createdAt)}>
                       {relativeTime(u.createdAt)}
                     </p>
                   </li>

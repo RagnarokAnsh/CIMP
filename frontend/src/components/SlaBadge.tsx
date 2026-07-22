@@ -2,6 +2,7 @@ import { AlertTriangle, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { BADGE_TONE } from '@/lib/issue-meta';
+import { dateTime } from '@/lib/format';
 import type { SlaState } from '@/api/types';
 
 // Surfaces SLA state for live issues. Only at-risk and breached render — on-track
@@ -16,8 +17,7 @@ export function SlaBadge({
 }) {
   if (slaState !== 'at_risk' && slaState !== 'breached') return null;
 
-  const due = dueAt ? new Date(dueAt) : null;
-  const title = due ? `Due ${due.toLocaleString()}` : undefined;
+  const title = dueAt ? `Due ${dateTime(dueAt)}` : undefined;
 
   // Shared tones rather than a hand-copied recipe: this badge previously
   // duplicated PRIORITY_META.CRITICAL's exact classes, so the two could drift.

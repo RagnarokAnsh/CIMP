@@ -9,6 +9,15 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-22 — UI review pass 4: date formatting, empty and loading states
+
+Continued the sweep into the classes automation can't judge — shared helpers, empty states, loading states.
+
+- **`relativeTime` existed twice** — `lib/format.ts` and a private copy in `NotificationsBell.tsx` — and they had **already drifted**: the shared one falls back to an absolute date past 30 days, the copy didn't, so an old notification rendered "200d ago". Copy deleted, now imports the shared one.
+- **Absolute timestamps had no shared helper.** Five places called a bare `toLocaleString()`, which renders seconds ("7/22/2026, 12:33:18 PM") — noise nobody reads — while another used `toLocaleDateString()`. Added `dateTime()` (medium date + short time) and `shortDate()` to `lib/format.ts`; all seven call sites converted. Dates now go through exactly three helpers and nowhere else.
+- **`AdminIntegrations` was the only surface with no loading state** — its three cards rendered blank while their queries were in flight. Added `ListSkeleton`, matching the skeleton every other list shows.
+- **The API-tokens list had no empty state at all**, rendering a blank area; automation rules and webhooks used a bare `<p>` where every other surface uses the shared `Empty` component. Added a `CompactEmpty` with the same icon + title + explanation shape, scaled for a half-width card (the full `Empty` medallion is too heavy there). Verified rendered.
+
 ## 2026-07-22 — UI review pass 3: semantic colour centralisation + AA contrast audit
 
 Systematic sweep rather than fixing reported symptoms. Built a scripted audit that measures **rendered** WCAG contrast (resolving each element's effective background by compositing translucent ancestors) across every staff route in **both themes**, plus checks for heading order, unnamed controls, target sizes and unstyled native controls.

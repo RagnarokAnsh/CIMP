@@ -14,6 +14,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { dateTime } from '@/lib/format';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
@@ -117,7 +118,7 @@ export function AuditPage() {
               {!isLoading && rows.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {new Date(e.createdAt).toLocaleString()}
+                    {dateTime(e.createdAt)}
                   </TableCell>
                   <TableCell><Badge variant="outline">{e.actorType}</Badge></TableCell>
                   <TableCell className="font-medium">{e.action.replace(/_/g, ' ').toLowerCase()}</TableCell>

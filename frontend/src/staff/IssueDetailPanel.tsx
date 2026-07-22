@@ -16,7 +16,7 @@ import { SlaBadge } from '@/components/SlaBadge';
 import { STATUS_META, PRIORITY_META, BADGE_TONE } from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
 import { canWriteOn } from '@/lib/permissions';
-import { firstLine } from '@/lib/format';
+import { firstLine, dateTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -370,7 +370,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          {new Date(c.createdAt).toLocaleString()}{c.editedAt ? ' (edited)' : ''}
+                          {dateTime(c.createdAt)}{c.editedAt ? ' (edited)' : ''}
                         </span>
                       </div>
                       <p className="whitespace-pre-wrap text-sm text-foreground/90">{renderBody(c.body, memberNames)}</p>
@@ -448,7 +448,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                             </span>
                           )}
                           <div className="text-xs text-muted-foreground">
-                            {new Date(h.createdAt).toLocaleString()}
+                            {dateTime(h.createdAt)}
                           </div>
                         </div>
                       </li>
@@ -468,7 +468,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               <Field label="Reporter" value={data.reporter?.name ?? '—'} />
               <Field label="Assignee" value={data.assignee?.name ?? 'Unassigned'} />
               <Field label="Jira sync" value={data.jiraSyncStatus} />
-              <Field label="Created" value={new Date(data.createdAt).toLocaleString()} />
+              <Field label="Created" value={dateTime(data.createdAt)} />
               {data.duplicates.length > 0 && (
                 <div className="space-y-1.5 border-t border-border/60 pt-3">
                   <span className="text-muted-foreground">Duplicates ({data.duplicates.length})</span>

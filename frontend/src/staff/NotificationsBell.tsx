@@ -9,22 +9,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { CenteredSpinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
+import { relativeTime } from '@/lib/format';
 
 const TRIGGER_META: Record<string, { label: string; icon: typeof Bell }> = {
   'issue.created': { label: 'New issue reported', icon: Sparkles },
   'issue.assigned': { label: 'Assigned to you', icon: UserPlus },
   'comment.mention': { label: 'Mentioned you in a comment', icon: AtSign },
 };
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const min = Math.round(diff / 60000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
-}
 
 export function NotificationsBell() {
   const queryClient = useQueryClient();
