@@ -9,6 +9,18 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-22 — UI review pass 2: split-view layout, container queries, target sizes
+
+Second pass, driven by reported breakage. Two items were **regressions from pass 1**.
+
+- **Admin tab strip grew a vertical scrollbar (regression).** Pass 1 added `overflow-x-auto` to `TabsList`; per the CSS overflow spec, when one axis is `auto` the other computes from `visible` to `auto` too, so the fixed `h-9` strip became a vertical scroller. Fixed with an explicit `overflow-y-hidden`, `min-h-9` instead of `h-9` (so the extra 1px grows rather than clips a focus ring), and a hidden horizontal bar — an 8px scrollbar inside a 36px control is worse than the cut-off tab, which is itself the affordance.
+- **Split view left a tall void beside a short main column.** `IssueDetailPanel` chose its `[1fr_300px]` two-column layout from an `xl:` **viewport** breakpoint, but its real width depends on its **container**: ~1472px on the full-page route versus ~1052px inside the split view. Same breakpoint, very different space — so the extras sidebar sat next to a short main column and scrolling revealed a large empty area. The panel is now an `@container` and switches at `@6xl` (72rem), which falls between the two measured widths: full-page keeps `1148px 300px`, split view stacks to a single `1052px` column. **Lesson worth keeping: any component rendered in more than one container must key its layout off container width, not viewport.**
+- **Paginator now states the range and total** — "Showing **1–20** of **41** issues · page 1 of 3" (compact variant: "1–20 of 41"). "Page 2 of 3" alone never said how many records existed.
+- **Target sizes.** Row checkboxes were a bare 16×16 — under the 24px minimum, and a real miss rate in a dense table. A `::before` overlay lifts the hit area to 24px with no visual change (verified functionally: a click 3px outside the visual box now toggles it — `getBoundingClientRect` still reports 16×16, since the pseudo-element does not alter the border box). Sort-header controls went from a bare 20px text run to a 24px-tall padded target with a focus ring and an explicit `aria-label`.
+- **Sticky detail toolbar** was `bg-background/80`, letting the status buttons scrolling underneath show through as ghosts; now `/95`.
+
+**Swept and clear:** no unnamed interactive elements, and no unstyled native controls left outside popovers/dialogs. **Left as-is:** issue-reference links in dense tables are 16–18px tall, but each row carries a much larger adjacent target (the summary link), and WCAG 2.2 exempts inline text links.
+
 ## 2026-07-22 — UI review pass: dashboard accuracy, chart time axis, mobile overflow
 
 Reviewed every surface **as rendered** — Playwright captures at 1440px and 390px, light and dark — rather than reading source. The design system itself (OKLCH tokens, dual themes, tinted elevation, reduced-motion) held up; the defects were in data presentation and responsive layout.

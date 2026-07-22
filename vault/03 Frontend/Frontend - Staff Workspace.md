@@ -21,7 +21,7 @@ The `/staff/*` SPA surface: email/password login → triage workspace. TanStack 
 | `AuditPage.tsx` | Admin audit-log viewer (filter/paginate). |
 | `AdminPage.tsx` | Platforms tab (create · SLA · rotate-secret · **disable/enable · delete**) + Staff & roles tab (create · filter · **edit · set password · disable/enable · delete**, per-row role grant/revoke). Every destructive action goes through `ConfirmDialog`; the irreversible ones require typing the platform key / staff email. |
 | `StaffIssueDetailPage.tsx` | Route wrapper for the detail panel. |
-| `IssueDetailPanel.tsx` | Full issue detail: status/priority/assignee actions (require `version`, 409 → reload), comments with **@mention autocomplete**, history, attachments, and the extras sidebar. |
+| `IssueDetailPanel.tsx` | Full issue detail: status/priority/assignee actions (require `version`, 409 → reload), comments with **@mention autocomplete**, history, attachments, and the extras sidebar. **Renders in two very different containers** — the full-page route (~1472px) and the split view (~1052px) — so it is an `@container` and switches to the `[1fr_300px]` sidebar layout at `@6xl`, *not* at a viewport breakpoint. Using `xl:` here put a tall sidebar beside a short main column in split view. |
 | `IssueExtras.tsx` | **`IssueWatch` + `IssueLabels` + `IssueLinks`** — the shipped features' UI. → [[Features - Shipped]] |
 | `SupportButton.tsx` | Mints a self-support hand-off and opens the reporter form. → [[Module - Self-Support]] |
 | `NotificationsBell.tsx` | Bell dropdown (unread count, mark-read). |

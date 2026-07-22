@@ -219,9 +219,16 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
   }
 
   return (
-    <div className="space-y-5">
+    // @container: this panel renders both full-page (~1470px of room) and inside
+    // the split view (~1050px). Viewport breakpoints can't tell those apart, so
+    // the extras sidebar used to sit alongside a short main column in split
+    // view, leaving a tall void beside it once you scrolled. The layout now
+    // keys off the panel's OWN width.
+    <div className="@container space-y-5">
       {toolbar && (
-        <div className="sticky top-0 z-10 -mx-1 border-b border-border/60 bg-background/80 px-1 pb-3 pt-1 backdrop-blur">
+        // bg-background/95: at /80 the status buttons scrolling underneath
+        // showed through as ghosts behind the toolbar text.
+        <div className="sticky top-0 z-10 -mx-1 border-b border-border/60 bg-background/95 px-1 pb-3 pt-1 backdrop-blur">
           {toolbar}
         </div>
       )}
@@ -272,7 +279,9 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_300px]">
+      {/* Sidebar only once the panel itself is comfortably wide (@6xl = 72rem);
+          below that the extras stack under the main column instead. */}
+      <div className="grid gap-6 @6xl:grid-cols-[1fr_300px]">
         <div className="space-y-6">
           <Card>
             <CardHeader><CardTitle className="text-base">Description</CardTitle></CardHeader>

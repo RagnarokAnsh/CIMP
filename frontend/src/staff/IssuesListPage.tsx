@@ -487,7 +487,13 @@ export function IssuesListPage() {
           </CardContent>
           {totalPages > 1 && (
             <div className="border-t border-border px-4 py-3">
-              <Pager page={page} totalPages={totalPages} onPage={setPage} />
+              <Pager
+                page={page}
+                totalPages={totalPages}
+                total={data?.total ?? 0}
+                pageSize={data?.pageSize ?? rows.length}
+                onPage={setPage}
+              />
             </div>
           )}
         </Card>
@@ -542,7 +548,14 @@ export function IssuesListPage() {
               </div>
               {totalPages > 1 && (
                 <div className="border-t border-border px-3 py-2.5">
-                  <Pager page={page} totalPages={totalPages} onPage={setPage} compact />
+                  <Pager
+                    page={page}
+                    totalPages={totalPages}
+                    total={data?.total ?? 0}
+                    pageSize={data?.pageSize ?? rows.length}
+                    onPage={setPage}
+                    compact
+                  />
                 </div>
               )}
             </CardContent>
@@ -620,17 +633,32 @@ function pageRange(page: number, total: number): (number | '…')[] {
 }
 
 function Pager({
-  page, totalPages, onPage, compact,
+  page, totalPages, total, pageSize, onPage, compact,
 }: {
   page: number;
   totalPages: number;
+  /** Row count across all pages — "Page 2 of 3" alone never says how many. */
+  total: number;
+  pageSize: number;
   onPage: (p: number) => void;
   compact?: boolean;
 }) {
   if (totalPages <= 1) return null;
+  const first = (page - 1) * pageSize + 1;
+  const last = Math.min(page * pageSize, total);
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-xs text-muted-foreground tabular-nums">
+        {compact ? (
+          <>{first}–{last} of {total.toLocaleString()}</>
+        ) : (
+          <>
+            Showing <span className="font-medium text-foreground">{first}–{last}</span>
+            {' of '}<span className="font-medium text-foreground">{total.toLocaleString()}</span>
+            {' issues · page '}{page} of {totalPages}
+          </>
+        )}
+      </span>
       <div className="flex items-center gap-1">
         <Button variant="outline" size="icon-sm" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page">
           <ChevronLeft className="h-4 w-4" />
@@ -671,9 +699,17 @@ function SortableHead({
   const Icon = !active ? ChevronsUpDown : filters.order === 'ASC' ? ChevronUp : ChevronDown;
   return (
     <TableHead>
+      {/* -mx-1.5 px-1.5 py-1: keeps the label optically aligned with the column
+          while giving the sort control a 24px-tall target and a visible focus
+          ring — it was a bare 20px text run. */}
       <button
         type="button"
-        className={cn('flex items-center gap-1 transition-colors hover:text-foreground', active && 'text-foreground')}
+        aria-label={`Sort by ${label}`}
+        className={cn(
+          '-mx-1.5 flex items-center gap-1 rounded px-1.5 py-1 transition-colors hover:text-foreground',
+          'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+          active && 'text-foreground',
+        )}
         onClick={() => onSort({ sort: field, order: active && filters.order === 'DESC' ? 'ASC' : 'DESC' })}
       >
         {label}

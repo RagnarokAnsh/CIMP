@@ -28,8 +28,14 @@ function Tabs({
 // max-w-full + overflow-x-auto: a 4-tab strip (Platforms / Staff & roles /
 // Integrations / Webhooks) is wider than a phone, and `w-fit` alone let it
 // overflow its container so the last tab was clipped and unreachable.
+//
+// overflow-y-hidden is REQUIRED, not belt-and-braces: per spec, when one axis
+// is `auto` the other computes from `visible` to `auto` as well, so the fixed
+// h-9 strip sprouted a vertical scrollbar. scrollbar-none hides the horizontal
+// bar too — it would eat 8px of a 36px-tall control; the cut-off tab is the
+// affordance.
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit max-w-full items-center justify-center overflow-x-auto rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:overflow-visible data-[variant=line]:rounded-none",
+  "group/tabs-list inline-flex w-fit max-w-full items-center justify-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden rounded-lg p-[3px] text-muted-foreground group-data-[orientation=horizontal]/tabs:min-h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:overflow-visible data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
