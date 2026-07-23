@@ -572,7 +572,11 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               left a long dead gap beside the main column. Same <details> pattern
               as Diagnostics above. */}
           {canWrite && (
-          <Card>
+          // py-0: Card supplies its own py-6, which sat *outside* the summary and
+          // left the collapsed row floating with ~24px of dead space above and
+          // below it — and double-counted with the expanded body's pb-6. The
+          // <details> owns all of its padding instead.
+          <Card className="py-0">
             <details open={data.publiclyVisible} className="group">
               <summary className="flex cursor-pointer select-none items-center gap-2 px-6 py-4 text-base font-semibold">
                 <Megaphone className="h-4 w-4" /> Known issue

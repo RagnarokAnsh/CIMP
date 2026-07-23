@@ -26,6 +26,12 @@ other systems can react to.
 - Delivery is **best-effort in-process** (timeout 5s, 3 retries with 2s/8s/30s
   backoff via `setTimeout`, fire-and-forget from an `@OnEvent` listener). A
   durable queue (Redis/BullMQ) is explicitly out of scope — note it in code.
+- **Circuit breaker (added 2026-07-23).** Per-endpoint consecutive-failure count:
+  after **3** exhausted deliveries the endpoint is paused for **5 minutes**, then
+  one event is let through as a probe; a success clears the state. Without it a
+  dead host cost 4 doomed requests *and* a WARN line per event — a bulk change
+  over 30 issues produced ~120 requests and 30 identical log lines. In memory
+  only: a restart retries, and the admin's `enabled` flag is never mutated.
 - Signature: `X-CIMP-Signature: sha256=<hex HMAC-SHA256(secret, rawBody)>`
   (GitHub convention). `X-CIMP-Event: issue.created` header carries the event name.
 - Two endpoint kinds: `GENERIC` (signed JSON) and `SLACK` (Slack incoming-webhook

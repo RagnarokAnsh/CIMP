@@ -9,6 +9,11 @@ updated: 2026-07-22
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-23 — Webhook circuit breaker; accordion wrapper padding
+
+- **A dead webhook endpoint amplified into the log.** Every event ran 1 attempt + 3 retries and then logged a WARN, *per event* — a bulk status change across 30 issues meant ~120 doomed requests and 30 identical lines, burying anything real. `WebhooksService` now tracks consecutive exhausted deliveries per endpoint: after 3 it logs one line explaining the silence and pauses that endpoint for 5 minutes, then lets a single event through as a probe. A success clears the state and logs recovery. In memory only — a restart retries, and nothing mutates the admin's `enabled` flag. +4 specs (**186 unit**). The trigger in dev was the seeded `https://ops.example.com/hooks/cimp` webhook, whose host does not exist; deleting it in Admin → Webhooks also silences it.
+- **The "Known issue" accordion didn't match its neighbours' height.** `Card` supplies `py-6`, which sat *outside* the `<details>`, so the collapsed summary floated with ~24px of dead space above and below it — and double-counted with the expanded body's own `pb-6`. `py-0` on that Card lets the `<details>` own all its padding: measured dead space is now **2px** (the border) in both states, down from ~48px collapsed.
+
 ## 2026-07-22 — Shared paginator, JQL bar hidden, failed loads no longer read as "empty"
 
 - **One paginator.** The good one lived inside `IssuesListPage` while the audit log hand-rolled its own — "Page 2 of 3" with text Previous/Next buttons — so the two diverged in both capability and appearance and neither said how many records existed. Extracted to `components/Pager.tsx` and used by both. Verified identical: *"Showing 1–20 of 59 · page 1 of 3"* and *"Showing 1–50 of 345 · page 1 of 7"*. Dropped the hard-coded word "issues" from the summary now that it also serves audit events.

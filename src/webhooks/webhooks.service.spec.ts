@@ -118,4 +118,73 @@ describe('WebhooksService', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });
+
+  // A dead host used to cost 4 doomed requests and one WARN for EVERY event —
+  // a bulk change over 30 issues buried the log in ~120 requests and 30
+  // identical lines.
+  describe('circuit breaker', () => {
+    beforeEach(() => {
+      (service as any).muteAfterFailures = 2;
+      (service as any).muteCooldownMs = 10_000;
+      endpoints.find.mockResolvedValue([ep()]);
+      fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    });
+
+    it('stops attempting once consecutive deliveries have been exhausted', async () => {
+      for (let i = 0; i < 2; i++) {
+        await service.deliver('issue.created', 'pA', {});
+        await until(() => fetchMock.mock.calls.length >= 4 * (i + 1));
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(8); // 2 events × (initial + 3 retries)
+
+      // Everything after the threshold is skipped outright, not retried.
+      for (let i = 0; i < 5; i++) await service.deliver('issue.created', 'pA', {});
+      await flush();
+      expect(fetchMock).toHaveBeenCalledTimes(8);
+    });
+
+    it('logs once when it mutes, not once per suppressed event', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {});
+      for (let i = 0; i < 2; i++) {
+        await service.deliver('issue.created', 'pA', {});
+        await until(() => fetchMock.mock.calls.length >= 4 * (i + 1));
+      }
+      for (let i = 0; i < 5; i++) await service.deliver('issue.created', 'pA', {});
+      await flush();
+
+      expect(warn).toHaveBeenCalledTimes(2); // one per exhausted delivery, then silence
+      expect(warn.mock.calls[1][0]).toMatch(/pausing deliveries/);
+    });
+
+    it('lets one event through as a probe after the cooldown, and recovers on success', async () => {
+      for (let i = 0; i < 2; i++) {
+        await service.deliver('issue.created', 'pA', {});
+        await until(() => fetchMock.mock.calls.length >= 4 * (i + 1));
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(8);
+
+      // Cooldown lapses; the receiver is healthy again.
+      (service as any).health.get('w1').mutedUntil = Date.now() - 1;
+      fetchMock.mockResolvedValue({ ok: true, status: 200 });
+      await service.deliver('issue.created', 'pA', {});
+      await until(() => fetchMock.mock.calls.length >= 9);
+      expect(fetchMock).toHaveBeenCalledTimes(9);
+
+      // Health is cleared, so normal delivery resumes with no cooldown.
+      expect((service as any).health.has('w1')).toBe(false);
+      await service.deliver('issue.created', 'pA', {});
+      await until(() => fetchMock.mock.calls.length >= 10);
+      expect(fetchMock).toHaveBeenCalledTimes(10);
+    });
+
+    it('does not mute an endpoint that keeps succeeding', async () => {
+      fetchMock.mockResolvedValue({ ok: true, status: 200 });
+      for (let i = 0; i < 4; i++) {
+        await service.deliver('issue.created', 'pA', {});
+        await until(() => fetchMock.mock.calls.length >= i + 1);
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect((service as any).health.size).toBe(0);
+    });
+  });
 });
