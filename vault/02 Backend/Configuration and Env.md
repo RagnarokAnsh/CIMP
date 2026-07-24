@@ -23,10 +23,10 @@ Swagger + verbose errors are also disabled in production.
 - **Staff auth:** `JWT_SECRET` (≥32, `openssl rand -hex 32`), `JWT_EXPIRES_IN` (8h).
 - **Storage:** `STORAGE_DRIVER` (local|s3), `STORAGE_DIR`, `S3_*`.
 - **Scanning:** `SCAN_DRIVER` (noop|clamav), `ALLOW_UNSCANNED_UPLOADS`, `CLAMAV_*`.
-- **Rate limit:** `THROTTLE_TTL/LIMIT/INTAKE_LIMIT`.
+- **Rate limit:** `THROTTLE_TTL/LIMIT/INTAKE_LIMIT`, and `TRUST_PROXY` — Express `trust proxy` setting (number of hops / `loopback` / CIDR list; numeric strings coerced). **Default OFF.** Behind a load balancer, `ThrottlerGuard` keys on `req.ip` which is the proxy's address (one shared bucket for everyone), so this must be set to the real hop count in prod; but enabling it blindly lets any client spoof `X-Forwarded-For` and evade limits entirely, so it's an explicit operator choice — unset in prod is a boot **warning**, not fatal (single-container deploys have no proxy).
 - **Mail:** `SMTP_*` (blank = log instead of send), `MAIL_FROM`, `APP_URL`.
 - **SLA:** `SLA_HOURS_CRITICAL/HIGH/MEDIUM/LOW`, `SLA_AT_RISK_FRACTION` (env defaults). Per-platform overrides live in the DB (`platforms.sla_policy` jsonb, set via Admin → Platforms → SLA), not env.
-- **Cron sweeps:** `SLA_SWEEP_ENABLED` (breach escalation every 5 min) and `DIGEST_ENABLED` (Mon 08:00 weekly digest) — **both default on**; set `=false` to disable. → [[Backend Modules and API|Scheduled jobs]].
+- **Cron sweeps:** `SLA_SWEEP_ENABLED` (breach escalation every 5 min), `DIGEST_ENABLED` (Mon 08:00 weekly digest), and `SCAN_RETRY_ENABLED` (re-scan stuck-PENDING attachments every 10 min — [[Module - Storage and Scanning]]) — **all default on**; set `=false` to disable. → [[Backend Modules and API|Scheduled jobs]].
 - **Jira:** `JIRA_BASE_URL/EMAIL/API_TOKEN/WEBHOOK_SECRET` (blank = disabled).
 - **Policy:** `FOCAL_POINT_CAN_TRANSITION` (OD-09, default false).
 - **Self-support:** `SELF_SUPPORT_PLATFORM_KEY` (default `cimp`) → [[Integrations]].

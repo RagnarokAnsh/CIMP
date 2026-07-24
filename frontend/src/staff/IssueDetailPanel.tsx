@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ActivitySquare, AtSign, ChevronDown, Copy, Lock, Megaphone, MessageSquare, Send,
@@ -9,14 +10,16 @@ import { staffApi } from '@/api/client';
 import { AttachmentGallery } from '@/components/AttachmentGallery';
 import { Spinner } from '@/components/ui/spinner';
 import type {
-  AssigneeOption, CommentVisibility, IssueStatus, Priority, StaffIssueDetail, StaffMe,
+  AssigneeOption, CommentVisibility, IssueStatus, Priority, StaffIssueDetail,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
 import { STATUS_META, PRIORITY_META, BADGE_TONE } from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
-import { canWriteOn } from '@/lib/permissions';
+import { canTransitionStatusOn, canWriteOn } from '@/lib/permissions';
 import { firstLine, dateTime } from '@/lib/format';
+import { toastMutationError } from '@/lib/toast-error';
+import { useMe } from '@/lib/use-me';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -81,17 +84,10 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['staff', 'issue', id] });
-  const onError = (e: any) => {
-    if (e?.response?.status === 409) {
-      // Stale optimistic-lock version: refetch so the next action uses the
-      // current version instead of looping on the same conflict.
-      refresh();
-      toast.error('This issue changed elsewhere — reloaded, try again.');
-      return;
-    }
-    const msg = e?.response?.data?.message ?? 'Action failed.';
-    toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
-  };
+  // Every mutation here carries an optimistic-lock version, so a 409 must refetch
+  // before the user retries — otherwise the retry conflicts on the stale version
+  // forever. `refresh` is that refetch; the rest falls through to the shared toast.
+  const onError = (e: unknown) => toastMutationError(e, refresh);
 
   const changeStatus = useMutation({
     mutationFn: (status: IssueStatus) =>
@@ -128,14 +124,15 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
     queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
   }
 
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
   // Watchers are read-only: hide mutation UI and skip the write-role-only
   // queries (/assignees and /members 403 for them). Server enforces regardless.
   const canWrite = canWriteOn(me, data?.platform?.id);
+  // Status transitions are a narrower grant than write: a FOCAL_POINT may set
+  // priority and assignee but only change status when the server's OD-09 policy
+  // (FOCAL_POINT_CAN_TRANSITION) is on, exposed via me.policy. Gating the buttons
+  // on this stops us offering a move that would reliably 403.
+  const canTransition = canTransitionStatusOn(me, data?.platform?.id);
   const { data: assignees } = useQuery({
     queryKey: ['staff', 'issue', id, 'assignees'],
     queryFn: async () => (await staffApi.get<AssigneeOption[]>(`/staff/issues/${id}/assignees`)).data,
@@ -244,9 +241,9 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           <Alert>
             <AlertDescription>
               Duplicate of{' '}
-              <a href={`/staff/issues/${data.duplicateOf.id}`} className="font-mono text-primary hover:underline">
+              <Link to={`/staff/issues/${data.duplicateOf.id}`} className="font-mono text-primary hover:underline">
                 {data.duplicateOf.referenceNo}
-              </a>
+              </Link>
               {' '}— closed here; the reporter is notified when that issue resolves.
             </AlertDescription>
           </Alert>
@@ -486,9 +483,9 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                   <span className="text-muted-foreground">Duplicates ({data.duplicates.length})</span>
                   <div className="flex flex-wrap gap-1.5">
                     {data.duplicates.map((d) => (
-                      <a key={d.id} href={`/staff/issues/${d.id}`} className="font-mono text-xs text-primary hover:underline">
+                      <Link key={d.id} to={`/staff/issues/${d.id}`} className="font-mono text-xs text-primary hover:underline">
                         {d.referenceNo}
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -507,12 +504,21 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Move status to</p>
-                <div className="flex flex-wrap gap-2">
-                  {STATUS_TRANSITIONS[data.status].map((s) => (
-                    <Button key={s} size="sm" variant="secondary" disabled={busy} onClick={() => changeStatus.mutate(s)}>
-                      {STATUS_META[s].label}
-                    </Button>
-                  ))}
+                {/* Merge stays available whether or not status transitions do —
+                    it's an administrative write a focal point legitimately holds,
+                    not a state-machine move. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {canTransition ? (
+                    STATUS_TRANSITIONS[data.status].map((s) => (
+                      <Button key={s} size="sm" variant="secondary" disabled={busy} onClick={() => changeStatus.mutate(s)}>
+                        {STATUS_META[s].label}
+                      </Button>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Changing status isn’t available to your role on this platform.
+                    </p>
+                  )}
                   {!data.duplicateOf && data.status !== 'CLOSED' && (
                     <MergeIssueButton
                       issueId={id}

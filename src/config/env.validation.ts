@@ -42,6 +42,12 @@ class EnvVars {
   @IsString()
   JWT_SECRET?: string;
 
+  // Express `trust proxy`: hop count ('1'), 'loopback', or a comma-separated
+  // IP/CIDR list. Unset means X-Forwarded-For is ignored (see the warning below).
+  @IsOptional()
+  @IsString()
+  TRUST_PROXY?: string;
+
   @IsOptional()
   @IsString()
   SCAN_DRIVER?: string;
@@ -77,6 +83,10 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
   );
 
   const problems: string[] = [];
+  // Degraded-but-working posture: reported, never fatal. Everything in
+  // `problems` aborts boot in production, which would be wrong for these —
+  // a single-container deploy with no proxy in front is correctly configured.
+  const warnings: string[] = [];
 
   // DB_SYNCHRONIZE defaults to true in configuration.ts; auto-syncing the schema
   // against entities in production can silently alter/drop columns.
@@ -108,6 +118,25 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
       'SCAN_DRIVER must be "clamav" in production (uploads are otherwise served '
       + 'unscanned). Set ALLOW_UNSCANNED_UPLOADS=true to consciously accept this risk.',
     );
+  }
+
+  // ThrottlerGuard keys on req.ip, and Express only derives that from
+  // X-Forwarded-For when `trust proxy` is set. Unset behind an LB/ingress, every
+  // client shares one bucket: one attacker eats the whole login budget and
+  // legitimate users lock each other out.
+  if (isProd && !parsed.TRUST_PROXY) {
+    warnings.push(
+      'TRUST_PROXY is unset: rate limiting keys on the proxy IP, so per-IP limits apply '
+      + 'to ALL clients combined. Set it to the number of proxy hops (e.g. "1") when '
+      + 'running behind a load balancer. Leave it unset if the app is exposed directly — '
+      + 'trusting X-Forwarded-For with no proxy in front lets clients spoof their IP.',
+    );
+  }
+
+  // Emitted before the fatal block below so a throw there can't hide them.
+  if (warnings.length) {
+    // eslint-disable-next-line no-console
+    console.warn(`[config] Production configuration warning:\n - ${warnings.join('\n - ')}`);
   }
 
   if (problems.length) {

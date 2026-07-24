@@ -1,6 +1,6 @@
 import { QueryFailedError } from 'typeorm';
 import { AuthService } from './auth.service';
-import { AccountStatus } from '../common/enums';
+import { AccountStatus, Role } from '../common/enums';
 
 // Focused on upsertFromClaims — the identity mirror called on EVERY authed
 // request by both the session guard (full claims) and the SSE guard ({sub,tv}).
@@ -103,5 +103,59 @@ describe('AuthService.upsertFromClaims', () => {
     await expect(
       service.upsertFromClaims({ sub: 'oidc|x', tv: 1, name: 'X', email: 'x@cimp.dev' }),
     ).rejects.toThrow('connection reset');
+  });
+});
+
+// The SSE stream is the one path authenticated once and then held open for hours,
+// so it re-authorizes on every heartbeat through refreshAuthenticated. Anything
+// that returns a stale answer here keeps a revoked account receiving live events.
+describe('AuthService.refreshAuthenticated', () => {
+  let staff: any;
+  let roles: any;
+  let service: AuthService;
+
+  const watcher = () => ({
+    id: 'w1',
+    idpSubject: 'local:watcher@cimp.dev',
+    name: 'Watcher',
+    email: 'watcher@cimp.dev',
+    status: AccountStatus.ACTIVE,
+    tokenVersion: 1,
+  });
+
+  beforeEach(() => {
+    staff = {
+      findOne: jest.fn(),
+      create: jest.fn((x: any) => x),
+      save: jest.fn(async (x: any) => x),
+    };
+    roles = { find: jest.fn().mockResolvedValue([]) };
+    service = new AuthService(staff, roles);
+  });
+
+  it('returns the identity plus freshly loaded grants for an ACTIVE user', async () => {
+    staff.findOne.mockResolvedValue(watcher());
+    roles.find.mockResolvedValue([{ role: Role.WATCHER, platform: { id: 'p1' } }]);
+
+    const res = await service.refreshAuthenticated('w1');
+
+    expect(staff.findOne).toHaveBeenCalledWith({ where: { id: 'w1' } });
+    expect(res).toMatchObject({
+      id: 'w1',
+      email: 'watcher@cimp.dev',
+      roles: [{ role: Role.WATCHER, platformId: 'p1' }],
+    });
+  });
+
+  it('returns null once the account is no longer ACTIVE', async () => {
+    staff.findOne.mockResolvedValue({ ...watcher(), status: AccountStatus.DISABLED });
+    expect(await service.refreshAuthenticated('w1')).toBeNull();
+    expect(roles.find).not.toHaveBeenCalled();
+  });
+
+  it('returns null for an id that no longer exists (deleted mid-stream)', async () => {
+    staff.findOne.mockResolvedValue(null);
+    expect(await service.refreshAuthenticated('gone')).toBeNull();
+    expect(roles.find).not.toHaveBeenCalled();
   });
 });

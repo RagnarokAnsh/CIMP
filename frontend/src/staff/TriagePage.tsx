@@ -7,12 +7,14 @@ import {
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
-  AssigneeOption, IssueStatus, Paginated, Priority, StaffIssueDetail, StaffIssueSummary, StaffMe,
+  AssigneeOption, IssueStatus, Paginated, Priority, StaffIssueDetail, StaffIssueSummary,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { STATUS_META, PRIORITY_META, BADGE_TONE } from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
 import { canWriteOn } from '@/lib/permissions';
+import { toastMutationError } from '@/lib/toast-error';
+import { useMe } from '@/lib/use-me';
 import { useHotkeys } from '@/lib/use-hotkeys';
 import { relativeTime } from '@/lib/format';
 import { Button } from '@/components/ui/button';
@@ -49,11 +51,7 @@ export function TriagePage() {
     queryFn: async () => (await staffApi.get<StaffIssueDetail>(`/staff/issues/${current!.id}`)).data,
     enabled: Boolean(current),
   });
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
   const canWrite = canWriteOn(me, detail?.platform?.id);
   const { data: assignees } = useQuery({
     queryKey: ['staff', 'issue', current?.id, 'assignees'],
@@ -67,11 +65,12 @@ export function TriagePage() {
     // The completed item leaves the NEW queue on refetch; keep the same index
     // so the next untriaged issue slides into place.
   };
-  const onError = (e: any) => {
-    const msg = e?.response?.data?.message ?? 'Action failed.';
-    toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
-    queryClient.invalidateQueries({ queryKey: ['staff', 'issue', current?.id] });
-  };
+  // A 409 refetches the open issue so its optimistic-lock version is fresh before
+  // the operator's next keystroke. Narrowed to 409 on purpose: a failed write
+  // (400/500) never mutated the row, so the cached version is still valid and a
+  // blanket invalidation would just add a needless round-trip mid-triage.
+  const onError = (e: unknown) =>
+    toastMutationError(e, () => queryClient.invalidateQueries({ queryKey: ['staff', 'issue', current?.id] }));
 
   const setPriority = useMutation({
     mutationFn: (priority: Priority) =>

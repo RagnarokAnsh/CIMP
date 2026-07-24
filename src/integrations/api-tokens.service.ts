@@ -8,6 +8,7 @@ import { ApiToken, Issue } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
 import { STAFF_WRITE_ROLES } from '../authz/role-sets';
+import { PlatformStatus } from '../common/enums';
 
 const sha256 = (v: string): string => createHash('sha256').update(v).digest('hex');
 
@@ -70,6 +71,11 @@ export class ApiTokensService {
       relations: { platform: true },
     });
     if (!token) return null;
+    // Disabling a platform is the documented retirement path, and every other auth path
+    // already refuses a non-ACTIVE one (HandoffService.verify, SelfSupportService.mintForStaff).
+    // Without this the integration read API would keep serving issue descriptions for a
+    // platform that was switched off. Null becomes the guard's existing 401.
+    if (token.platform?.status !== PlatformStatus.ACTIVE) return null;
     // Best-effort last-used stamp; don't block the request on it.
     this.tokens.update({ id: token.id }, { lastUsedAt: new Date() }).catch(() => undefined);
     return token;

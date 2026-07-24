@@ -178,8 +178,10 @@ export class MergeService {
           await em.save(
             em.create(Comment, {
               issue: { id: dup.id } as Issue,
+              // Event-driven fan-out: no staff member authored this, so SYSTEM rather
+              // than STAFF (the reporter still sees it attributed to "Support").
               author: null,
-              authorType: ActorType.STAFF,
+              authorType: ActorType.SYSTEM,
               body: 'The underlying problem this issue duplicated has been resolved.',
               visibility: CommentVisibility.REPORTER_VISIBLE,
             }),

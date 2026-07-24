@@ -2,12 +2,25 @@
 title: Changelog
 tags: [cimp, changelog, updates]
 type: log
-updated: 2026-07-22
+updated: 2026-07-24
 ---
 # Changelog / Updates Log
 ← [[CIMP - Home]] · [[Session Handoff]]
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+
+## 2026-07-24 — Audit remediation batch: security, correctness, consistency, dedup
+
+A multi-agent audit pass (OWASP + correctness + reuse) surfaced ~30 findings; this batch fixes essentially all of them. **215 unit + 40 e2e pass; both typechecks clean; ESLint now wired and green.** Grouped:
+
+- **Tenant isolation / enumeration.** `bulkUpdate` collapsed its not-found vs out-of-scope skip reasons to one indistinguishable string — the endpoint carries no `:id`, so `PlatformAccessGuard` never ran and it leaked the same 403-vs-404 oracle the guard defends. And a malformed (non-UUID) `:id` reached Postgres (guards run before `ParseUUIDPipe`) → `22P02` → **500 on every `/staff/issues/:id/*` route**; the guard now rejects it as 404 pre-DB, with a defensive `22P02`→400 branch in `AllExceptionsFilter`. → [[Module - Issues]] · [[Module - Authz]] · [[Module - Common and Config]]
+- **Revocation that wasn't live.** The SSE stream captured platform scope once at connect and held it for hours; now it re-resolves every 25s on the heartbeat via `AuthService.refreshAuthenticated` and ends the stream when the account goes non-ACTIVE (grant/disable revocation is live; a password-reset `tokenVersion` bump still waits for reconnect). Disabled staff also kept getting notification emails/bell rows (`activeRecipients` never checked status despite its name) — now filtered ACTIVE at every path. API tokens kept working on a DISABLED platform — `authenticate` now checks platform status like every other auth path. → [[Module - Realtime]] · [[Module - Auth]] · [[Module - Notifications]] · [[Module - Integrations]]
+- **Outbound safety.** Webhook delivery followed redirects, so a receiver could 302 the signed payload past the SSRF guard to cloud metadata — now `redirect: 'manual'` + CGNAT (`100.64/10`) added to the blocklist. → [[Integrations]] · [[Security Audit and Hardening]]
+- **Automation parity.** Rules could assign issues to staff with no platform access and emitted **no** domain events (assignee never notified, no webhook/SSE); `actionValue` is now validated per-action at write **and** apply time (mirroring `IssuesService`), and SET_PRIORITY/ASSIGN emit the same events the manual path does. No event loop (the listener only reacts to CREATED/STATUS_CHANGED). → [[Features - Shipped]] · [[Module - Issues]]
+- **Jira.** Inbound status writes now run the shared `applyStatusSideEffects` (extracted from `IssuesService` into `status-side-effects.ts`) — a Jira-driven reopen no longer instantly re-breaches SLA or leaves a stale `closedAt`. A PENDING sync claim older than 15 min is retried instead of wedging forever; summaries are whitespace-collapsed/≤255 chars. → [[Module - Jira]] · [[Module - Issues]]
+- **Durability.** Failed scans no longer strand a file at PENDING forever — a `scan-retry.service.ts` cron re-scans stuck files every 10 min (15-min grace so it can't race intake). The `StorageService` seam gained `delete`, wired into reporter intake so a failed persist doesn't orphan blobs. Saved views are now size- and count-capped. → [[Module - Storage and Scanning]] · [[Module - Reporter]] · [[Module - Saved Views]]
+- **Rate limiting behind a proxy.** Added `TRUST_PROXY` (default off, prod warning) so `ThrottlerGuard` keys on the real client IP, not the load balancer's shared bucket. → [[Configuration and Env]]
+- **Consistency + dedup.** System-authored comments now use `ActorType.SYSTEM`; `applyPriority` throws 422 on a no-op like `applyStatus`; login DTO drops its misleading `@MinLength(8)`; context-sanitizer guards `__proto__`. Frontend: the CSV export was a plain `<a href>` (always 401) that dropped most filters — now an authed `downloadFile` off one shared `listParams`; six copies of the `useMe` query, three copies of the 409 handler, and eight bypasses of `toastApiError` consolidated; `canDevelopOn`/`canTransitionStatusOn` share the permission logic and gate the focal-point status buttons (OD-09) via a new `policy` field on `/staff/me`; SPA `<Link>`s replace full-reload anchors. **ESLint flat configs** added for both roots (`.agents/` ignored, `no-undef` off for TS; green baseline, 86+6 warnings). → [[Frontend Overview]] · [[Module - Auth]]
 
 ## 2026-07-23 — Webhook circuit breaker; accordion wrapper padding
 

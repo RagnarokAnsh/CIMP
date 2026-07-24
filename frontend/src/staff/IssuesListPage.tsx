@@ -9,11 +9,14 @@ import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
   BulkResult, IssueStatus, Paginated, PlatformItem, Priority, SavedViewDto,
-  StaffIssueSummary, StaffMe,
+  StaffIssueSummary,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { canWriteAnywhere } from '@/lib/permissions';
+import { downloadFile } from '@/lib/download';
+import { toastApiError } from '@/lib/toast-error';
+import { useMe } from '@/lib/use-me';
 import { SlaBadge } from '@/components/SlaBadge';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { Pager } from '@/components/Pager';
@@ -43,6 +46,7 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 
@@ -59,6 +63,10 @@ interface Filters {
   status: string;
   priority: string;
   q: string;
+  // No control writes this any more — the raw query bar read as clutter sitting
+  // under the dropdowns that people actually reach for. Everything else stays
+  // wired (backend grammar in src/issues/jql.ts, the `jql` query param, saved
+  // views that already persist one), so re-adding a query bar is UI-only work.
   jql: string;
   assignedToMe: boolean;
   platformId: string;
@@ -72,12 +80,32 @@ const DEFAULT_FILTERS: Filters = {
   platformId: '', from: '', to: '', sort: 'createdAt', order: 'DESC',
 };
 
+// One mapping from filter state to query params, shared by the list and the CSV
+// export — the export used to build its own string carrying only status and
+// priority, so the downloaded file silently disagreed with the rows on screen.
+// `page` is deliberately not here: the list appends it, and the export endpoint
+// ignores it (it returns every match up to the server's row cap).
+function listParams(filters: Filters, meId: string | undefined) {
+  return {
+    status: filters.status || undefined,
+    priority: filters.priority || undefined,
+    q: filters.q || undefined,
+    jql: filters.jql || undefined,
+    assigneeId: filters.assignedToMe ? meId : undefined,
+    platformId: filters.platformId || undefined,
+    from: filters.from ? new Date(filters.from).toISOString() : undefined,
+    to: filters.to ? new Date(`${filters.to}T23:59:59`).toISOString() : undefined,
+    sort: filters.sort,
+    order: filters.order,
+  };
+}
+
 export function IssuesListPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [qInput, setQInput] = useState('');
-  const [jqlInput, setJqlInput] = useState('');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saveOpen, setSaveOpen] = useState(false);
   const [viewName, setViewName] = useState('');
@@ -115,35 +143,19 @@ export function IssuesListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qInput, filters.q]);
 
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
   const { data: platforms } = useQuery({
     queryKey: ['staff', 'platforms'],
     queryFn: async () => (await staffApi.get<PlatformItem[]>('/staff/platforms')).data,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['staff', 'issues', filters, page, me?.id],
     placeholderData: keepPreviousData,
     queryFn: async () =>
       (await staffApi.get<Paginated<StaffIssueSummary>>('/staff/issues', {
-        params: {
-          status: filters.status || undefined,
-          priority: filters.priority || undefined,
-          q: filters.q || undefined,
-          jql: filters.jql || undefined,
-          assigneeId: filters.assignedToMe ? me?.id : undefined,
-          platformId: filters.platformId || undefined,
-          from: filters.from ? new Date(filters.from).toISOString() : undefined,
-          to: filters.to ? new Date(`${filters.to}T23:59:59`).toISOString() : undefined,
-          sort: filters.sort,
-          order: filters.order,
-          page,
-        },
+        params: { ...listParams(filters, me?.id), page },
       })).data,
   });
 
@@ -164,10 +176,24 @@ export function IssuesListPage() {
     if (!selectedId || !rows.some((r) => r.id === selectedId)) setSelectedId(rows[0].id);
   }, [view, rows, selectedId]);
 
-  const exportUrl = `/api/staff/issues/export?${new URLSearchParams({
-    ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.priority ? { priority: filters.priority } : {}),
-  }).toString()}`;
+  // The staff bearer token lives in memory and is attached by the axios request
+  // interceptor, so a plain <a href> export always came back 401. Pull the CSV
+  // through the authenticated instance instead (see lib/download.ts).
+  async function exportCsv() {
+    const query = new URLSearchParams(
+      Object.entries(listParams(filters, me?.id))
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    );
+    setExporting(true);
+    try {
+      await downloadFile(staffApi, `/staff/issues/export?${query.toString()}`, 'issues.csv');
+    } catch (e) {
+      toastApiError(e);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const bulk = useMutation({
     mutationFn: (body: { ids: string[]; op: 'status' | 'priority' | 'assignee'; value: string }) =>
@@ -190,7 +216,7 @@ export function IssuesListPage() {
       queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
       queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Bulk update failed.'),
+    onError: toastApiError,
   });
 
   const ids = [...selected];
@@ -198,7 +224,11 @@ export function IssuesListPage() {
     bulk.mutate({ ids, op, value });
 
   function toggleRow(id: string) {
-    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
   }
   function toggleAll() {
     setSelected(allOnPageSelected ? new Set() : new Set(rows.map((r) => r.id)));
@@ -206,7 +236,7 @@ export function IssuesListPage() {
 
   function applyView(v: SavedViewDto) {
     const f = { ...DEFAULT_FILTERS, ...(v.filters as unknown as Filters) };
-    setFilters(f); setQInput(f.q ?? ''); setJqlInput(f.jql ?? ''); setPage(1);
+    setFilters(f); setQInput(f.q ?? ''); setPage(1);
   }
   function saveView() {
     const name = viewName.trim();
@@ -227,11 +257,6 @@ export function IssuesListPage() {
     (filters.status ? 1 : 0) + (filters.priority ? 1 : 0) + (filters.q ? 1 : 0) +
     (filters.jql ? 1 : 0) +
     (filters.assignedToMe ? 1 : 0) + (filters.platformId ? 1 : 0) + (filters.from || filters.to ? 1 : 0);
-
-  // Server-side JQL parse errors come back as 400s — surface them inline.
-  const jqlError = filters.jql && isError
-    ? ((error as any)?.response?.data?.message ?? 'Invalid query.')
-    : null;
 
   const selectedIdx = rows.findIndex((r) => r.id === selectedId);
 
@@ -279,8 +304,9 @@ export function IssuesListPage() {
             <ToggleGroupItem value="list" aria-label="List view"><List className="h-4 w-4" /></ToggleGroupItem>
             <ToggleGroupItem value="split" aria-label="Detail view"><Columns2 className="h-4 w-4" /></ToggleGroupItem>
           </ToggleGroup>
-          <Button asChild variant="outline">
-            <a href={exportUrl}><Download className="h-4 w-4" /> Export CSV</a>
+          <Button variant="outline" onClick={exportCsv} disabled={exporting}>
+            {exporting ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+            Export CSV
           </Button>
         </div>
       </div>
@@ -346,43 +372,10 @@ export function IssuesListPage() {
               variant="ghost"
               size="sm"
               className="text-muted-foreground"
-              onClick={() => { setFilters(DEFAULT_FILTERS); setQInput(''); setJqlInput(''); setPage(1); }}
+              onClick={() => { setFilters(DEFAULT_FILTERS); setQInput(''); setPage(1); }}
             >
               <X className="h-4 w-4" /> Clear
             </Button>
-          )}
-
-          {/* JQL query bar — hidden for now.
-              The dropdown filters cover what people actually reach for, and a
-              raw query language sitting under them mostly read as clutter. The
-              backend grammar (src/issues/jql.ts), the `jql` filter field, its
-              error surfacing, and saved-view persistence all remain wired, so
-              restoring this is deleting the `false &&` below. */}
-          {false && (
-          <>
-            <form
-              className="flex w-full items-center gap-2"
-              onSubmit={(e) => { e.preventDefault(); patch({ jql: jqlInput.trim() }); }}
-            >
-              <Input
-                value={jqlInput}
-                onChange={(e) => setJqlInput(e.target.value)}
-                placeholder='Query: status = NEW AND priority IN (HIGH, CRITICAL) AND assignee = me AND label = bug'
-                className={cn('flex-1 font-mono text-xs', jqlError && 'border-destructive')}
-                aria-label="Filter query"
-                title="Fields: status, priority, platform, assignee, reporter, label, created, updated, text — AND-only; quote values with spaces"
-              />
-              <Button type="submit" size="sm" variant="secondary" disabled={jqlInput.trim() === filters.jql}>
-                Apply query
-              </Button>
-              {filters.jql && (
-                <Button type="button" size="sm" variant="ghost" onClick={() => { setJqlInput(''); patch({ jql: '' }); }}>
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </form>
-            {jqlError && <p className="w-full text-xs text-destructive">{Array.isArray(jqlError) ? jqlError.join(' ') : jqlError}</p>}
-          </>
           )}
         </CardContent>
       </Card>

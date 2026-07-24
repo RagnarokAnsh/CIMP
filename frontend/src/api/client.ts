@@ -10,8 +10,9 @@ reporterApi.interceptors.request.use((config) => {
   return config;
 });
 
-// Staff API: authenticated by an OIDC bearer token. The token getter is set
-// once the auth provider is ready (see staff/auth.tsx).
+// Staff API: authenticated by the self-issued HS256 JWT from POST /api/auth/login
+// (there is no external IdP). The token getter is registered once the staff app
+// mounts (see staff/local-auth.tsx).
 let staffTokenGetter: () => string | undefined = () => undefined;
 export function setStaffTokenGetter(fn: () => string | undefined): void {
   staffTokenGetter = fn;
@@ -21,8 +22,8 @@ export function getStaffToken(): string | undefined {
   return staffTokenGetter();
 }
 
-// Called when a staff request comes back 401 (expired/invalid session). The auth
-// provider (OIDC or dev shim) registers a handler that signs the user out so the
+// Called when a staff request comes back 401 (expired/invalid session). The staff
+// app (staff/local-auth.tsx) registers a handler that signs the user out so the
 // gate re-prompts instead of leaving the UI in a broken, silently-failing state.
 let staffUnauthorizedHandler: () => void = () => {};
 export function setStaffUnauthorizedHandler(fn: () => void): void {

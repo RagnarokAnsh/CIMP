@@ -45,6 +45,25 @@ describe('sanitizeContext', () => {
     expect(depth).toBeLessThanOrEqual(5);
   });
 
+  it('drops prototype-hijacking keys instead of letting them mutate the result', () => {
+    const out = sanitizeContext('{"a":1,"__proto__":{"polluted":true}}')!;
+    expect(out).toEqual({ a: 1 });
+    expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+    expect((out as any).polluted).toBeUndefined();
+    expect(({} as any).polluted).toBeUndefined(); // nothing global was touched
+  });
+
+  it('drops constructor/prototype keys at nested depths too', () => {
+    const out = sanitizeContext(JSON.stringify({
+      nested: { constructor: { x: 1 }, prototype: { y: 2 }, keep: 'ok' },
+    }))!;
+    expect(out).toEqual({ nested: { keep: 'ok' } });
+  });
+
+  it('returns null when a context carries nothing but dangerous keys', () => {
+    expect(sanitizeContext('{"__proto__":{"polluted":true}}')).toBeNull();
+  });
+
   it('returns null when the clamped result still exceeds the total cap', () => {
     // 40 keys × ~1KB strings ≈ 40KB passes; use nested objects to exceed 64KB.
     const big = {

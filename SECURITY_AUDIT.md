@@ -3,6 +3,15 @@
 **Date:** 2026-07-04 · **Scope:** `dev` working tree, ~6,600 LOC backend + 54 frontend files
 **Method:** 11-dimension multi-agent review (OWASP Top 10 + correctness/authz/QA), findings adversarially verified where possible, top items hand-verified against source.
 
+> **Update 2026-07-24 — second remediation batch (a fresh ~30-finding audit pass).** Fixed:
+> bulk-endpoint enumeration oracle; non-UUID `:id` → 500 (guard now 404s pre-DB + `22P02`→400 filter);
+> **live revocation** on the SSE stream (re-auth per heartbeat), notifications (ACTIVE filter), and API
+> tokens (platform-status check); webhook redirect-following SSRF (`redirect:'manual'` + CGNAT block);
+> automation validation + domain events; Jira inbound side-effects (shared helper) + PENDING staleness;
+> scan-retry cron; storage `delete` + intake cleanup; `TRUST_PROXY`; plus consistency/dedup and an ESLint
+> gate. **215 unit + 40 e2e green.** Full write-up: `vault/08 Meta/Changelog.md` (2026-07-24).
+> Remaining known gap: webhook DNS-rebinding (hostname-string check, admin-gated).
+
 **Verdict:** Not production-ready as-is. Strong architecture (centralized authz, optimistic locking, event decoupling, scan-gating, fail-closed config *design*), but one hard boot-blocker, several ways the security layer silently turns *off*, and thin coverage on the trust boundaries. All fixable without rewrites.
 
 | Severity | Count |

@@ -46,6 +46,9 @@ describe('WebhooksService', () => {
       'https://172.16.0.1/hook',
       'https://172.31.255.1/hook',
       'https://169.254.169.254/latest/meta-data',
+      'https://100.64.0.1/hook', // carrier-grade NAT, bottom of 100.64.0.0/10
+      'https://100.100.1.1/hook',
+      'https://100.127.255.255/hook', // top of 100.64.0.0/10
       'https://[::1]/hook',
       'https://[::ffff:169.254.169.254]/latest/meta-data', // IPv4-mapped v6 → metadata IP
       'https://[::ffff:7f00:1]/hook', // IPv4-mapped v6 → 127.0.0.1
@@ -61,6 +64,8 @@ describe('WebhooksService', () => {
       'https://example.com/hook',
       'https://hooks.internal-tools.io/cimp?x=1',
       'https://172.32.0.1/hook', // outside the 172.16-31 private block
+      'https://100.63.255.1/hook', // just below 100.64.0.0/10
+      'https://100.128.0.1/hook', // just above 100.64.0.0/10
     ])('allows %s', (url) => {
       expect(() => service.assertSafeUrl(url)).not.toThrow();
     });
@@ -116,6 +121,21 @@ describe('WebhooksService', () => {
       await service.deliver('issue.created', 'pA', {});
       await flush();
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // Following redirects would let the receiver's operator — who is not the admin
+    // who added the endpoint — bounce us to an address assertSafeUrl never vetted.
+    it('does not follow redirects, and treats a 3xx as a failed delivery', async () => {
+      const warn = jest.spyOn((service as any).logger, 'warn').mockImplementation(() => {});
+      endpoints.find.mockResolvedValue([ep()]);
+      fetchMock.mockResolvedValue({ ok: false, status: 302 });
+      await service.deliver('issue.created', 'pA', {});
+      await until(() => fetchMock.mock.calls.length >= 4);
+
+      expect(fetchMock.mock.calls[0][1].redirect).toBe('manual');
+      expect(fetchMock).toHaveBeenCalledTimes(4); // 3xx is a failure: retried, then given up on
+      // The operator can tell a redirect from a 500 without reading the code.
+      expect(warn.mock.calls[0][0]).toMatch(/redirected \(HTTP 302\)/);
     });
   });
 

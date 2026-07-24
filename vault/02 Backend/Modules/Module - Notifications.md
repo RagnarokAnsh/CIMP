@@ -29,7 +29,7 @@ Exported provider: `NotificationsService` (consumed elsewhere; the listener is t
 ## Key classes & logic
 
 ### NotificationsService
-Recipient resolution helper `activeRecipients(users)` dedupes by `id` and drops any user without an `email`. Note: `notifyMentions` and `listForStaff` filter on `AccountStatus.ACTIVE`, but the email dispatch paths (`activeRecipients`) do **not** re-check account status — they filter only on presence + email + dedupe.
+Recipient resolution helper `activeRecipients(users)` dedupes by `id`, drops any user without an `email`, **and now drops non-`ACTIVE` accounts** (fixed 2026-07-24 — the name had been lying). `focalPointsFor(platformId)` additionally filters `staffUser.status = ACTIVE` at the query level, so a disabled focal point's row never loads. Every email/bell path now matches `notifyMentions`/`listForStaff`, which already enforced ACTIVE.
 
 Notification methods:
 - **`notifyFocalPointsOfNewIssue(issueId, platformId)`** (FR-NOT-01) — loads focal-point grants (`UserPlatformRole` where `role = FOCAL_POINT` AND `platform.id = platformId`; global focal points don't exist), emails each with subject `[<platformKey>] New issue <referenceNo>`, trigger `issue.created`.
@@ -79,7 +79,7 @@ See [[Data Model]] for full entity graph.
 - Notification failures are non-fatal: listeners and `dispatch` swallow errors so the originating request always succeeds.
 - Actor-exclusion applies to `notifyStatusChange` and `notifyMentions` only; `notifyReporterReply` does not exclude anyone (there is no staff actor).
 - Mentions never send email (IN_APP only); email notifications always also create a bell row (so they surface in both places).
-- `activeRecipients` (email paths) filters on email presence + dedupe but does **not** check `AccountStatus` — a DISABLED staff user with an email could still be emailed on create/assign/status/reply. Only mention + list paths enforce ACTIVE.
+- `activeRecipients` (email paths) now filters on `AccountStatus.ACTIVE` in addition to email presence + dedupe, and `focalPointsFor` filters ACTIVE at the query level — a DISABLED staff user is no longer emailed on create/assign/status/reply (previously they were; only mention + list paths enforced it).
 - Recipient enum supports `REPORTER`, but this module only writes STAFF rows; reporter updates flow via `hasUpdates` (OD-02).
 - With no `SMTP_HOST`, all "sends" are logged and `NotificationLog.status` is still recorded as `SENT` (since `mail.send` resolves without throwing).
 

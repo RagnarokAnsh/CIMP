@@ -8,6 +8,9 @@ export class SaveViewDto {
   @MaxLength(60)
   name: string;
 
+  // Size is capped in SavedViewsService.save, not here: class-validator has no
+  // serialized-byte constraint (@MaxLength measures string length only), and the
+  // payload is deliberately opaque so its keys can't be enumerated on a DTO.
   @ApiProperty({ description: 'Opaque filter payload owned by the frontend.' })
   @IsObject()
   filters: Record<string, unknown>;

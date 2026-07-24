@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
-import type { PlatformItem, Role, StaffMe, StaffWithRoles } from '@/api/types';
+import type { PlatformItem, Role, StaffWithRoles } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { SecretOnceDialog } from '@/components/SecretOnce';
 import { initials } from '@/lib/format';
 import { toastApiError } from '@/lib/toast-error';
+import { useMe } from '@/lib/use-me';
 import { cn } from '@/lib/utils';
 import { roleLabel, TEXT_TONE } from '@/lib/issue-meta';
 import { IntegrationsTab, WebhooksTab } from './AdminIntegrations';
@@ -412,11 +413,7 @@ function StaffTab() {
   });
   // Used to mark "you" and to hide self-destructive actions the server rejects
   // anyway — better to not offer them than to explain a 400.
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'staff'] });
   const onError = toastApiError;

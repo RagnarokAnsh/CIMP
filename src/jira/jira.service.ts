@@ -11,6 +11,11 @@ import { Issue, Platform } from '../entities';
 // documented approach for server-to-server calls.
 const REQUEST_TIMEOUT_MS = 15_000;
 
+// Jira caps the summary field at 255 characters and rejects the whole create
+// call if it overflows — the reference prefix counts toward it.
+const SUMMARY_MAX = 255;
+const SUMMARY_BODY_MAX = 200;
+
 @Injectable()
 export class JiraService {
   private readonly logger = new Logger(JiraService.name);
@@ -30,7 +35,7 @@ export class JiraService {
     const body = {
       fields: {
         project: { key: platform.jiraProjectKey },
-        summary: `[${issue.referenceNo}] ${issue.description.slice(0, 200)}`,
+        summary: this.summaryFor(issue),
         description: this.toAdf(issue.description),
         issuetype: { name: 'Task' },
         priority: { name: this.mapPriority(issue.priority) },
@@ -104,6 +109,14 @@ export class JiraService {
     return `Basic ${Buffer.from(`${email}:${token}`).toString('base64')}`;
   }
 
+  // Jira rejects a summary containing a newline, so any multi-line report failed
+  // to sync at all. Flatten to one line first (same idea as IssuesService.preview),
+  // then clamp — slicing raw text would just carry the newlines through.
+  private summaryFor(issue: Issue): string {
+    const oneLine = (issue.description ?? '').replace(/\s+/g, ' ').trim();
+    return `[${issue.referenceNo}] ${oneLine.slice(0, SUMMARY_BODY_MAX)}`.slice(0, SUMMARY_MAX);
+  }
+
   private mapPriority(p: Priority): string {
     switch (p) {
       case Priority.CRITICAL: return 'Highest';
@@ -113,12 +126,15 @@ export class JiraService {
     }
   }
 
-  // Jira v3 expects Atlassian Document Format for rich-text fields.
+  // Jira v3 expects Atlassian Document Format for rich-text fields. A text node
+  // whose content is empty/whitespace is invalid ADF and fails the whole call,
+  // while an empty paragraph is fine — so drop the node rather than send a blank.
   private toAdf(text: string) {
+    const content = (text ?? '').trim() ? [{ type: 'text', text }] : [];
     return {
       type: 'doc',
       version: 1,
-      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+      content: [{ type: 'paragraph', content }],
     };
   }
 }

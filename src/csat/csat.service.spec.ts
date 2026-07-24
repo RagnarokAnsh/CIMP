@@ -1,6 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { CsatService } from './csat.service';
-import { CommentVisibility, IssueStatus } from '../common/enums';
+import { ActorType, CommentVisibility, IssueStatus } from '../common/enums';
 import { IssueEvents } from '../events/issue-events';
 
 describe('CsatService', () => {
@@ -59,6 +59,9 @@ describe('CsatService', () => {
     const note = comments.save.mock.calls[0][0];
     expect(note.visibility).toBe(CommentVisibility.INTERNAL);
     expect(note.body).toContain('still broken');
+    // Nobody wrote it — must not be attributed to staff.
+    expect(note.author).toBeNull();
+    expect(note.authorType).toBe(ActorType.SYSTEM);
   });
 
   it('re-rating overwrites the existing response and does not re-flag', async () => {

@@ -9,6 +9,16 @@ const MAX_ARRAY_ITEMS = 25;
 const MAX_OBJECT_KEYS = 40;
 const MAX_DEPTH = 5;
 
+// JSON.parse creates `__proto__` as a plain OWN property, so it survives
+// Object.keys — but `out['__proto__'] = v` on a normal object literal hits
+// Object.prototype's __proto__ SETTER instead of creating a key: the entry is
+// silently swallowed and the sanitized object comes back with a hijacked
+// prototype. Nothing global is polluted (the accumulator is fresh and
+// JSON.stringify walks own keys only), so this is defensive hardening rather
+// than a live RCE — but reporter-controlled input must not be able to hand
+// downstream code an object whose inherited members it chose.
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
 function clampValue(value: unknown, depth: number): unknown {
   if (depth > MAX_DEPTH) return undefined;
   if (typeof value === 'string') {
@@ -25,7 +35,10 @@ function clampValue(value: unknown, depth: number): unknown {
   }
   if (typeof value === 'object') {
     const out: Record<string, unknown> = {};
-    for (const key of Object.keys(value as object).slice(0, MAX_OBJECT_KEYS)) {
+    // Drop the dangerous keys before slicing, so a padded payload can't spend
+    // the key budget on entries we were going to discard anyway.
+    const keys = Object.keys(value as object).filter((k) => !DANGEROUS_KEYS.has(k));
+    for (const key of keys.slice(0, MAX_OBJECT_KEYS)) {
       const clamped = clampValue((value as Record<string, unknown>)[key], depth + 1);
       if (clamped !== undefined) out[key.slice(0, 100)] = clamped;
     }

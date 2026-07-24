@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { MergeService } from './merge.service';
 import { IssueEvents } from '../events/issue-events';
-import { CommentVisibility, IssueStatus } from '../common/enums';
+import { ActorType, CommentVisibility, IssueStatus } from '../common/enums';
 
 describe('MergeService', () => {
   const staff = { id: 's1' } as any;
@@ -129,6 +129,9 @@ describe('MergeService', () => {
     expect(comments[0].issue).toEqual({ id: 'dup' });
     expect(comments[1].visibility).toBe(CommentVisibility.INTERNAL);
     expect(comments[1].issue).toEqual({ id: 'canon' });
+    // A person clicked merge, so both carry the real staff author.
+    expect(comments.every((c: any) => c.authorType === ActorType.STAFF)).toBe(true);
+    expect(comments.every((c: any) => c.author?.id === 's1')).toBe(true);
 
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'MERGED', issueId: 'dup', newValue: 'canon' }),
@@ -152,6 +155,9 @@ describe('MergeService', () => {
       const comments = em.save.mock.calls.map((c: any[]) => c[0]);
       expect(comments).toHaveLength(2);
       expect(comments.every((c: any) => c.visibility === CommentVisibility.REPORTER_VISIBLE)).toBe(true);
+      // Fan-out has no acting staff member: SYSTEM, never STAFF.
+      expect(comments.every((c: any) => c.author === null)).toBe(true);
+      expect(comments.every((c: any) => c.authorType === ActorType.SYSTEM)).toBe(true);
       expect(em.createQueryBuilder).toHaveBeenCalledTimes(2); // updatedAt bumps
     });
 

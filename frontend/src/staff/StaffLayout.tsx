@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import {
   ChevronsLeft, Inbox, LayoutDashboard, LifeBuoy, ListChecks, LogOut,
   Menu, ScrollText, Search, Settings, Trello,
 } from 'lucide-react';
-import { staffApi } from '@/api/client';
-import type { StaffMe } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { initials } from '@/lib/format';
 import { openCommandPalette } from '@/lib/motion';
+import { useMe } from '@/lib/use-me';
 import { useStaffRealtime } from '@/lib/realtime';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -22,11 +21,6 @@ import { CommandPalette } from './CommandPalette';
 import { NotificationsBell } from './NotificationsBell';
 import { SupportButton } from './SupportButton';
 
-function initials(name?: string): string {
-  if (!name) return '?';
-  return name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
-}
-
 const COLLAPSE_KEY = 'cimp_sidebar_collapsed';
 
 export function StaffLayout({
@@ -36,11 +30,7 @@ export function StaffLayout({
   children: React.ReactNode;
   onSignOut: () => void;
 }) {
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
 
   // Live updates over SSE — keeps the board, lists, detail and bell fresh.
   useStaffRealtime();

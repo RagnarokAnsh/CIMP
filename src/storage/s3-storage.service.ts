@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  GetObjectCommand, PutObjectCommand, S3Client,
+  DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client,
 } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
@@ -50,5 +50,13 @@ export class S3StorageService extends StorageService {
     const bytes = await res.Body?.transformToByteArray();
     if (!bytes) throw new Error(`Object ${storageKey} has no body`);
     return Buffer.from(bytes);
+  }
+
+  async delete(storageKey: string): Promise<void> {
+    // DeleteObject is already idempotent on S3 — deleting a key that isn't there
+    // succeeds — so there is no not-found case to swallow.
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: storageKey }),
+    );
   }
 }

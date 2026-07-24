@@ -14,6 +14,14 @@ const SERVABLE_SCAN = [ScanStatus.CLEAN, ScanStatus.SKIPPED];
 
 const MAX_ATTEMPTS = 3;
 
+// How long a PENDING claim is trusted before it's treated as abandoned. PENDING
+// means "a create call is in flight"; if the process dies between claiming and
+// writing the key back, nothing else ever revisits that row and the issue is
+// wedged forever. Far longer than a live attempt can take (3 tries × a 15s
+// request timeout + backoff ≈ 50s), so a genuinely in-flight call is never
+// stolen and a double-create needs a crash inside this window.
+const PENDING_STALE_MS = 15 * 60_000;
+
 // Pushes newly created issues into the mapped Jira project. Never blocks intake
 // (it's an async listener); records jiraSyncStatus and retries on failure.
 @Injectable()
@@ -40,12 +48,14 @@ export class JiraListener {
     }
     // Idempotency: never create a second Jira issue if this one is already
     // synced or in flight (a re-delivered event would otherwise duplicate it).
-    if (
-      issue.jiraIssueKey ||
-      issue.jiraSyncStatus === JiraSyncStatus.SYNCED ||
-      issue.jiraSyncStatus === JiraSyncStatus.PENDING
-    ) {
-      return;
+    if (issue.jiraIssueKey || issue.jiraSyncStatus === JiraSyncStatus.SYNCED) return;
+    // …but only trust an in-flight claim for as long as one could plausibly be
+    // in flight, otherwise a crash mid-create leaves PENDING with no retry path.
+    if (issue.jiraSyncStatus === JiraSyncStatus.PENDING) {
+      if (!this.isPendingClaimStale(issue)) return;
+      this.logger.warn(
+        `Jira sync for ${issue.referenceNo} left PENDING past the staleness window; retrying.`,
+      );
     }
 
     await this.issues.update(issue.id, { jiraSyncStatus: JiraSyncStatus.PENDING });
@@ -133,6 +143,16 @@ export class JiraListener {
     }
   }
 
+  // No dedicated claim timestamp exists, but `updated_at` is an @UpdateDateColumn
+  // and TypeORM bumps it on the `update(...)` that writes PENDING — so it dates
+  // the claim. Unrelated edits also bump it, which can only delay a retry (never
+  // trigger a premature one), and a missing value means we can't vouch for the
+  // claim at all, so treat it as abandoned rather than wedge the issue.
+  private isPendingClaimStale(issue: Issue): boolean {
+    const claimedAt = issue.updatedAt ? new Date(issue.updatedAt).getTime() : 0;
+    return Date.now() - claimedAt > PENDING_STALE_MS;
+  }
+
   private async withRetry<T>(fn: () => Promise<T>): Promise<T> {
     let lastErr: unknown;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -140,7 +160,9 @@ export class JiraListener {
         return await fn();
       } catch (err) {
         lastErr = err;
-        await this.delay(attempt * 500);
+        // Nothing follows the last attempt, so backing off after it only holds
+        // the listener (and the PENDING claim) open for no gain.
+        if (attempt < MAX_ATTEMPTS) await this.delay(attempt * 500);
       }
     }
     throw lastErr;

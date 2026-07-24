@@ -52,6 +52,12 @@ export interface StaffMe {
   name: string;
   email: string;
   roles: { role: Role; platformId: string | null }[];
+  /**
+   * Mirrors the server's FOCAL_POINT_CAN_TRANSITION seam (OD-09) so the UI can
+   * hide controls the server would 403. Gating only — the server still decides.
+   * Optional: absent on older responses, and absence must read as "off".
+   */
+  policy?: { focalPointCanTransition: boolean };
 }
 
 /** A row from GET /admin/staff — the account plus its role grants. */

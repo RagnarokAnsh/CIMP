@@ -9,14 +9,16 @@ import {
 import { Inbox, MoveRight, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
-import type { IssueStatus, Paginated, Priority, StaffIssueSummary, StaffMe } from '@/api/types';
+import type { IssueStatus, Paginated, Priority, StaffIssueSummary } from '@/api/types';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { BOARD_STATUS_ORDER, STATUS_TRANSITIONS, canTransition } from '@/lib/issue-status';
 import { STATUS_META } from '@/lib/issue-meta';
-import { canWriteOn } from '@/lib/permissions';
+import { canDevelopOn, canWriteOn } from '@/lib/permissions';
 import { relativeTime, initials } from '@/lib/format';
+import { toastApiError } from '@/lib/toast-error';
+import { useMe } from '@/lib/use-me';
 import { PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -67,11 +69,7 @@ export function BoardPage() {
       })).data,
   });
 
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
 
   // Local working copy so a drag updates the board instantly; re-synced whenever
   // the server query settles (which also refreshes optimistic-lock versions).
@@ -140,6 +138,30 @@ export function BoardPage() {
     },
   });
 
+  // Assignment goes through the same TanStack path as every other mutation in the
+  // app (it was the one hand-rolled `.then/.catch` promise chain). The optimistic
+  // update + rollback live in the caller, exactly like moveIssue, so the drag and
+  // the "assign to me" button share one write path.
+  const assign = useMutation({
+    mutationFn: (v: { id: string; assigneeId: string; version: number }) =>
+      staffApi.patch(`/staff/issues/${v.id}/assignment`, { assigneeId: v.assigneeId, version: v.version }),
+  });
+
+  // Both board writes fail the same two ways. A 409 means our optimistic-lock
+  // version is stale, so refetch before the user retries or the retry conflicts
+  // on the same version forever. The message names the card on purpose: the
+  // shared `toastMutationError` wording can't, and on a board of up to 100 cards
+  // "this changed elsewhere" doesn't tell you which one just snapped back.
+  // Everything else is an ordinary API error — that part is the shared helper.
+  function handleMutationError(err: unknown, issue: StaffIssueSummary) {
+    if ((err as any)?.response?.status === 409) {
+      queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
+      toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
+      return;
+    }
+    toastApiError(err);
+  }
+
   // Shared by drag-and-drop and the per-card quick-move menu: optimistically
   // move the card, then persist with the optimistic-lock version.
   function moveIssue(issue: StaffIssueSummary, target: IssueStatus) {
@@ -160,17 +182,10 @@ export function BoardPage() {
       { id: issue.id, status: target, version: issue.version },
       {
         onSuccess: () => toast.success(`${issue.referenceNo} → ${STATUS_META[target].label}.`),
-        onError: (err: any) => {
+        onError: (err) => {
           // Roll back the optimistic move and explain.
           setItems((prev) => prev.map((i) => (i.id === issue.id ? { ...i, status: from } : i)));
-          if (err?.response?.status === 409) {
-            // Pull fresh rows + versions so the retry doesn't conflict again.
-            queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
-            toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
-            return;
-          }
-          const msg = err?.response?.data?.message ?? 'Move failed.';
-          toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
+          handleMutationError(err, issue);
         },
       },
     );
@@ -185,15 +200,13 @@ export function BoardPage() {
     moveIssue(issue, target);
   }
 
-  // Can the current user take this issue? True only if they hold a DEVELOPER
-  // grant globally or for the issue's platform — mirrors the server's check, so
-  // we only show the action when it will actually succeed.
+  // Can the current user take this issue? Only if the server would accept them
+  // as the assignee (canDevelopOn mirrors that check) and it isn't already
+  // theirs — "Assign to me" on your own card is a no-op the menu shouldn't offer.
   function canAssignToMe(issue: StaffIssueSummary): boolean {
-    if (!me || !issue.platform) return false;
+    if (!me) return false;
     if (issue.assignee?.id === me.id) return false;
-    return me.roles.some(
-      (r) => r.role === 'DEVELOPER' && (r.platformId === null || r.platformId === issue.platform!.id),
-    );
+    return canDevelopOn(me, issue.platform?.id);
   }
 
   // Read-only watchers see the card but can't drag it or open the move menu.
@@ -205,22 +218,22 @@ export function BoardPage() {
     if (!me) return;
     const prev = issue.assignee;
     setItems((list) => list.map((i) => (i.id === issue.id ? { ...i, assignee: { id: me.id, name: me.name } } : i)));
-    staffApi
-      .patch(`/staff/issues/${issue.id}/assignment`, { assigneeId: me.id, version: issue.version })
-      .then(() => {
-        toast.success(`${issue.referenceNo} assigned to you.`);
-        queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
-        queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
-      })
-      .catch((err: any) => {
-        setItems((list) => list.map((i) => (i.id === issue.id ? { ...i, assignee: prev } : i)));
-        if (err?.response?.status === 409) {
+    assign.mutate(
+      { id: issue.id, assigneeId: me.id, version: issue.version },
+      {
+        onSuccess: () => {
+          toast.success(`${issue.referenceNo} assigned to you.`);
           queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
-          toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
-          return;
-        }
-        toast.error(err?.response?.data?.message ?? 'Could not assign.');
-      });
+          queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
+        },
+        onError: (err) => {
+          // Roll back the optimistic assignment, then the shared handler (which
+          // keeps the card-specific 409 wording).
+          setItems((list) => list.map((i) => (i.id === issue.id ? { ...i, assignee: prev } : i)));
+          handleMutationError(err, issue);
+        },
+      },
+    );
   }
 
   if (isError) {

@@ -87,7 +87,17 @@ export class ReporterService {
       })),
     );
 
-    const issueId = await this.createIssueWithUniqueReference(ctx, dto, reporter, stored);
+    // The blobs are written before the row exists, so if persistence ultimately
+    // fails (exhausted reference retries, or any other DB error) they would be
+    // orphaned in storage with nothing pointing at them. Best-effort clean them
+    // up before rethrowing; a failed delete must not mask the original error.
+    let issueId: string;
+    try {
+      issueId = await this.createIssueWithUniqueReference(ctx, dto, reporter, stored);
+    } catch (err) {
+      await Promise.allSettled(stored.map((s) => this.storage.delete(s.storageKey)));
+      throw err;
+    }
 
     // Notify the platform's focal points (FR-NOT-01) and trigger Jira sync,
     // decoupled from the intake request.
@@ -152,7 +162,11 @@ export class ReporterService {
               filename: s.filename,
               contentType: s.contentType,
               sizeBytes: s.sizeBytes,
-              scanStatus: ScanStatus.PENDING, // AV scan wired in Phase 2
+              // PENDING is the safe default: ScanningListener picks the file up
+              // off IssueEvents.CREATED and writes the real verdict, and PENDING
+              // files are never served (SERVABLE_SCAN above). A scanner outage
+              // therefore leaves the file un-downloadable, not wrongly trusted.
+              scanStatus: ScanStatus.PENDING,
             }),
           ),
         );

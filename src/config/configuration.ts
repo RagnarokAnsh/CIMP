@@ -3,6 +3,12 @@ export default () => ({
   // Comma-separated list of allowed frontend origins. '*' (default) allows all
   // — restrict this in production.
   corsOrigins: process.env.CORS_ORIGINS ?? '*',
+  // Express `trust proxy`. Empty (default) = OFF, so req.ip is the socket peer.
+  // Behind a load balancer that peer is the PROXY, and every client then shares
+  // one rate-limit bucket. Set to a hop count ('1'), 'loopback', or a
+  // comma-separated IP/CIDR list of trusted proxies. See main.ts for why this
+  // must be an explicit operator decision rather than on by default.
+  trustProxy: process.env.TRUST_PROXY ?? '',
   database: {
     host: process.env.DB_HOST ?? 'localhost',
     port: parseInt(process.env.DB_PORT ?? '5432', 10),

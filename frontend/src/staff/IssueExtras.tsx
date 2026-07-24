@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, GitMerge, Link2, Plus, Tag, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -343,7 +344,7 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
           {(links ?? []).map((l) => (
             <div key={l.id} className="flex items-center gap-2 text-sm">
               <span className="w-24 shrink-0 text-xs text-muted-foreground">{LINK_LABEL[l.type][l.direction]}</span>
-              <a href={`/staff/issues/${l.issue.id}`} className="font-mono text-primary hover:underline">{l.issue.referenceNo}</a>
+              <Link to={`/staff/issues/${l.issue.id}`} className="font-mono text-primary hover:underline">{l.issue.referenceNo}</Link>
               <Badge variant="outline" className="text-[10px]">{l.issue.status}</Badge>
               {!readOnly && (
                 <button

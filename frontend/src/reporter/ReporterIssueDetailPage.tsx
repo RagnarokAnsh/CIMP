@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { firstLine, relativeTime, dateTime } from '@/lib/format';
+import { toastApiError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 
 // One-click resolution rating. 👎 invites an optional comment; the rating can
@@ -25,6 +26,10 @@ function CsatWidget({ issueId, existing }: {
 }) {
   const queryClient = useQueryClient();
   const [pendingDown, setPendingDown] = useState(false);
+  // The server upserts CSAT (latest wins), so a rating is never final. `changing`
+  // reopens the picker from the acknowledgement — the widget used to lock forever
+  // on first rating, contradicting its own "the rating can be changed" contract.
+  const [changing, setChanging] = useState(false);
   const [comment, setComment] = useState('');
 
   const submit = useMutation({
@@ -35,20 +40,28 @@ function CsatWidget({ issueId, existing }: {
       }),
     onSuccess: () => {
       setPendingDown(false);
+      setChanging(false);
       setComment('');
       toast.success('Thanks for the feedback!');
       queryClient.invalidateQueries({ queryKey: ['reporter', 'issue', issueId] });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Could not record your rating.'),
+    onError: (e) => toastApiError(e),
   });
 
-  if (existing) {
+  if (existing && !changing) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
         {existing.score === 1
           ? <ThumbsUp className="h-4 w-4 text-emerald-500" />
           : <ThumbsDown className="h-4 w-4 text-destructive" />}
         <span>You rated this resolution. Thanks for the feedback!</span>
+        <button
+          type="button"
+          className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline"
+          onClick={() => { setChanging(true); setPendingDown(false); }}
+        >
+          Change
+        </button>
       </div>
     );
   }
@@ -121,7 +134,7 @@ export function ReporterIssueDetailPage() {
       toast.success('Reply sent to support.');
       queryClient.invalidateQueries({ queryKey: ['reporter', 'issue', id] });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Could not send your reply.'),
+    onError: (e) => toastApiError(e),
   });
 
   if (isLoading) return <Skeleton className="h-64 w-full" />;

@@ -25,7 +25,7 @@ updated: 2026-07-06
 ## Key classes & logic
 `ApiTokensService`:
 - `create` → generates `cimp_<48 hex>`, stores only the **SHA-256 hash** + `lastFour`; returns the plaintext **once**.
-- `authenticate(raw)` → SHA-256 lookup where `revokedAt IS NULL`; best-effort `lastUsedAt` stamp.
+- `authenticate(raw)` → SHA-256 lookup where `revokedAt IS NULL` **and the token's platform is `ACTIVE`** (returns null otherwise → guard's 401); best-effort `lastUsedAt` stamp. The platform-status check (added 2026-07-24) matches `HandoffService.verify` and `SelfSupportService` — disabling a platform now also retires its integration read API.
 - `listIssues` / `getIssue` scoped to the token's platform.
 - CRUD guarded by `ScopeService.canAccessPlatform`.
 
@@ -37,6 +37,7 @@ updated: 2026-07-06
 ## Gotchas / invariants
 - Plaintext is unrecoverable after creation (only the hash is stored).
 - Read-only, single-platform binding (v1 permission model — a [[Decisions and Glossary|decision]]).
+- A revoked token **or a DISABLED platform** both fail auth with the same 401.
 
 ## Related
 [[Features - Shipped]] · [[Module - Authz]] · [[Module - Jira]] · [[cimp-connect Package]]

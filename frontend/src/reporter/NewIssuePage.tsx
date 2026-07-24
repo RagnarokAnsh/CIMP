@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { reporterApi } from '@/api/client';
 import { getHandoffToken } from '@/api/handoff';
 import { clearDiagnostics, loadDiagnostics } from '@/api/diagnostics';
+import { toastApiError } from '@/lib/toast-error';
 import type { ReporterIssueDetail, SimilarIssue } from '@/api/types';
 import { useQuery } from '@tanstack/react-query';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -36,7 +37,12 @@ function validateFiles(files: FileList | null): string | null {
   if (!files || files.length === 0) return null;
   if (files.length > MAX_FILES) return `At most ${MAX_FILES} files may be attached.`;
   for (const f of Array.from(files)) {
-    if (!ALLOWED_MIME_TYPES.includes(f.type)) {
+    // Only reject a type the browser positively identified as unsupported.
+    // File.type is '' for plenty of real files, and the server is the authority
+    // regardless — it sniffs the actual magic bytes (ReporterService.validateFiles)
+    // rather than trusting this header, so blocking an unknown type here would
+    // reject valid uploads the server would have accepted.
+    if (f.type && !ALLOWED_MIME_TYPES.includes(f.type)) {
       return `"${f.name}" is not a supported type (PNG, JPEG, WEBP, PDF).`;
     }
     if (f.size > MAX_FILE_BYTES) {
@@ -75,7 +81,7 @@ function SimilarIssuesPanel({ description }: { description: string }) {
       setSubscribedTokens((prev) => new Set(prev).add(token));
       toast.success("You'll be notified when it's resolved.");
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Could not subscribe.'),
+    onError: (e) => toastApiError(e),
   });
 
   if (dismissed || !matches || matches.length === 0) return null;
@@ -164,7 +170,13 @@ export function NewIssuePage() {
       if (screenshot) {
         if ((files?.length ?? 0) < MAX_FILES) {
           const blob = await (await fetch(screenshot)).blob();
-          form.append('files', new File([blob], 'screenshot.jpg', { type: 'image/jpeg' }));
+          // Name and type the file from the screenshot's actual mediatype, not a
+          // hard-coded JPEG: the server persists the sniffed content type, and the
+          // on-disk key's extension is derived from this filename, so a PNG sent as
+          // screenshot.jpg would carry a mismatched extension.
+          const mediaType = blob.type || 'image/jpeg';
+          const ext = mediaType.split('/')[1] || 'jpg';
+          form.append('files', new File([blob], `screenshot.${ext}`, { type: mediaType }));
         } else {
           toast.warning('Screenshot not attached — the file limit is already used by your attachments.');
         }

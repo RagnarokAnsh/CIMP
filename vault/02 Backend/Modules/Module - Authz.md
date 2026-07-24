@@ -47,6 +47,7 @@ Two branches keyed on `req.params.id`:
 - **Issue-scoped** (`:id` present): loads `Issue` with `relations: { platform: true }`.
   - Issue not found → `NotFoundException('Issue not found')`.
   - Staff has **no** role on the issue's platform (`!canAccessPlatform(staff, platform.id, STAFF_READ_ROLES)`) → `NotFoundException('Issue not found')`. **This is the key invariant:** out-of-scope existence returns 404 identical to genuinely-missing, so issue ids cannot be enumerated across platforms via a 403-vs-404 oracle. A `WATCHER` grant counts here (the issue "exists" for them); they then get a truthful 403 on write routes.
+  - **Malformed `:id`** (not a UUID) is rejected with the **same 404** *before* the DB lookup (guards run before `ParseUUIDPipe`, so an un-vetted id would otherwise reach Postgres and raise `22P02` → 500 on every `/staff/issues/:id/*` route). Keeping it a 404 means malformed / not-found / out-of-scope all answer identically. Defence-in-depth: `AllExceptionsFilter` also maps a stray `22P02` `QueryFailedError` to `400`.
   - Staff IS scoped but lacks the **specific** role for this action (`!canAccessPlatform(staff, platform.id, required)`) → truthful `ForbiddenException('You do not have access to this issue.')`.
 - **No issue context**: requires the role in any scope (`staff.roles.some(g => required.includes(g.role))`) else `ForbiddenException('Insufficient role.')`. Admin routes hit this branch (admins are always global).
 

@@ -59,8 +59,10 @@ export class CsatService {
       await this.comments.save(
         this.comments.create({
           issue: { id: issueId } as any,
+          // The platform wrote this, not a person — SYSTEM so consumers filtering on
+          // authorType don't read an automated flag as a staff member's note.
           author: null,
-          authorType: ActorType.STAFF,
+          authorType: ActorType.SYSTEM,
           body: `Reporter rated the resolution negatively${dto.comment?.trim() ? `: "${dto.comment.trim()}"` : '.'}`,
           visibility: CommentVisibility.INTERNAL,
         }),

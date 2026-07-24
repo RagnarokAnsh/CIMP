@@ -76,6 +76,21 @@ export class AuthService {
     return { ...this.toAuthenticated(user), roles: await this.loadRoles(user.id) };
   }
 
+  // Re-resolve an already-authenticated staff member's current status + grants.
+  // Used by the long-lived SSE stream, which would otherwise keep streaming with
+  // the scope it captured at connect time — every ordinary request re-checks this
+  // via upsertFromClaims, but that stream is authenticated once and held open for
+  // hours. Returns null when the account is gone or no longer ACTIVE.
+  //
+  // Note: tokenVersion can't be re-checked here — the caller holds an
+  // AuthenticatedStaff, not the claims — so a password reset only takes effect on
+  // the next connect. Status + grant revocation are the ones that must be live.
+  async refreshAuthenticated(staffUserId: string): Promise<AuthenticatedStaff | null> {
+    const user = await this.staff.findOne({ where: { id: staffUserId } });
+    if (!user || user.status !== AccountStatus.ACTIVE) return null;
+    return { ...this.toAuthenticated(user), roles: await this.loadRoles(user.id) };
+  }
+
   private isUniqueViolation(err: unknown): boolean {
     return (
       err instanceof QueryFailedError

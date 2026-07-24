@@ -22,12 +22,17 @@ import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { UpdatePriorityDto } from './dto/update-priority.dto';
 import { BulkOp, BulkUpdateDto } from './dto/bulk-update.dto';
 import { canTransition } from './status-machine';
+import { applyStatusSideEffects } from './status-side-effects';
 import { computeSla } from './sla';
 import { buildPrefixTsQuery } from './search-terms';
 import { applyJqlFilters, parseJql } from './jql';
 
 // Upper bound on rows a single CSV export may materialize in memory.
 const EXPORT_MAX_ROWS = 50_000;
+
+// One skip reason for both "no such issue" and "exists, but not yours", so a
+// bulk call can't be used to tell the two apart. See the catch in bulkUpdate.
+const NOT_VISIBLE_REASON = 'Not found or out of scope';
 
 @Injectable()
 export class IssuesService {
@@ -300,7 +305,7 @@ export class IssuesService {
 
     const from = issue.status;
     issue.status = dto.status;
-    this.applyStatusSideEffects(issue, dto.status);
+    applyStatusSideEffects(issue, dto.status);
 
     await this.dataSource.transaction(async (em) => {
       await em.save(issue);
@@ -385,7 +390,12 @@ export class IssuesService {
     this.assertVersion(issue, dto.version);
 
     const from = issue.priority;
-    if (from === dto.priority) return;
+    // Reject the no-op instead of silently succeeding, matching applyStatus: a
+    // 200 with no audit row and no PRIORITY_CHANGED event reads as "we changed
+    // it" to every caller, and bulk ops then count it as updated.
+    if (from === dto.priority) {
+      throw new UnprocessableEntityException('Issue is already at that priority.');
+    }
     issue.priority = dto.priority;
 
     await this.dataSource.transaction(async (em) => {
@@ -419,7 +429,7 @@ export class IssuesService {
   async bulkUpdate(staff: AuthenticatedStaff, dto: BulkUpdateDto) {
     const scope = this.scope.scopedPlatformIds(staff);
     if (Array.isArray(scope) && scope.length === 0) {
-      return { updated: 0, skipped: dto.ids.map((id) => ({ id, reason: 'Out of scope' })) };
+      return { updated: 0, skipped: dto.ids.map((id) => ({ id, reason: NOT_VISIBLE_REASON })) };
     }
 
     // Validate the target value up front (these writes bypass the request pipe).
@@ -440,11 +450,20 @@ export class IssuesService {
         // read scope, but bulk ops are mutations — require a write role on the
         // issue's platform (or globally), same as the single-issue routes.
         if (!this.scope.canAccessPlatform(staff, issue.platform.id, STAFF_WRITE_ROLES)) {
-          skipped.push({ id, reason: 'Out of scope' });
+          skipped.push({ id, reason: NOT_VISIBLE_REASON });
           continue;
         }
         // Reuse the loaded issue and skip the per-issue getDetail round-trip
         // that the public single-issue handlers do.
+        //
+        // Passing the version we just read means assertVersion can never fire
+        // here — that is deliberate, NOT a missing check. Issue.version is a
+        // @VersionColumn, so em.save() still emits `UPDATE ... WHERE version = X`
+        // and a concurrent writer makes TypeORM raise
+        // OptimisticLockVersionMismatchError, which AllExceptionsFilter maps to
+        // 409 and the catch below records as a per-id skip. Threading a
+        // caller-supplied version through instead would only reject the whole
+        // batch on the first stale id.
         if (dto.op === BulkOp.STATUS) {
           await this.applyStatus(staff, issue, { status: dto.value as IssueStatus, version: issue.version });
         } else if (dto.op === BulkOp.PRIORITY) {
@@ -454,7 +473,16 @@ export class IssuesService {
         }
         updated += 1;
       } catch (e) {
-        skipped.push({ id, reason: (e as Error)?.message ?? 'Update failed' });
+        // A missing id and an id on a platform the caller has no write role on
+        // must be indistinguishable, or this endpoint becomes the 403-vs-404
+        // oracle PlatformAccessGuard exists to close — 200 ids per call is a
+        // fast cross-tenant id scanner. Other failures (422 bad transition, 409
+        // version conflict) are on issues the caller can already see, so their
+        // real message is safe and useful.
+        const reason = e instanceof NotFoundException
+          ? NOT_VISIBLE_REASON
+          : (e as Error)?.message ?? 'Update failed';
+        skipped.push({ id, reason });
       }
     }
 
@@ -569,25 +597,6 @@ export class IssuesService {
     }
     if (!this.scope.canAccessPlatform(staff, platformId, roles)) {
       throw new ForbiddenException('You may not change the status of this issue.');
-    }
-  }
-
-  private applyStatusSideEffects(issue: Issue, to: IssueStatus): void {
-    if (to === IssueStatus.RESOLVED) {
-      issue.resolvedAt = new Date();
-    } else if (to === IssueStatus.CLOSED) {
-      issue.closedAt = issue.closedAt ?? new Date();
-    } else if (to === IssueStatus.REOPENED) {
-      issue.resolvedAt = null;
-      issue.closedAt = null;
-      // Reopening a merged duplicate detaches it from its canonical issue —
-      // someone judged it NOT the same problem after all.
-      issue.duplicateOf = null;
-      // L8: the SLA clock restarts on reopen — measuring from the original
-      // createdAt would instantly re-breach any old issue. New cycle, new
-      // breach marker.
-      issue.slaStartedAt = new Date();
-      issue.slaBreachedAt = null;
     }
   }
 

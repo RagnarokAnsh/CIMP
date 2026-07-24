@@ -221,9 +221,16 @@ export class NotificationsService {
   }
 
   // Focal points scoped to a platform (global focal points don't exist).
+  // Disabled accounts are excluded at the query level so an offboarded focal
+  // point's row never loads at all — same `su.status = :active` rule
+  // IssuesService.listAssignees applies when offering people to assign to.
   private async focalPointsFor(platformId: string): Promise<StaffUser[]> {
     const grants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: platformId } },
+      where: {
+        role: Role.FOCAL_POINT,
+        platform: { id: platformId },
+        staffUser: { status: AccountStatus.ACTIVE },
+      },
       relations: { staffUser: true },
     });
     return grants.map((g) => g.staffUser);
@@ -255,11 +262,17 @@ export class NotificationsService {
     );
   }
 
+  // Deduped, emailable, still-employed recipients. Offboarding has to stop
+  // notification delivery, not just login: until the status check below existed
+  // this method only deduped and checked for an address — so a DISABLED account
+  // kept getting issue descriptions and reference numbers by email and kept
+  // accruing bell rows. Matters most for someone disabled *after* being assigned:
+  // notifyAssignee loads them by id and has no other filter in front of it.
   private activeRecipients(users: (StaffUser | undefined | null)[]): StaffUser[] {
     const seen = new Set<string>();
     const out: StaffUser[] = [];
     for (const u of users) {
-      if (u && u.email && !seen.has(u.id)) {
+      if (u && u.email && u.status === AccountStatus.ACTIVE && !seen.has(u.id)) {
         seen.add(u.id);
         out.push(u);
       }

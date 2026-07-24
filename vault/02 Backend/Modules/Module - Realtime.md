@@ -29,11 +29,11 @@ Exported providers: `RealtimeService` (injectable event bus), `SseAuthGuard`.
 **`RealtimeController`** (`@Controller('staff')`, `@ApiTags('staff-realtime')`)
 - `ticket()` — bearer-authenticated via `JwtAuthGuard`; calls `localAuth.signSseTicket(staff.idpSubject)`. Throws `UnauthorizedException` if signing returns null (auth disabled / non-active user).
 - `events()` — builds the per-connection stream:
-  - `allowed = scope.scopedPlatformIds(staff)` → either `'ALL'` (admin/global developer) or a list of platform IDs.
-  - `inScope(e)` predicate: deliver if `allowed === 'ALL'`, OR `allowed.includes(e.platformId)`, OR `e.targetStaffIds?.includes(staff.id)` (direct-target override for assignment/@mention regardless of platform scope).
+  - `let allowed = scope.scopedPlatformIds(staff)` → `'ALL'` (admin/global developer) or a list of platform IDs. **Mutable** — re-resolved on every heartbeat (see below).
+  - `inScope(e)` predicate: `scope.scopeAllows(allowed, e.platformId)` OR `e.targetStaffIds?.includes(staff.id)` (direct-target override for assignment/@mention regardless of platform scope). Reads the mutable `allowed`, so a scope change takes effect on the next event without reconnecting.
   - `live = realtime.events$.pipe(filter(inScope), map → { data: e })`.
-  - `heartbeat = interval(25_000)` emitting `{ data: { type:'ping' } }` to keep idle connections alive through proxies.
-  - Returns `merge(live, heartbeat)`.
+  - `heartbeat = interval(25_000)` — each tick `concatMap`s `auth.refreshAuthenticated(staff.id)`: **null** (account gone / no longer ACTIVE) → `revoked.next()` ends the stream; otherwise recompute `allowed` from the fresh grants. A DB error keeps the previous scope and logs (never fails a healthy stream closed in silence). Still emits the `{ type:'ping' }` frame.
+  - Returns `merge(live, heartbeat).pipe(takeUntil(revoked))` — completing on revocation closes the SSE; the browser reconnects and fails auth cleanly at `/events/ticket`.
 
 **`RealtimeService`**
 - Private `stream = new Subject<RealtimeEvent>()`; `events$` getter returns `stream.asObservable()`.
@@ -53,7 +53,7 @@ Exported providers: `RealtimeService` (injectable event bus), `SseAuthGuard`.
 - The `audience:'sse'` requirement makes ticket and session token **non-interchangeable**: a session token (no audience) is rejected by `SseAuthGuard`, and a ticket is rejected on normal routes. See [[Auth and Authorization]] and [[Security Audit and Hardening]].
 
 ## Dependencies (injected)
-- `RealtimeController`: `RealtimeService`, `ScopeService` ([[Auth and Authorization]]), `LocalAuthService`.
+- `RealtimeController`: `RealtimeService`, `ScopeService` ([[Auth and Authorization]]), `LocalAuthService`, `AuthService` (for `refreshAuthenticated` — the per-heartbeat re-authorization).
 - `SseAuthGuard`: `LocalAuthService`.
 - Module imports `AuthModule`, `AuthzModule`.
 
@@ -65,7 +65,7 @@ None directly. Identity is re-materialised through `LocalAuthService` → `Staff
 
 ## Gotchas / invariants
 - SSE ticket TTL is ~30s and single-purpose — a leaked stream URL is not a usable session. Frontend must re-mint per connection.
-- Scope is evaluated **once at connection time** (`scopedPlatformIds` snapshot). A mid-stream role/scope change is not reflected until the client reconnects (new ticket).
+- Scope is **re-resolved every 25s on the heartbeat** (`refreshAuthenticated`), not just at connect (fixed 2026-07-24). A disabled account or a revoked grant stops delivery within one tick; the stream ends outright when the account is no longer ACTIVE. **Residual:** a `tokenVersion` bump (password reset) is *not* re-checked mid-stream — the connection holds an `AuthenticatedStaff`, not the claims — so that one only takes effect on reconnect. Status + grant revocation, the security-critical cases, are live.
 - The stream is a plain `Subject` (no replay/buffer): events emitted while a staff member is disconnected are lost — the client should refetch on (re)connect rather than rely on backlog delivery.
 - `RealtimeService` is a singleton bridging **in-process** events only — this fan-out does not work across multiple backend instances without a shared broker.
 - `targetStaffIds` override bypasses platform scope, so an assignee/@mentioned staffer receives the event even for a platform outside their scope.

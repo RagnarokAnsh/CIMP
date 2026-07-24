@@ -77,6 +77,10 @@ export class WebhooksService {
         'Webhook URLs must use a DNS hostname or public IPv4 address (IPv6 literals are not supported).',
       );
     }
+    // Decimal, hex and short-form IPv4 literals (2130706433, 0x7f000001, 127.1) need
+    // no special handling: the WHATWG URL parser has already normalised them to
+    // '127.0.0.1' by the time we read `hostname`, so the prefix checks below catch
+    // them. Don't re-add a parser here — it would be dead code.
     const isPrivate =
       host === 'localhost'
       || host.endsWith('.localhost')
@@ -85,7 +89,10 @@ export class WebhooksService {
       || /^10\./.test(host)
       || /^192\.168\./.test(host)
       || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-      || /^169\.254\./.test(host);
+      || /^169\.254\./.test(host)
+      // Carrier-grade NAT (100.64.0.0/10). It looks like ordinary routable space but
+      // several cloud providers use it internally, so it must be blocked like the RFC1918 ranges.
+      || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host);
     if (isPrivate) {
       throw new BadRequestException('Webhook URLs must not target private or loopback addresses.');
     }
@@ -159,8 +166,20 @@ export class WebhooksService {
         'X-CIMP-Signature': this.sign(ep.secret, body),
       },
       body,
+      // Refuse redirects rather than follow them: assertSafeUrl only vets the URL an
+      // admin configured, so a receiver answering `302 → http://169.254.169.254/`
+      // would walk the signed payload straight past the SSRF guard to cloud metadata.
+      // The receiver's operator is not necessarily the admin who added the endpoint.
+      redirect: 'manual',
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
+    // Called out separately from the generic failure below so an operator reading the
+    // log can tell "your receiver redirects" from "your receiver is broken".
+    if (res.status >= 300 && res.status < 400) {
+      throw new Error(
+        `Webhook endpoint redirected (HTTP ${res.status}); redirects are not followed`,
+      );
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
   }
 }

@@ -15,12 +15,12 @@ updated: 2026-07-14
 |---|---|
 | `local-auth.service.ts` | `LocalAuthService` — password login, JWT mint/verify, SSE ticket sign/verify. The core. |
 | `local-auth.controller.ts` | `LocalAuthController` — `POST /api/auth/login` (public, throttled). |
-| `auth.service.ts` | `AuthService.upsertFromClaims` — mirror StaffUser from verified claims, enforce revocation, load role grants. |
+| `auth.service.ts` | `AuthService.upsertFromClaims` — mirror StaffUser from verified claims, enforce revocation, load role grants. Also `refreshAuthenticated(staffUserId)` — re-resolve a live staff member's status + grants (null unless ACTIVE), used by the long-lived SSE stream ([[Module - Realtime]]) to re-authorize mid-connection. |
 | `jwt-auth.guard.ts` | `JwtAuthGuard` — plain `CanActivate`; verifies `Bearer` token, attaches `req.user`. |
 | `staff.controller.ts` | `StaffController` — `GET /api/staff/me` (guarded). |
 | `current-staff.decorator.ts` | `@CurrentStaff()` param decorator → `req.user as AuthenticatedStaff`. |
 | `auth.types.ts` | `AuthenticatedStaff`, `StaffRoleGrant`, `TokenClaims` interfaces + `LOCAL_SUBJECT_PREFIX` / `localSubject(email)` — the single source of truth for how password-login staff are keyed. |
-| `dto/login.dto.ts` | `LoginDto` — `email` (`@IsEmail`), `password` (`@MinLength(8)`). |
+| `dto/login.dto.ts` | `LoginDto` — `email` (`@IsEmail`), `password` (`@IsString`, **no length rule**: validating a login attempt's length decides nothing (it either matches the stored hash or not) and a 400-vs-401 leaks the policy; the 12-char floor lives where passwords are *set* — `CreateStaffDto`/`SetPasswordDto`). |
 | `auth.module.ts` | Wires providers; **exports** `AuthService`, `JwtAuthGuard`, `LocalAuthService`. |
 | `local-auth.service.spec.ts` | Unit tests for `login` (valid/wrong-pw/disabled/unknown-email/disabled-secret). |
 

@@ -12,6 +12,10 @@ import { ROLES_KEY } from './roles.decorator';
 import { ScopeService } from './scope.service';
 import { STAFF_READ_ROLES, STAFF_WRITE_ROLES } from './role-sets';
 
+// Version-agnostic RFC-4122 shape, deliberately as permissive as ParseUUIDPipe's
+// default so the guard never rejects an id the route's own pipe would accept.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Enforces role + platform scope. Runs after JwtAuthGuard (req.user is set).
 // For routes carrying an issue `:id`, it resolves the issue's platform and
 // requires the staff member to hold one of the route's roles for that platform
@@ -40,6 +44,13 @@ export class PlatformAccessGuard implements CanActivate {
 
     const issueId = req.params?.id;
     if (issueId) {
+      // Guards run before pipes, so ParseUUIDPipe has not vetted `:id` yet. Handing a
+      // non-UUID to the repository makes Postgres raise 22P02 (invalid uuid syntax),
+      // which is not an HttpException and surfaces as a 500 on every /staff/issues/:id
+      // route. Reject it here as 404, not 400: every unusable id — not-found,
+      // out-of-scope (below), malformed — must answer identically, so the response
+      // stays useless as an oracle for which issue ids exist.
+      if (!UUID_PATTERN.test(issueId)) throw new NotFoundException('Issue not found');
       const issue = await this.issues.findOne({
         where: { id: issueId },
         relations: { platform: true },

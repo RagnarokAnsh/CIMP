@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { LifeBuoy } from 'lucide-react';
-import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
+import { toastApiError } from '@/lib/toast-error';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 
@@ -23,9 +23,11 @@ export function SupportButton() {
         if (win) win.location.href = url;
         else window.location.href = url; // popup blocked — fall back to same tab
       },
-      onError: (e: any) => {
+      onError: (e) => {
+        // Close the tab we opened up front so a failed mint doesn't strand a
+        // blank about:blank window.
         win?.close();
-        toast.error(e?.response?.data?.message ?? 'Could not open support.');
+        toastApiError(e);
       },
     });
   };
