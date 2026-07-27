@@ -224,7 +224,7 @@ export function Breakdown({
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <span className="flex min-w-0 items-center gap-2">
                     {kind === 'assignee' && (
-                      <Avatar className="size-5"><AvatarFallback className="text-[9px]">{initials(r.key)}</AvatarFallback></Avatar>
+                      <Avatar className="size-5"><AvatarFallback className="text-2xs">{initials(r.key)}</AvatarFallback></Avatar>
                     )}
                     <span className="truncate">{labelFor(r.key)}</span>
                   </span>

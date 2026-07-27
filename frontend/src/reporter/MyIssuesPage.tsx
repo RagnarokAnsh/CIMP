@@ -18,10 +18,12 @@ import {
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { relativeTime } from '@/lib/format';
 import { useT } from '@/i18n';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import { useStatusLabel } from '@/i18n/useStatusLabel';
 
 export function MyIssuesPage() {
   const { t } = useT();
+  useDocumentTitle(t('list.title'));
   const statusLabel = useStatusLabel();
   const hasToken = Boolean(getHandoffToken());
   const { data, isLoading, isError } = useQuery({
@@ -42,7 +44,7 @@ export function MyIssuesPage() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>{t('list.title')}</CardTitle>
+        <CardTitle as="h1" className="text-xl">{t('list.title')}</CardTitle>
         <Button asChild size="sm">
           <Link to="/reporter/new">
             <PlusCircle className="h-4 w-4" />
@@ -98,7 +100,7 @@ export function MyIssuesPage() {
                     >
                       {i.referenceNo}
                       {i.hasUpdates && (
-                        <Badge className="h-5 px-1.5 text-[10px]">{t('list.newUpdates')}</Badge>
+                        <Badge className="h-5 px-1.5 text-2xs">{t('list.newUpdates')}</Badge>
                       )}
                     </Link>
                   </TableCell>

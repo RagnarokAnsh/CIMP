@@ -14,6 +14,7 @@ import {
 } from '@/lib/status-meta';
 import { dateTime, relativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 // The public status page: /status/:key — unauthenticated, no tokens, its own
 // axios call (NOT staffApi/reporterApi, which attach credentials this page must
@@ -31,6 +32,10 @@ export function PublicStatusPage() {
     refetchInterval: 60_000,
     retry: 1,
   });
+
+  // Public and linkable, so this is the one route whose title people actually
+  // see outside the app — in a bookmark, a shared link, a status-check tab.
+  useDocumentTitle(data ? `${OVERALL_HEADLINE[data.overall]} — ${data.platform.name}` : null);
 
   return (
     <div className="min-h-screen bg-background">

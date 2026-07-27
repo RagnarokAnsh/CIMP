@@ -11,6 +11,7 @@ import { clearDiagnostics, loadDiagnostics } from '@/api/diagnostics';
 import { toastApiError } from '@/lib/toast-error';
 import { friendlyError } from '@/lib/api-error';
 import { useT, type TFunction } from '@/i18n';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import type { ReporterIssueDetail, SimilarIssue } from '@/api/types';
 import { useQuery } from '@tanstack/react-query';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -149,6 +150,7 @@ function SimilarIssuesPanel({ description }: { description: string }) {
 
 export function NewIssuePage() {
   const { t } = useT();
+  useDocumentTitle(t('new.title'));
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<FileList | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -218,7 +220,7 @@ export function NewIssuePage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t('new.title')}</CardTitle>
+        <CardTitle as="h1" className="text-xl">{t('new.title')}</CardTitle>
         <CardDescription>{t('new.subtitle')}</CardDescription>
       </CardHeader>
       <CardContent>

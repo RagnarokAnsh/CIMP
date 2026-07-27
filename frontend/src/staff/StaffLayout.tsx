@@ -96,7 +96,7 @@ export function StaffLayout({
           >
             <Search className="h-4 w-4" />
             <span className="flex-1 text-left">Search issues…</span>
-            <kbd className="hidden rounded border border-border bg-muted px-1.5 font-mono text-[10px] sm:inline">
+            <kbd className="hidden rounded border border-border bg-muted px-1.5 font-mono text-2xs sm:inline">
               ⌘K
             </kbd>
           </button>

@@ -49,6 +49,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 const STATUSES: IssueStatus[] = ['NEW', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED', 'REOPENED'];
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -101,6 +102,7 @@ function listParams(filters: Filters, meId: string | undefined) {
 }
 
 export function IssuesListPage() {
+  useDocumentTitle('Issues');
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [qInput, setQInput] = useState('');
@@ -466,7 +468,7 @@ export function IssuesListPage() {
                     )}
                     <TableCell className="max-w-md">
                       <Link to={`/staff/issues/${r.id}`} className="group block">
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mono text-2xs text-muted-foreground">
                           {r.referenceNo}{r.platform?.key ? ` · ${r.platform.key}` : ''}
                         </span>
                         <span className="block truncate font-medium text-foreground group-hover:text-primary group-hover:underline">
@@ -479,7 +481,7 @@ export function IssuesListPage() {
                     <TableCell><SlaBadge slaState={r.slaState} dueAt={r.dueAt} /></TableCell>
                     <TableCell>
                       <span className="flex items-center gap-2 text-sm">
-                        <Avatar className="size-6"><AvatarFallback className="text-[10px]">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
+                        <Avatar className="size-6"><AvatarFallback className="text-2xs">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
                         <span className="truncate text-muted-foreground">{r.assignee?.name ?? 'Unassigned'}</span>
                       </span>
                     </TableCell>
@@ -536,13 +538,13 @@ export function IssuesListPage() {
                       <SlaBadge slaState={r.slaState} dueAt={r.dueAt} />
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[11px] text-muted-foreground">{r.referenceNo}</span>
+                      <span className="font-mono text-2xs text-muted-foreground">{r.referenceNo}</span>
                       <StatusBadge status={r.status} />
                       <PriorityBadge priority={r.priority} />
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <Avatar className="size-5"><AvatarFallback className="text-[9px]">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
+                        <Avatar className="size-5"><AvatarFallback className="text-2xs">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
                         <span className="truncate">{r.assignee?.name ?? 'Unassigned'}</span>
                       </span>
                       <span className="shrink-0">{relativeTime(r.updatedAt)}</span>

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Spinner } from '@/components/ui/spinner';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -270,7 +271,7 @@ export function MergeIssueButton({
                       pushed the whole result list — and the search box above it —
                       out past the dialog's max-w-lg box and onto the page. */}
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">{i.descriptionPreview}</span>
-                  <Badge variant="outline" className="shrink-0 text-[10px]">{i.status}</Badge>
+                  <StatusBadge status={i.status} className="shrink-0" />
                 </button>
               ))}
             </div>
@@ -335,7 +336,7 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Link2 className="h-4 w-4" /> Linked issues
-          {count > 0 && <Badge variant="secondary" className="text-[10px] tabular-nums">{count}</Badge>}
+          {count > 0 && <Badge variant="secondary" className="text-2xs tabular-nums">{count}</Badge>}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -345,7 +346,7 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
             <div key={l.id} className="flex items-center gap-2 text-sm">
               <span className="w-24 shrink-0 text-xs text-muted-foreground">{LINK_LABEL[l.type][l.direction]}</span>
               <Link to={`/staff/issues/${l.issue.id}`} className="font-mono text-primary hover:underline">{l.issue.referenceNo}</Link>
-              <Badge variant="outline" className="text-[10px]">{l.issue.status}</Badge>
+              <StatusBadge status={l.issue.status} />
               {!readOnly && (
                 <button
                   type="button"

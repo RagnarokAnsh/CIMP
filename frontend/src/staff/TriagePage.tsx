@@ -26,12 +26,14 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { MergeIssueButton } from './IssueExtras';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 // Keyboard-first triage: the untriaged (NEW) queue, oldest first, one issue at
 // a time. Every triage-completing action advances to the next issue.
 export function TriagePage() {
+  useDocumentTitle('Triage');
   const queryClient = useQueryClient();
   const [index, setIndex] = useState(0);
   const [showKeys, setShowKeys] = useState(false);
@@ -220,7 +222,7 @@ export function TriagePage() {
                 {canAssignToMe && (
                   <Button size="sm" variant="outline" className="gap-1.5" disabled={busy} onClick={() => assignToMe.mutate()}>
                     <UserCheck className="h-3.5 w-3.5" /> Assign to me
-                    <kbd className="text-[10px] text-muted-foreground">a</kbd>
+                    <kbd className="text-2xs text-muted-foreground">a</kbd>
                   </Button>
                 )}
                 {PRIORITIES.map((p, i) => (
@@ -232,14 +234,14 @@ export function TriagePage() {
                     onClick={() => setPriority.mutate(p)}
                   >
                     {PRIORITY_META[p].label}
-                    <kbd className="ml-1 text-[10px] text-muted-foreground">{i + 1}</kbd>
+                    <kbd className="ml-1 text-2xs text-muted-foreground">{i + 1}</kbd>
                   </Button>
                 ))}
                 <span className="mx-1 h-5 w-px bg-border" />
                 {transitions.map((s, i) => (
                   <Button key={s} size="sm" variant="secondary" disabled={busy} onClick={() => setStatus.mutate(s)}>
                     {STATUS_META[s].label}
-                    {i === 0 && <kbd className="ml-1 text-[10px] text-muted-foreground">s</kbd>}
+                    {i === 0 && <kbd className="ml-1 text-2xs text-muted-foreground">s</kbd>}
                   </Button>
                 ))}
                 <MergeIssueButton

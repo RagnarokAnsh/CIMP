@@ -23,6 +23,7 @@ import {
 } from './dashboard-widgets';
 import { meterTone } from '@/lib/issue-meta';
 import { hoursFmt, pct, relativeTime } from '@/lib/format';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 // The per-platform ("tenant owner") report: one platform's support health, for
 // the team that owns the platform rather than the support staff who work every
@@ -33,6 +34,7 @@ import { hoursFmt, pct, relativeTime } from '@/lib/format';
 // platform, and the picker only offers platforms already in the caller's scope
 // (GET /staff/platforms is itself scoped).
 export function PlatformReportPage() {
+  useDocumentTitle('Reports');
   const { data: platforms, isLoading: platformsLoading } = useQuery({
     queryKey: ['staff', 'platforms'],
     queryFn: async () => (await staffApi.get<PlatformItem[]>('/staff/platforms')).data,

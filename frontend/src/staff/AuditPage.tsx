@@ -15,6 +15,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { dateTime } from '@/lib/format';
 import { Pager } from '@/components/Pager';
+import { actionLabel } from '@/lib/issue-meta';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
@@ -25,6 +27,7 @@ const ALL = '__all__';
 const ACTOR_TYPES = ['STAFF', 'REPORTER', 'SYSTEM'];
 
 export function AuditPage() {
+  useDocumentTitle('Audit log');
   const [actorType, setActorType] = useState('');
   const [action, setAction] = useState('');
   const [page, setPage] = useState(1);
@@ -121,7 +124,7 @@ export function AuditPage() {
                     {dateTime(e.createdAt)}
                   </TableCell>
                   <TableCell><Badge variant="outline">{e.actorType}</Badge></TableCell>
-                  <TableCell className="font-medium">{e.action.replace(/_/g, ' ').toLowerCase()}</TableCell>
+                  <TableCell className="font-medium">{actionLabel(e.action)}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {e.field ? `${e.field}: ${e.oldValue ?? '∅'} → ${e.newValue ?? '∅'}` : '—'}
                   </TableCell>

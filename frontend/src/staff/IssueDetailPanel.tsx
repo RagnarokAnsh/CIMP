@@ -14,7 +14,9 @@ import type {
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
-import { STATUS_META, PRIORITY_META, BADGE_TONE } from '@/lib/issue-meta';
+import {
+  STATUS_META, PRIORITY_META, BADGE_TONE, actionLabel, historyValue, enumLabel,
+} from '@/lib/issue-meta';
 import { STATUS_TRANSITIONS } from '@/lib/issue-status';
 import { canTransitionStatusOn, canWriteOn } from '@/lib/permissions';
 import { firstLine, dateTime } from '@/lib/format';
@@ -507,10 +509,11 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                       <li key={idx} className="flex items-start gap-3 text-sm">
                         <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary/60" />
                         <div>
-                          <span className="font-medium">{h.action.replace(/_/g, ' ').toLowerCase()}</span>
+                          <span className="font-medium">{actionLabel(h.action)}</span>
                           {h.field && (
                             <span className="text-muted-foreground">
-                              {' '}— {h.field}: {h.oldValue ?? '∅'} → {h.newValue ?? '∅'}
+                              {' '}— {h.field}: {historyValue(h.field, h.oldValue)}
+                              {' → '}{historyValue(h.field, h.newValue)}
                             </span>
                           )}
                           <div className="text-xs text-muted-foreground">
@@ -544,7 +547,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               <Field label="Platform" value={data.platform?.name ?? '—'} />
               <Field label="Reporter" value={data.reporter?.name ?? '—'} />
               <Field label="Assignee" value={data.assignee?.name ?? 'Unassigned'} />
-              <Field label="Jira sync" value={data.jiraSyncStatus} />
+              <Field label="Jira sync" value={enumLabel(data.jiraSyncStatus)} />
               <Field label="Created" value={dateTime(data.createdAt)} />
               {data.duplicates.length > 0 && (
                 <div className="space-y-1.5 border-t border-border/60 pt-3">
@@ -575,10 +578,20 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                 {/* Merge stays available whether or not status transitions do —
                     it's an administrative write a focal point legitimately holds,
                     not a state-machine move. */}
+                {/* The first transition the state machine offers is the expected
+                    next move, so it carries primary weight; the rest are
+                    alternatives. Every button rendered as `secondary` before,
+                    which gave the workflow no direction at all. */}
                 <div className="flex flex-wrap items-center gap-2">
                   {canTransition ? (
-                    STATUS_TRANSITIONS[data.status].map((s) => (
-                      <Button key={s} size="sm" variant="secondary" disabled={busy} onClick={() => changeStatus.mutate(s)}>
+                    STATUS_TRANSITIONS[data.status].map((s, i) => (
+                      <Button
+                        key={s}
+                        size="sm"
+                        variant={i === 0 ? 'default' : 'secondary'}
+                        disabled={busy}
+                        onClick={() => changeStatus.mutate(s)}
+                      >
                         {STATUS_META[s].label}
                       </Button>
                     ))
@@ -655,7 +668,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
               <summary className="flex cursor-pointer select-none items-center gap-2 px-6 py-4 text-base font-semibold">
                 <Megaphone className="h-4 w-4" /> Known issue
                 {data.publiclyVisible && (
-                  <Badge variant="outline" className={cn('text-[10px]', BADGE_TONE.info)}>Published</Badge>
+                  <Badge variant="outline" className={cn('text-2xs', BADGE_TONE.info)}>Published</Badge>
                 )}
                 <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
               </summary>

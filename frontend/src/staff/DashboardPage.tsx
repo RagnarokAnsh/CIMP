@@ -16,8 +16,10 @@ import {
 } from './dashboard-widgets';
 import { METER_TONE, meterTone } from '@/lib/issue-meta';
 import { hoursFmt, pct } from '@/lib/format';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 export function DashboardPage() {
+  useDocumentTitle('Dashboard');
   const { data, isLoading, isError } = useQuery({
     queryKey: ['staff', 'dashboard'],
     queryFn: async () => (await staffApi.get<DashboardSummary>('/staff/dashboard')).data,

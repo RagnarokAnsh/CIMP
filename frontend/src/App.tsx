@@ -1,5 +1,10 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
-import { LifeBuoy, ListChecks, PlusCircle } from 'lucide-react';
+import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { Compass, LifeBuoy, ListChecks, PlusCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
+} from '@/components/ui/empty';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import { NewIssuePage } from './reporter/NewIssuePage';
 import { MyIssuesPage } from './reporter/MyIssuesPage';
 import { ReporterIssueDetailPage } from './reporter/ReporterIssueDetailPage';
@@ -31,9 +36,37 @@ export function App() {
       {/* Staff workspace. */}
       <Route path="/staff/*" element={<StaffApp />} />
 
-      <Route path="*" element={<div className="p-8 text-muted-foreground">Not found.</div>} />
+      <Route path="*" element={<NotFound />} />
       </Routes>
     </>
+  );
+}
+
+/**
+ * The 404. Previously a bare `<div>Not found.</div>` in muted grey — no
+ * heading, no landmark, no way back — which is what a stale bookmark or a
+ * mistyped issue id landed on, in a product where every other empty state is
+ * carefully built.
+ */
+function NotFound() {
+  useDocumentTitle('Page not found');
+  return (
+    <main className="flex min-h-screen items-center justify-center p-6">
+      <Empty className="max-w-md">
+        <EmptyHeader>
+          <EmptyMedia variant="icon"><Compass /></EmptyMedia>
+          <EmptyTitle as="h1">This page doesn’t exist</EmptyTitle>
+          <EmptyDescription>
+            The link may be out of date, or the issue may have been merged into another one.
+          </EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button asChild>
+            <Link to="/reporter/issues"><ListChecks className="h-4 w-4" /> Go to my issues</Link>
+          </Button>
+        </EmptyContent>
+      </Empty>
+    </main>
   );
 }
 

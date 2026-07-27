@@ -166,3 +166,35 @@ export const ROLE_META: Record<Role, { label: string }> = {
 };
 
 export const roleLabel = (role: Role): string => ROLE_META[role]?.label ?? role;
+
+/**
+ * "STATUS_CHANGED" -> "Status changed".
+ *
+ * The audit log and the issue history timeline each carried their own
+ * `.replace(/_/g, ' ').toLowerCase()`, which rendered the label all-lowercase
+ * mid-sentence and let the two surfaces describe the same event differently.
+ */
+export const actionLabel = (action: string): string => {
+  const words = action.replace(/_/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+/**
+ * Humanises an issue-history value. History rows carry the raw column value, so
+ * a status change rendered as "NEW → IN_PROGRESS" — the enum, in a UI that has
+ * had a label for it all along.
+ */
+export function historyValue(field: string | null | undefined, value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (field === 'status') return STATUS_META[value as IssueStatus]?.label ?? value;
+  if (field === 'priority') return PRIORITY_META[value as Priority]?.label ?? value;
+  if (field === 'role') return ROLE_META[value as Role]?.label ?? value;
+  return value;
+}
+
+/** "jiraSyncStatus" values and similar SCREAMING_CASE fields shown as plain text. */
+export const enumLabel = (value: string | null | undefined): string => {
+  if (!value) return '—';
+  const words = value.replace(/_/g, ' ').toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};

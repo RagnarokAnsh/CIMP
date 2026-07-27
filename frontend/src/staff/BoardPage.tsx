@@ -34,6 +34,7 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 const BOARD_PAGE_SIZE = 100; // backend caps pageSize at 100.
 
@@ -58,6 +59,7 @@ const WIP_LIMITS: Partial<Record<IssueStatus, number>> = {
 const BOARD_TRACK = 'flex gap-3 overflow-x-auto pb-2 [&>*]:w-[17rem] [&>*]:shrink-0 xl:[&>*]:w-auto xl:[&>*]:min-w-[17rem] xl:[&>*]:flex-1';
 
 export function BoardPage() {
+  useDocumentTitle('Board');
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -314,8 +316,11 @@ export function BoardPage() {
         <div className="space-y-6">
           {lanes.map((lane) => (
             <section key={lane.key} className="space-y-2">
+              {/* text-base, not text-sm: this is a real section heading and it
+                  was rendering smaller than the card text beneath it, so the
+                  visual hierarchy pointed the opposite way to the semantic one. */}
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold">{lane.label}</h2>
+                <h2 className="text-base font-semibold tracking-tight">{lane.label}</h2>
                 <Badge variant="secondary" className="tabular-nums">{lane.count}</Badge>
               </div>
               <div className={BOARD_TRACK}>
@@ -529,7 +534,7 @@ function IssueCard({
         {actions}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="font-mono text-[11px] text-muted-foreground">
+        <span className="font-mono text-2xs text-muted-foreground">
           {issue.referenceNo}{issue.platform?.key ? ` · ${issue.platform.key}` : ''}
         </span>
         <PriorityBadge priority={issue.priority} />
@@ -537,7 +542,7 @@ function IssueCard({
       </div>
       <div className="mt-2.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex min-w-0 items-center gap-1.5">
-          <Avatar className="size-5"><AvatarFallback className="text-[9px]">{initials(issue.assignee?.name)}</AvatarFallback></Avatar>
+          <Avatar className="size-5"><AvatarFallback className="text-2xs">{initials(issue.assignee?.name)}</AvatarFallback></Avatar>
           <span className="truncate">{issue.assignee?.name ?? 'Unassigned'}</span>
         </span>
         <span className="shrink-0">{relativeTime(issue.updatedAt)}</span>

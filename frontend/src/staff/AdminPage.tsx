@@ -42,8 +42,10 @@ import { cn } from '@/lib/utils';
 import { roleLabel, TEXT_TONE } from '@/lib/issue-meta';
 import { IntegrationsTab, WebhooksTab } from './AdminIntegrations';
 import { StatusPageTab } from './AdminStatusPage';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 export function AdminPage() {
+  useDocumentTitle('Administration');
   return (
     <div className="space-y-6">
       <div>
@@ -612,7 +614,7 @@ function StaffRow({
     <TableRow className={disabled ? 'opacity-60' : undefined}>
       <TableCell>
         <span className="flex items-center gap-2.5 font-medium">
-          <Avatar className="size-7"><AvatarFallback className="text-[11px]">{initials(staff.name)}</AvatarFallback></Avatar>
+          <Avatar className="size-7"><AvatarFallback className="text-2xs">{initials(staff.name)}</AvatarFallback></Avatar>
           {staff.name}
           {isSelf && <span className="text-xs font-normal text-muted-foreground">(you)</span>}
         </span>

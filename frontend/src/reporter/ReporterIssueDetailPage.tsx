@@ -20,6 +20,7 @@ import { firstLine, relativeTime, dateTime } from '@/lib/format';
 import { toastApiError } from '@/lib/toast-error';
 import { useT } from '@/i18n';
 import { useStatusLabel } from '@/i18n/useStatusLabel';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import { cn } from '@/lib/utils';
 
 // One-click resolution rating. 👎 invites an optional comment; the rating can
@@ -128,7 +129,7 @@ function UpdateBubble({ update: u }: { update: ReporterIssueDetail['updates'][nu
       <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         {u.fromReporter ? t('detail.you') : u.author}
         {u.translated && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-normal">
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-2xs font-normal">
             <Languages className="h-2.5 w-2.5" aria-hidden />
             {t('detail.translated')}
           </span>
@@ -169,6 +170,9 @@ export function ReporterIssueDetailPage() {
     queryKey: ['reporter', 'issue', id],
     queryFn: async () => (await reporterApi.get<ReporterIssueDetail>(`/issues/${id}`)).data,
   });
+  // The reference number, not the description: it is what the reporter quotes
+  // back to support and what makes one open tab tellable from another.
+  useDocumentTitle(data?.referenceNo);
 
   // Mark the issue seen when opened (drives the unread indicator).
   const markSeen = useMutation({
@@ -208,7 +212,7 @@ export function ReporterIssueDetailPage() {
             <span aria-hidden className="text-muted-foreground/70">·</span>
             <span>{t('list.raised', { when: relativeTime(data.createdAt) })}</span>
           </div>
-          <CardTitle className="leading-snug text-balance">
+          <CardTitle as="h1" className="text-xl leading-snug text-balance">
             {firstLine(data.description, 120) || data.referenceNo}
           </CardTitle>
           <div className="flex flex-wrap items-center gap-2 pt-1">
