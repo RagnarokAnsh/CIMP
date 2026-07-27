@@ -1,11 +1,11 @@
-import { AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, TrendingDown, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
-import { STATUS_META } from '@/lib/issue-meta';
+import { BADGE_TONE, PRIORITY_META, STATUS_META } from '@/lib/issue-meta';
 import { initials, pct } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { IssueStatus } from '@/api/types';
+import type { IssueStatus, Priority } from '@/api/types';
 
 // The presentational vocabulary of the analytics surfaces, shared by the
 // cross-scope DashboardPage and the single-platform PlatformReportPage. Both
@@ -132,11 +132,36 @@ export function SlaHealth({
   );
 }
 
-export type BreakdownKind = 'status' | 'priority' | 'assignee' | 'plain';
+/**
+ * "Backlog up 4" / "+4 net" — the direction-of-travel chip.
+ *
+ * DashboardPage and PlatformReportPage each carried a byte-identical copy of
+ * this, tone classes and all. One copy, one set of contrast-checked tones.
+ */
+export function TrendChip({
+  net, className,
+}: {
+  /** Positive means the backlog grew, which is the state worth flagging. */
+  net: number;
+  className?: string;
+}) {
+  const growing = net > 0;
+  const Icon = growing ? TrendingUp : TrendingDown;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
+        growing ? BADGE_TONE.warning : BADGE_TONE.success,
+        className,
+      )}
+    >
+      <Icon className="h-3 w-3" aria-hidden />
+      {growing ? `+${net}` : net} net
+    </span>
+  );
+}
 
-const PRIORITY_BAR: Record<string, string> = {
-  LOW: 'bg-slate-400', MEDIUM: 'bg-blue-500', HIGH: 'bg-orange-500', CRITICAL: 'bg-red-500',
-};
+export type BreakdownKind = 'status' | 'priority' | 'assignee' | 'plain';
 
 // The API returns breakdown rows in whatever order the GROUP BY produced, which
 // rendered priority as "Critical, Low, Medium, High" — a severity chart in
@@ -180,7 +205,7 @@ export function Breakdown({
   };
   const barFor = (key: string) => {
     if (kind === 'status') return STATUS_META[key as IssueStatus]?.dot ?? 'bg-primary/70';
-    if (kind === 'priority') return PRIORITY_BAR[key] ?? 'bg-primary/70';
+    if (kind === 'priority') return PRIORITY_META[key as Priority]?.dot ?? 'bg-primary/70';
     return 'bg-primary/70';
   };
   return (

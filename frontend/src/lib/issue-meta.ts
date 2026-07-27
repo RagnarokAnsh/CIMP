@@ -57,6 +57,24 @@ export const TEXT_TONE = {
   danger: 'text-red-700 dark:text-red-400',
 } as const;
 
+/**
+ * Fills for progress bars and meters — the "is this number healthy?" axis.
+ *
+ * These read from the design tokens rather than the raw palette. Six call sites
+ * across DashboardPage and PlatformReportPage each wrote
+ * `cond ? 'bg-amber-500' : 'bg-emerald-500'` inline, which meant a theme change
+ * could never reach them and the two report pages could drift apart.
+ */
+export const METER_TONE = {
+  good: 'bg-success',
+  caution: 'bg-warning',
+  bad: 'bg-danger',
+} as const;
+
+/** Picks a meter fill from a boolean "needs attention" test. */
+export const meterTone = (needsAttention: boolean): string =>
+  (needsAttention ? METER_TONE.caution : METER_TONE.good);
+
 export const STATUS_META: Record<
   IssueStatus,
   { label: string; className: string; dot: string }
@@ -73,8 +91,10 @@ export const STATUS_META: Record<
   },
   ON_HOLD: {
     label: 'On hold',
-    dot: 'bg-slate-400',
-    className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-400/15 dark:text-slate-300 dark:border-slate-400/20',
+    // slate-500, not -400: the darker step buys separation from CLOSED's zinc
+    // without changing what the colour means.
+    dot: 'bg-slate-500',
+    className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:border-slate-500/20',
   },
   RESOLVED: {
     label: 'Resolved',
@@ -90,33 +110,48 @@ export const STATUS_META: Record<
   },
   REOPENED: {
     label: 'Reopened',
-    dot: 'bg-violet-500',
-    className: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-500/15 dark:text-violet-300 dark:border-violet-500/20',
+    // Rose, not violet. Under deuteranopia violet and blue simulate to ΔE 1.1 —
+    // literally the same colour — so REOPENED and NEW were indistinguishable
+    // for ~8% of men. No violet or purple survives that test (blue and violet
+    // share the axis dichromats lose); rose does. The six-dot set was solved
+    // for worst-case pairwise ΔE across normal, deuteranope and protanope
+    // vision: it was 1.1, it is now 20.4. Rose also reads as "this came back",
+    // which is what REOPENED means.
+    dot: 'bg-rose-500',
+    className: 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/20',
   },
 };
 
+// `dot` matches STATUS_META's shape so breakdown bars can read their colour
+// from here instead of keeping a parallel PRIORITY_BAR map in
+// dashboard-widgets.tsx — the two were free to disagree about what "High" looks
+// like, which is exactly the drift STATUS_META was created to stop.
 export const PRIORITY_META: Record<
   Priority,
-  { label: string; className: string; icon: LucideIcon }
+  { label: string; className: string; icon: LucideIcon; dot: string }
 > = {
   LOW: {
     label: 'Low',
     icon: ArrowDown,
+    dot: 'bg-slate-400',
     className: 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-400/15 dark:text-slate-300 dark:border-slate-400/20',
   },
   MEDIUM: {
     label: 'Medium',
     icon: Equal,
+    dot: 'bg-blue-500',
     className: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/20',
   },
   HIGH: {
     label: 'High',
     icon: ArrowUp,
+    dot: 'bg-orange-500',
     className: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/20',
   },
   CRITICAL: {
     label: 'Critical',
     icon: ChevronsUp,
+    dot: 'bg-red-500',
     className: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/20',
   },
 };

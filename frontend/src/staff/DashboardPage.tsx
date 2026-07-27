@@ -12,10 +12,10 @@ import { AnimatedNumber } from '@/components/AnimatedNumber';
 import { Reveal } from '@/components/Reveal';
 import { TrendChart } from './TrendChart';
 import {
-  Breakdown, HeroStat, KpiCard, SlaHealth,
+  Breakdown, HeroStat, KpiCard, SlaHealth, TrendChip,
 } from './dashboard-widgets';
+import { METER_TONE, meterTone } from '@/lib/issue-meta';
 import { hoursFmt, pct } from '@/lib/format';
-import { cn } from '@/lib/utils';
 
 export function DashboardPage() {
   const { data, isLoading, isError } = useQuery({
@@ -80,7 +80,7 @@ export function DashboardPage() {
           value={`${pct(resolvedOrClosed, all)}%`}
           sub={`${resolvedOrClosed} of ${all} closed out`}
           progress={pct(resolvedOrClosed, all)}
-          progressClass="bg-emerald-500"
+          progressClass={METER_TONE.good}
         />
         <KpiCard
           label="SLA on track"
@@ -88,24 +88,14 @@ export function DashboardPage() {
           value={`${pct(onTrack, open)}%`}
           sub={`${onTrack} of ${open} open within target`}
           progress={pct(onTrack, open)}
-          progressClass={overdue > 0 ? 'bg-amber-500' : 'bg-emerald-500'}
+          progressClass={meterTone(overdue > 0)}
         />
         <KpiCard
           label="Created"
           icon={<Inbox className="h-5 w-5" />}
           value={<AnimatedNumber value={created14} className="tabular-nums" />}
           sub="new in the last 14 days"
-          chip={
-            <span className={cn(
-              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
-              net > 0
-                ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
-                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
-            )}>
-              {net > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {net > 0 ? `+${net}` : net} net
-            </span>
-          }
+          chip={<TrendChip net={net} />}
         />
         <KpiCard
           label="Resolved"
@@ -137,7 +127,7 @@ export function DashboardPage() {
           value={data.ops.reopenRate === null ? '—' : `${data.ops.reopenRate}%`}
           sub="of resolutions reopened (30d)"
           progress={data.ops.reopenRate ?? 0}
-          progressClass={data.ops.reopenRate !== null && data.ops.reopenRate > 20 ? 'bg-amber-500' : 'bg-emerald-500'}
+          progressClass={meterTone(data.ops.reopenRate !== null && data.ops.reopenRate > 20)}
         />
         <KpiCard
           label="Deflected"
@@ -155,7 +145,7 @@ export function DashboardPage() {
             ? `${data.csat.count} rating${data.csat.count === 1 ? '' : 's'} from reporters`
             : 'no reporter ratings yet'}
           progress={data.csat.positiveRate ?? 0}
-          progressClass={data.csat.positiveRate !== null && data.csat.positiveRate < 60 ? 'bg-amber-500' : 'bg-emerald-500'}
+          progressClass={meterTone(data.csat.positiveRate !== null && data.csat.positiveRate < 60)}
         />
       </Reveal>
 

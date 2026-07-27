@@ -346,7 +346,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           {data.context && (
             <details className="group rounded-lg border border-border/60">
               <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-sm font-medium">
-                <ActivitySquare className="h-4 w-4 text-emerald-500" />
+                <ActivitySquare className="h-4 w-4 text-success" />
                 Diagnostics
                 <span className="text-xs font-normal text-muted-foreground">
                   auto-captured by the reporting app

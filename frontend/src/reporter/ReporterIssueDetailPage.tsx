@@ -57,7 +57,7 @@ function CsatWidget({ issueId, existing }: {
     return (
       <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
         {existing.score === 1
-          ? <ThumbsUp className="h-4 w-4 text-emerald-500" />
+          ? <ThumbsUp className="h-4 w-4 text-success" />
           : <ThumbsDown className="h-4 w-4 text-destructive" />}
         <span>{t('csat.thanks')}</span>
         <button
