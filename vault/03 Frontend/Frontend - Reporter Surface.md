@@ -23,7 +23,7 @@ The reporter portal is **localized**; the staff workspace deliberately is not (a
 | `i18n/locales.ts` | Flat key→string dictionaries. **`en` is the source of truth and defines the key type** (`TranslationKey`); `es`/`fr`/`de` are `Partial`s. `LOCALES` carries each language's own endonym for the switcher. |
 | `i18n/index.tsx` | `I18nProvider`, `useT()` → `{ locale, setLocale, t }`, `detectLocale()`, `{name}` interpolation. |
 | `i18n/LanguageSwitcher.tsx` | Dropdown listing every language in its **endonym** ("Español", not "Spanish") — someone who can't read the current UI language must still find theirs. |
-| `i18n/useStatusLabel.ts` | Localized `IssueStatus` label, paired with `StatusBadge`'s `label` prop. |
+| `i18n/useStatusLabel.ts` | Localized `IssueStatus` **and** `Priority` labels (`useStatusLabel` / `usePriorityLabel`), paired with the `label` prop on `StatusBadge` / `PriorityBadge`. |
 
 - **Dependency-free by choice.** Three small pages with a flat key set; react-i18next's loaders/plural engine/namespaces would all go unused. The `useT()` call sites already match its shape, so swapping later is mechanical.
 - **Locale precedence:** `?lang=` (portal deep-link) → `localStorage` → `navigator.language` → `en`. Persisted; storage failures (private mode / locked-down embed) fall through to English rather than breaking the page.
@@ -33,6 +33,8 @@ The reporter portal is **localized**; the staff workspace deliberately is not (a
 
 ## Reuse note
 `StatusBadge` gained an optional **`label`** prop rather than being forked: the portal passes a translated label while both surfaces keep one badge component and one set of contrast-checked colours. → [[Frontend - Components, Lib and API]]
+
+**Completed 2026-07-27.** The localisation had two holes that a UI/UX audit caught: the issue table's four column headers were English literals, and `PriorityBadge` had never been given the `label` prop `StatusBadge` got for exactly this purpose — so a Spanish reporter saw Spanish navigation, Spanish empty states and a Spanish status badge sitting next to an English "Critical". Eight keys added across all four locales. The lesson worth keeping: when a shared component is given an i18n escape hatch, check its siblings — the pattern was half-applied for weeks without anything failing.
 
 ## Data flow
 - All calls go through `reporterApi` with `X-Handoff-Token`; the token was captured from `?handoff=`/postMessage into `sessionStorage` and stripped from the URL.

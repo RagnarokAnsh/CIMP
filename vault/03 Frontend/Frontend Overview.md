@@ -1,7 +1,7 @@
 ---
 title: Frontend Overview
 tags: [cimp, frontend, react]
-updated: 2026-07-13
+updated: 2026-07-27
 ---
 # Frontend Overview
 ← [[CIMP - Home]]
@@ -26,7 +26,18 @@ The reporter surface is **localized** (EN/ES/FR/DE, `src/i18n/`); the staff work
 - **Dashboard** (`src/staff/DashboardPage.tsx`): KPI rows now include **CSAT (30d)** + an **ops** row (first-response/resolution p50·p90, reopen rate, deflected).
 - **Support button** (`src/staff/SupportButton.tsx`): self-support handoff → [[Integrations]].
 
+## Design system — read `DESIGN.md` before touching styling
+`DESIGN.md` was rewritten on 2026-07-27 to match what actually ships (a measured UI/UX audit found the documented system and the built one had drifted). The rules that bite hardest:
+
+- **Tokens, never raw palette.** `bg-emerald-500` and friends are banned outside `lib/issue-meta.ts` / `lib/status-meta.ts`. Semantic fills go through `METER_TONE`/`meterTone()`; badges through `BADGE_TONE`; banners through `BANNER_TONE`. There are currently **zero** hardcoded palette values elsewhere — keep it that way.
+- **`--border` ≠ `--input`.** `--border` is decorative (dividers, card edges). `--input` is a form-control boundary, which WCAG 1.4.11 requires at 3:1 — that is why it is much darker than it looks like it should be.
+- **One focus ring**: `.focus-ring` (or `.focus-ring-surface` on cards). Never hand-roll `focus-visible:ring-*`.
+- **Type scale is tokenised** (`--text-2xs` … `--text-4xl`). 11px is the hard floor; `text-[10px]` is banned. Note `text-sm` (14px) is the working base, not `text-base`.
+- **`CardTitle` is a heading**, not a styled div — it carries the document outline for nearly every panel.
+- **One height per toolbar**; `--workspace-chrome` for `100vh` subtraction; `.z-sticky/.z-header/.z-overlay/.z-progress` for stacking.
+- **Colour is never the only signal**, and the six status dots are solved as a set for colour-vision distance — re-run the solver before changing one. `tests/e2e/design-tokens.spec.ts` measures every badge tone in both themes **and** guards against the recipe list drifting from the source.
+
 ## Commands (`frontend/`)
 `npm run dev` (:5173, proxies `/api`→:3000) · `npm run build` (`tsc -b && vite build`) · `npm run typecheck` · `npm run gen:api` · `npm run test:e2e` (Playwright, needs dev Postgres).
 
-Related: [[Backend Modules and API]] · [[Features - Shipped]]
+Related: [[Backend Modules and API]] · [[Features - Shipped]] · [[Frontend - Components, Lib and API]]
