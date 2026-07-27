@@ -1,12 +1,26 @@
 ---
 title: Features - Shipped
 tags: [cimp, features]
-updated: 2026-07-13
+updated: 2026-07-27
 ---
 # Features - Shipped (JIRA-like)
 ← [[CIMP - Home]] · roadmap → [[Feature Roadmap]]
 
 All backend follows the same pattern: entity + migration + service (scoped, tested) + controller under `/api/staff/...`, guarded by `PlatformAccessGuard` or a platform-scope check. All tenant-isolated.
+
+## Canned responses `#feature`
+`src/canned-responses/*` · `CannedResponse`. Per-platform reply templates with `{{reporter}}`/`{{reference}}`/`{{assignee}}`/`{{platform}}` placeholders substituted **client-side at insert** (the server never interpolates). Write-role only for reads too — a watcher can't comment, so there is no read-only surface. Routes: `/api/staff/platforms/:pid/canned-responses` (CRUD). **UI:** Admin → Integrations (manage) + a "Templates" dropdown in the comment composer that inserts at the caret. → [[Module - Canned Responses]]
+
+## Public status page `#feature`
+`src/status/*` · `StatusComponent` + `StatusIncident` + `StatusIncidentUpdate`. Per-platform components with a health status, and incidents carrying an **append-only public timeline** — posting an update is how an incident progresses (the incident inherits the update's status; RESOLVED stamps `resolvedAt`, re-opening clears it). Overall banner = worst component, and an open incident forces at least DEGRADED so a platform that only posts incidents never reads green. Cross-platform component ids are refused. Routes: staff `/api/staff/platforms/:pid/status/*`; **public `GET /api/public/platforms/:key/status`** (unauthenticated, CORS `*`, 30s cache, 60/min — a DISABLED platform 404s like an unknown one). **UI:** Admin → Status page tab; public page at `/status/:key`. → [[Module - Status Page]]
+
+## Tenant-owner reporting `#feature`
+`src/dashboard/*` — `GET /api/staff/platforms/:pid/report`. One platform's support health (FRT/resolution percentiles, SLA, CSAT, reopen rate, deflection, 14-day trend, published known issues), reusing every dashboard aggregate via `computeForScope`. **Read-role, so the read-only `WATCHER` grant is the canonical tenant-observer role** — a platform's owning team can watch their support health with zero mutation rights. **UI:** `/staff/reports`, sharing `dashboard-widgets.tsx` with the main dashboard so the two can't drift. → [[Module - Dashboard]]
+
+## Reporter portal i18n + machine translation `#feature`
+Two independent halves:
+- **UI localization** (`frontend/src/i18n/`) — EN/ES/FR/DE for the reporter portal, dependency-free and typed off the `en` dictionary; `?lang=` → localStorage → `navigator.language` → `en`; per-*key* English fallback. The staff workspace is deliberately not localized. → [[Frontend - Reporter Surface]]
+- **Message translation** (`src/translation/`) — an env-chosen seam (`TRANSLATE_DRIVER=none|libretranslate`, default off) that fills a jsonb cache off the `comment.added` event. **`Comment.body` is always the original**; both surfaces show the translation with a "show original" toggle, so a provider outage degrades to untranslated text rather than a failed reply. The reporter's language rides an optional `locale` claim on the hand-off token. → [[Module - Translation]]
 
 ## Issue links `#feature`
 `src/issues/issue-links.*` · `IssueLink` entity. Directional `BLOCKS|RELATES|DUPLICATES`, **same-platform only**, self-link/duplicate rejected, inward/outward presentation. Routes: `GET/POST/DELETE /api/staff/issues/:id/links`. **UI:** links card in [[Frontend Overview|IssueExtras.tsx]] (add by typing a reference → resolved via scoped search).

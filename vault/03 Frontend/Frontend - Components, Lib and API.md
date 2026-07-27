@@ -19,7 +19,7 @@ Shared UI, hooks, and the API clients used by both the [[Frontend - Staff Worksp
 | `DateRangeFilter.tsx` | Created-date range as a Popover with presets, replacing two bare `<input type="date">` controls. |
 | `AttachmentGallery.tsx` | Grid of attachments with scan-gated download. |
 | `AttachmentPreview.tsx` | Inline preview; **PDFs render in a `sandbox=""` iframe** (opaque origin, no scripts — audit M5). |
-| `StatusBadge.tsx` / `SlaBadge.tsx` | Status/priority + SLA state badges, both built on `lib/issue-meta.ts`. **`SlaBadge` renders nothing for on-track/terminal issues** — an empty SLA column means everything is on track, not a bug. |
+| `StatusBadge.tsx` / `SlaBadge.tsx` | Status/priority + SLA state badges, both built on `lib/issue-meta.ts`. **`SlaBadge` renders nothing for on-track/terminal issues** — an empty SLA column means everything is on track, not a bug. `StatusBadge` takes an optional **`label`** override so the localized reporter portal reuses it instead of forking. → [[Frontend - Reporter Surface]] |
 | `AnimatedNumber.tsx`, `Reveal.tsx`, `GlobalLoadingBar.tsx`, `ThemeToggle.tsx`, `theme-provider.tsx` | Motion/UX + theming. |
 
 ## `lib/`
@@ -27,13 +27,16 @@ Shared UI, hooks, and the API clients used by both the [[Frontend - Staff Worksp
 |---|---|
 | `realtime.ts` | **`useStaffRealtime`** — fetches a short-lived SSE **ticket** (bearer header), opens `EventSource`, invalidates TanStack caches on events; re-fetches a ticket on reconnect. → [[Auth and Authorization]] |
 | `issue-status.ts` | `STATUS_TRANSITIONS`, `canTransition`, `BOARD_STATUS_ORDER` (mirrors server status machine). |
+| `status-meta.ts` | Status-page vocabulary in the same shape as `issue-meta.ts`: `COMPONENT_STATUS_META`, `INCIDENT_STATUS_META`, `INCIDENT_IMPACT_META`, `OVERALL_HEADLINE` + ordered picker lists. Tones reuse `BADGE_TONE`, so the public page and the admin tab can never describe a state differently. → [[Module - Status Page]] |
+| `api-error.ts` | **`friendlyError(e, fallback)`** — the single status→human-text mapper. Prefers the server's message for *domain* statuses (400/404/409/422, which are specific and actionable) and substitutes friendly text elsewhere (429, 5xx, and `0` = no response reached us). Strips any `SomethingException:` prefix defensively. `GLOBALLY_TOASTED` (401/403/429) lets per-call handlers avoid stacking a second toast on the interceptor's. |
 | `issue-meta.ts` | Status/priority labels + colours, **and `BADGE_TONE` / `TEXT_TONE` — the single source for success/info/warning/danger styling.** Reach for these instead of hand-rolling `bg-emerald-500/10 text-emerald-400`-style classes: every ad-hoc recipe that existed was written in dark mode and measured 1.7–3.5 against a 4.5 AA requirement in light. `tests/e2e/design-tokens.spec.ts` pins all 17 recipes in both themes. The raw Tailwind palette (rather than the `--success`/`--warning` tokens) is deliberate here — 6 statuses × 4 priorities need more distinct hues than the semantic tokens provide. |
-| `format.ts`, `download.ts`, `motion.ts`, `utils.ts` | Formatting, file download, command-palette open, `cn`. |
+| `format.ts`, `download.ts`, `motion.ts`, `utils.ts` | Formatting (`relativeTime`/`dateTime`/`shortDate`/`initials`/`firstLine` + the analytics helpers **`pct`/`hoursFmt`**), file download, command-palette open, `cn`. |
+| `toast-error.ts` | `toastApiError` / `toastMutationError` — both now route through `api-error.ts` and **skip statuses the global interceptor already toasted**. |
 
 ## `api/`
 | File | Responsibility |
 |---|---|
-| `client.ts` | `staffApi` (Bearer JWT) + `reporterApi` (`X-Handoff-Token`) axios instances; token getters; 401 handling. |
+| `client.ts` | `staffApi` (Bearer JWT) + `reporterApi` (`X-Handoff-Token`) axios instances; token getters; **401 / 403 / 429** handling, deduped (`authToast`, 3s window). 409 is deliberately passed through untouched so per-mutation handlers can refresh and retry. |
 | `handoff.ts` | Captures the hand-off token from `?handoff=` / origin-checked `postMessage` → `sessionStorage`, strips it from the URL. |
 | `types.ts` | Hand-written response types (mirror backend). Regenerate the full client: `npm run gen:api`. |
 

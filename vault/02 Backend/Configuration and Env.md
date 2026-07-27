@@ -30,6 +30,7 @@ Swagger + verbose errors are also disabled in production.
 - **Jira:** `JIRA_BASE_URL/EMAIL/API_TOKEN/WEBHOOK_SECRET` (blank = disabled).
 - **Policy:** `FOCAL_POINT_CAN_TRANSITION` (OD-09, default false).
 - **Self-support:** `SELF_SUPPORT_PLATFORM_KEY` (default `cimp`) → [[Integrations]].
+- **Translation (optional, default off):** `TRANSLATE_DRIVER` (`none`|`libretranslate`), `TRANSLATE_API_URL`, `TRANSLATE_API_KEY`, `TRANSLATE_STAFF_LOCALE` (default `en` — the language inbound reporter messages are translated *into*), `TRANSLATE_REPORTER_LOCALES` (comma-separated, e.g. `es,fr,de` — pre-warms translations of staff replies). With the default `none` nothing is translated and **no comment text leaves the box**; enabling it sends message bodies to the configured provider, so self-host LibreTranslate if that matters. → [[Module - Translation]] · [[Security Audit and Hardening]]
 - **(FAFICS / connectors set):** `CIMP_PLATFORM_KEY`, `CIMP_HANDOFF_SECRET`, `CIMP_SUPPORT_URL` — live in the *consumer* project, not here. See [[cimp-connect Package]].
 
 > ⚠️ **Deploy gotcha:** merging `dev`→`main` (which deploys) requires all the prod vars above set on the server, or boot fails by design. See [[Session Handoff]].

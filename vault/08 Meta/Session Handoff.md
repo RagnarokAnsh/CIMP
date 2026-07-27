@@ -1,7 +1,7 @@
 ---
 title: Session Handoff
 tags: [cimp, handoff, resume]
-updated: 2026-07-24
+updated: 2026-07-27
 ---
 # Session Handoff — read this first when resuming
 ← [[CIMP - Home]]
@@ -14,7 +14,9 @@ updated: 2026-07-24
 - Sibling repos: `D:\cimp-connect` ([[cimp-connect Package]]), `D:\FAFICS` ([[FAFICS Integration]]).
 
 ## State (green)
-- **215 unit + 40 e2e (backend) + 11 Playwright e2e (frontend) pass**; both typechecks clean; **ESLint now wired and green** (`npm run lint` in each root — 0 errors; 86 backend + 6 frontend warnings, informational). Verify: `npm test && npm run test:e2e` (root) and `cd frontend && npm run test:e2e` (needs dev Postgres up; boots API on :3972 + Vite on :5199).
+- **244 unit (30 suites) + 40 e2e (backend) + 11 Playwright e2e (frontend) pass**; both typechecks clean; **ESLint green** (`npm run lint` in each root — 0 errors; 86 backend + 9 frontend warnings, informational). Verify: `npm test && npm run test:e2e` (root) and `cd frontend && npm run test:e2e` (needs dev Postgres up; boots API on :3972 + Vite on :5199).
+- **2026-07-27: audit pass + six-feature batch.** A full audit (OWASP, bugs, redundancy, reuse, QA, UI/UX) found **no exploitable holes and no functional bugs**; then shipped: 429/error message mapping, **canned responses**, **tenant-owner reporting**, **public status page**, **reporter i18n (EN/ES/FR/DE)**, and **machine translation** of reporter↔staff messages. **Migrations now #20** (18 canned responses, 19 status page, 20 comment translations). New env (all default off/none): `TRANSLATE_DRIVER`, `TRANSLATE_API_URL`, `TRANSLATE_API_KEY`, `TRANSLATE_STAFF_LOCALE`, `TRANSLATE_REPORTER_LOCALES`. → Changelog · [[Module - Status Page]] · [[Module - Translation]] · [[Module - Canned Responses]]
+- **Open from that audit (not yet done):** `npm audit fix` in both roots (18 backend / 7 frontend advisories, mostly build-time tooling — `typeorm <0.3.31`, `picomatch`, `tmp`, `webpack buildHttp`); a status-machine parity test between `src/issues/status-machine.ts` and `frontend/src/lib/issue-status.ts` (they agree today, nothing enforces it); and the duplicated audit-action label formatting in `AuditPage.tsx` / `IssueDetailPanel.tsx`.
 - **2026-07-24: audit remediation batch** — essentially all of a ~30-finding audit pass fixed (tenant-isolation oracles, live SSE/notification/token revocation, webhook redirect SSRF, automation validation+events, Jira side-effects, scan-retry sweep, storage-cleanup, trust-proxy, plus consistency/dedup + the ESLint gate). Migrations unchanged (still #17). New env (all default on): `SCAN_RETRY_ENABLED`; new opt-in: `TRUST_PROXY` (default off). → Changelog · [[Security Audit and Hardening]]
 - **2026-07-22: admin CRUD completed** — platform + staff lifecycle (disable/enable/delete), self- and last-admin lockout guards, a ghost-account fix in `upsertFromClaims`, and confirmation dialogs on every destructive action. No migration needed (`status` columns already existed). → Changelog · [[Module - Admin]]
 - **2026-07-13 audit pass done** (auth hardening + dedup — see Changelog). Top remaining engineering gaps, in order: **CI pipeline** (231 tests, nothing runs them automatically), error monitoring, then deploy dev→main (migrations 12-17) + domain/TLS.
@@ -22,15 +24,16 @@ updated: 2026-07-24
 - **Deploy note:** dev is many features ahead of the AWS `main` deploy — merging dev→main runs migrations 12-17 and ships all new surfaces at once. New env (optional): `SLA_SWEEP_ENABLED`, `DIGEST_ENABLED` (both default on).
 - **Local dev ports:** FAFICS now squats :3000 (web) and :3001 (api) — run the CIMP backend with `PORT=<free> npm run start:dev` when both are up.
 - **Security:** the 2026-07-24 batch closed essentially all remaining open findings from the audit (tenant-isolation oracles, live revocation across SSE/notifications/tokens, webhook redirect SSRF, +more). Tracker: `SECURITY_AUDIT.md`. → [[Security Audit and Hardening]].
-- **Features shipped:** issue links, labels, watchers, automation rules, scoped API tokens (all backend+tests+**UI** — automation/token UIs now live in Admin → Integrations); board WIP limits **+ swimlanes** (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). Plus the differentiator track: merge, webhooks, SDK context capture, CSAT, deflection, triage inbox, SLA policies/escalations, ops analytics/digest, JQL. → [[Features - Shipped]] / [[Module - Authz]].
+- **Features shipped:** issue links, labels, watchers, automation rules, scoped API tokens (all backend+tests+**UI** — automation/token UIs now live in Admin → Integrations); board WIP limits **+ swimlanes** (UI); SSE-ticket auth; **WATCHER read-only role** (backend+tests+UI, admin-managed, per-platform or global). Plus the differentiator track: merge, webhooks, SDK context capture, CSAT, deflection, triage inbox, SLA policies/escalations, ops analytics/digest, JQL. Plus the 2026-07-27 batch: **canned responses, tenant-owner reporting, public status page, reporter i18n, machine translation**. → [[Features - Shipped]] / [[Module - Authz]].
 
 ## What's next (priority order) → [[Feature Roadmap]]
 The differentiator + JIRA-like feature tracks are **done** (SLA policies/escalations, automation/API-token UIs, board swimlanes, JQL all shipped — see [[Features - Shipped]]). Remaining, in order:
-1. **CI pipeline** — 266 tests (215 unit + 40 backend e2e + 11 Playwright) **+ `npm run lint`** (now green in both roots), nothing runs them automatically yet. Note: adopting lint in CI needs `npm install` first (the eslint deps were added 2026-07-24) — first real run may surface warnings to triage.
-2. **Error monitoring** (no runtime observability).
-3. **Deploy `dev → main`** — runs migrations 12–17, ships all new surfaces at once; needs the prod env set (incl. optional `SLA_SWEEP_ENABLED`/`DIGEST_ENABLED`) + domain/TLS. → [[Configuration and Env]].
-4. **AI triage (Plan 05)** — user-deferred. → [[Plan 05 - AI Triage Pluggable and Free]].
-5. **Email-to-issue intake** — **do LAST** (user directive); needs a mail-provider decision.
+1. **CI pipeline** — 295 tests (244 unit + 40 backend e2e + 11 Playwright) **+ `npm run lint`** (green in both roots) **+ `npm audit`**, nothing runs them automatically yet. Note: adopting lint in CI needs `npm install` first (the eslint deps were added 2026-07-24) — first real run may surface warnings to triage.
+2. **`npm audit fix`** in both roots — 18 backend / 7 frontend advisories, mostly build-time tooling; a few need breaking bumps (`@nestjs/typeorm@11`). Surfaced by the 2026-07-27 audit.
+3. **Error monitoring** (no runtime observability).
+4. **Deploy `dev → main`** — runs migrations 12–20, ships all new surfaces at once; needs the prod env set (incl. optional `SLA_SWEEP_ENABLED`/`DIGEST_ENABLED`; translation stays off unless `TRANSLATE_DRIVER` is set) + domain/TLS. → [[Configuration and Env]].
+5. **AI triage (Plan 05)** — user-deferred. → [[Plan 05 - AI Triage Pluggable and Free]].
+6. **Email-to-issue intake** — **do LAST** (user directive); needs a mail-provider decision.
 - Decision-gated security: Redis throttler (M8), disk-streaming uploads (M6). Webhook SSRF: redirects are now refused and CGNAT blocked (2026-07-24); the remaining gap is DNS-rebinding (a public name resolving to a private IP) — hostname-string check only, admin-gated.
 
 ## Dev-environment gotchas (bit us on 2026-07-22)

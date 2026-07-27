@@ -8,9 +8,12 @@ updated: 2026-07-13
 
 `frontend/` — Vite + React + TypeScript SPA. shadcn/ui (owned source in `src/components/ui/`), TanStack Query + Table, React Router, sonner (toasts), dnd-kit (board). E2E via **Playwright** (`tests/e2e/`, `npm run test:e2e`).
 
-## Two surfaces (one SPA, `src/App.tsx`)
+## Three surfaces (one SPA, `src/App.tsx`)
 - **Reporter** (`/reporter/*`) — embedded in portals; auth via hand-off token (`src/api/handoff.ts` captures `?handoff=`/postMessage → `sessionStorage`, stripped from URL). SDK diagnostics ride a `#cimpctx=` URL **fragment**, captured by `src/api/diagnostics.ts` before render (never hits a server). Pages: NewIssuePage (+ deflection "already tracked" panel + removable diagnostics/screenshot chips), MyIssuesPage, ReporterIssueDetailPage (+ CSAT 👍/👎 widget once RESOLVED/CLOSED).
-- **Staff** (`/staff/*`) — email/password login (`src/staff/local-auth.tsx`, token in `sessionStorage`). Layout `StaffLayout.tsx` (sidebar + top bar). Pages: IssuesListPage (+ **JQL** query input with inline errors), BoardPage, DashboardPage, AuditPage, AdminPage, **TriagePage** (`/staff/triage` — keyboard-first NEW queue), StaffIssueDetailPage. Command palette (⌘K).
+- **Staff** (`/staff/*`) — email/password login (`src/staff/local-auth.tsx`, token in `sessionStorage`). Layout `StaffLayout.tsx` (sidebar + top bar). Pages: IssuesListPage (+ **JQL** query input with inline errors), BoardPage, DashboardPage, **PlatformReportPage** (`/staff/reports` — per-platform tenant report), AuditPage, AdminPage, **TriagePage** (`/staff/triage` — keyboard-first NEW queue), StaffIssueDetailPage. Command palette (⌘K).
+- **Public status page** (`/status/:key`) — `src/status/PublicStatusPage.tsx`. **Unauthenticated**, and deliberately uses its own bare axios instance rather than `staffApi`/`reporterApi`, which would attach credentials this page must never send. Auto-refreshes every 60s. → [[Module - Status Page]]
+
+The reporter surface is **localized** (EN/ES/FR/DE, `src/i18n/`); the staff workspace is not. → [[Frontend - Reporter Surface]]
 
 ## Key pieces
 - **API clients** (`src/api/client.ts`): `staffApi` (Bearer) + `reporterApi` (`X-Handoff-Token`), axios, 401 handling.

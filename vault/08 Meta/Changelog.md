@@ -2,12 +2,24 @@
 title: Changelog
 tags: [cimp, changelog, updates]
 type: log
-updated: 2026-07-24
+updated: 2026-07-27
 ---
 # Changelog / Updates Log
 ← [[CIMP - Home]] · [[Session Handoff]]
 
-> Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~19 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+> Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~20 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+
+## 2026-07-27 — Six-feature batch: error mapping, canned responses, tenant reporting, status page, i18n + machine translation
+
+Preceded by a full audit pass (OWASP, bugs, redundancy, reuse, UI/UX) that found **no exploitable holes and no functional bugs** — the security core (404-vs-403 enumeration defense, magic-byte sniffing, prototype-pollution guard, algorithm-pinned hand-off JWTs, webhook redirect refusal) held up. Open items it did surface: dependency `npm audit` (18 backend / 7 frontend, mostly build-time), and a status-machine parity test. **244 unit tests / 30 suites pass; both typechecks clean; both lints 0 errors.** Migrations now **#20**.
+
+- **`ThrottlerException: Too Many Requests` reached users verbatim.** Fixed at both layers: `AllExceptionsFilter` now normalizes *every* 429 body to one friendly sentence (its default message is class-name-prefixed and meaningless), and a new `lib/api-error.ts` is the single status→text mapper on the client — server message preferred for domain statuses (400/404/409/422), friendly text elsewhere (429/5xx/`0` = no response). All three raw-message sites (login, intake, mutations) route through it, and 401/403/429 are now toasted **once** by the interceptor instead of stacking. → [[Module - Common and Config]] · [[Frontend - Components, Lib and API]]
+- **Canned responses.** Per-platform reply templates with `{{placeholders}}` filled client-side at insert; managed in Admin → Integrations, inserted from a "Templates" dropdown in the comment composer. Write-role only (a watcher can't comment, so there is no read-only surface). → [[Module - Canned Responses]]
+- **Tenant-owner reporting.** `GET /staff/platforms/:pid/report` + `/staff/reports`: one platform's support health, reusing every dashboard aggregate via an extracted `computeForScope`. **Read-role**, so the read-only `WATCHER` grant becomes the tenant-observer role. The frontend cards were extracted to `dashboard-widgets.tsx` and `DashboardPage` refactored onto them, so the two surfaces share one implementation rather than a copy. → [[Module - Dashboard]] · [[Frontend - Staff Workspace]]
+- **Public status page.** Components + incidents with an append-only public timeline; posting an update *is* how an incident progresses. Public `GET /api/public/platforms/:key/status` is unauthenticated, CORS-open and 30s-cached, and uses its own bare axios instance on the client so no credential is ever attached. Overall status = worst component, but an open incident forces at least DEGRADED so an incident-only platform never reads green. → [[Module - Status Page]]
+- **Reporter portal i18n (EN/ES/FR/DE).** Dependency-free and typed off the `en` dictionary (three small pages; react-i18next's loaders/plurals/namespaces would go unused). Locale precedence `?lang=` → localStorage → `navigator.language` → `en`, with per-*key* English fallback so a partial translation never renders blank. `StatusBadge` gained an optional `label` prop instead of being forked. Staff workspace stays English by design. → [[Frontend - Reporter Surface]]
+- **Machine translation of reporter↔staff messages.** New env-chosen seam (`TRANSLATE_DRIVER`, default `none`) in the shape of storage/scanning; a listener fills a jsonb cache off `comment.added`, never in the request path. **`Comment.body` is always the original** and both surfaces offer "show original", so a provider outage degrades to untranslated text rather than a failed reply. A failed translation that echoes its input is deliberately not cached. Reporter language rides an optional `locale` claim on the hand-off token (malformed → dropped, never a failed hand-off). → [[Module - Translation]] · [[Module - Handoff]] · [[Configuration and Env]]
+- **Audit follow-through:** `isUniqueViolation` extracted to `src/common/db-errors.ts` (it was hand-rolled in six files) and used by all new code.
 
 ## 2026-07-24 — Audit remediation batch: security, correctness, consistency, dedup
 
