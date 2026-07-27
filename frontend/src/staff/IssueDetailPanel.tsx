@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ActivitySquare, AtSign, ChevronDown, Copy, Lock, Megaphone, MessageSquare, MessageSquareText, Send,
+  ActivitySquare, AtSign, Copy, Lock, Megaphone, MessageSquare, MessageSquareText, Send,
   ThumbsDown, ThumbsUp, UserCheck, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { IssueWatch, IssueLabels, IssueLinks, MergeIssueButton } from './IssueExtras';
+import { Disclosure } from '@/components/ui/disclosure';
 import { DiagnosticsView } from '@/components/DiagnosticsView';
 
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -346,30 +347,30 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           </Card>
 
           {data.context && (
-            <details className="group rounded-lg border border-border/60">
-              <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-sm font-medium">
-                <ActivitySquare className="h-4 w-4 text-success" />
-                Diagnostics
-                <span className="text-xs font-normal text-muted-foreground">
-                  auto-captured by the reporting app
-                </span>
-                <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="space-y-3 border-t border-border/60 px-4 py-3">
-                <DiagnosticsView context={data.context} />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => {
-                    void navigator.clipboard.writeText(JSON.stringify(data.context, null, 2));
-                    toast.success('Diagnostics copied as JSON.');
-                  }}
-                >
-                  <Copy className="h-3.5 w-3.5" /> Copy JSON
-                </Button>
-              </div>
-            </details>
+            <Disclosure
+              icon={<ActivitySquare className="h-4 w-4 shrink-0 text-success" aria-hidden />}
+              summary={
+                <>
+                  Diagnostics
+                  <span className="ml-2 text-xs font-normal text-muted-foreground">
+                    auto-captured by the reporting app
+                  </span>
+                </>
+              }
+            >
+              <DiagnosticsView context={data.context} />
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  void navigator.clipboard.writeText(JSON.stringify(data.context, null, 2));
+                  toast.success('Diagnostics copied as JSON.');
+                }}
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy JSON
+              </Button>
+            </Disclosure>
           )}
 
           <Tabs defaultValue="comments">
@@ -658,23 +659,21 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           {/* Collapsed unless the issue is actually published. Expanded it is a
               ~250px block of explanation for an action taken on a small minority
               of issues, and with four other cards below it that padding is what
-              left a long dead gap beside the main column. Same <details> pattern
-              as Diagnostics above. */}
+              left a long dead gap beside the main column.
+              Now the shared Disclosure, same as Diagnostics — these two sat a few
+              hundred pixels apart in one column with different chrome (a bare
+              bordered box vs. a Card with py-0 to cancel its own padding), which
+              is what happens when the same idiom is built twice. */}
           {canWrite && (
-          // py-0: Card supplies its own py-6, which sat *outside* the summary and
-          // left the collapsed row floating with ~24px of dead space above and
-          // below it — and double-counted with the expanded body's pb-6. The
-          // <details> owns all of its padding instead.
-          <Card className="py-0">
-            <details open={data.publiclyVisible} className="group">
-              <summary className="flex cursor-pointer select-none items-center gap-2 px-6 py-4 text-base font-semibold">
-                <Megaphone className="h-4 w-4" /> Known issue
-                {data.publiclyVisible && (
-                  <Badge variant="outline" className={cn('text-2xs', BADGE_TONE.info)}>Published</Badge>
-                )}
-                <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="space-y-2 px-6 pb-6">
+          <Disclosure
+            open={data.publiclyVisible}
+            icon={<Megaphone className="h-4 w-4 shrink-0" aria-hidden />}
+            summary="Known issue"
+            badge={data.publiclyVisible ? (
+              <Badge variant="outline" className={cn('text-2xs', BADGE_TONE.info)}>Published</Badge>
+            ) : undefined}
+          >
+              <div className="space-y-2">
                 {data.publiclyVisible ? (
                   <>
                     <p className="text-sm text-muted-foreground">
@@ -709,8 +708,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                   </>
                 )}
               </div>
-            </details>
-          </Card>
+          </Disclosure>
           )}
 
         </div>
