@@ -53,6 +53,17 @@ export function StaffLayout({
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* Skip link. A keyboard user otherwise traverses ~12 controls — seven
+          sidebar links, the collapse toggle, search, support, notifications,
+          theme and the account menu — before reaching content, on every single
+          navigation (WCAG 2.4.1, Level A). Visually hidden until focused. */}
+      <a
+        href="#main-content"
+        className="focus-ring sr-only z-overlay rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:absolute focus:left-4 focus:top-3"
+      >
+        Skip to content
+      </a>
+
       {/* Desktop sidebar */}
       <aside
         className={cn(
@@ -93,7 +104,7 @@ export function StaffLayout({
           <button
             type="button"
             onClick={openCommandPalette}
-            className="flex h-9 w-full max-w-sm items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm text-muted-foreground shadow-xs transition-colors hover:border-ring/40 hover:text-foreground"
+            className="focus-ring flex h-9 w-full max-w-sm items-center gap-2 rounded-lg border border-border bg-surface px-3 text-sm text-muted-foreground shadow-xs transition-colors hover:border-ring/40 hover:text-foreground"
           >
             <Search className="h-4 w-4" />
             <span className="flex-1 text-left">Search issues…</span>
@@ -106,7 +117,11 @@ export function StaffLayout({
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 rounded-full p-0.5 pr-2 transition-colors hover:bg-accent">
+                <button
+                  type="button"
+                  aria-label={me?.name ? `Account menu for ${me.name}` : 'Account menu'}
+                  className="focus-ring flex items-center gap-2 rounded-full p-0.5 pr-2 transition-colors hover:bg-accent"
+                >
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-gradient-brand text-xs text-white">
                       {initials(me?.name)}
@@ -128,7 +143,7 @@ export function StaffLayout({
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto">
           <div className={cn('mx-auto w-full p-4 sm:p-6 lg:p-8', !fullBleed && 'max-w-screen-2xl')}>
             {children}
           </div>
@@ -160,7 +175,7 @@ function SidebarNav({ isAdmin, collapsed }: { isAdmin: boolean; collapsed: boole
         {!collapsed && <span className="font-semibold tracking-tight">Support</span>}
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 p-3">
+      <nav aria-label="Workspace" className="flex flex-1 flex-col gap-1 p-3">
         {NAV_ITEMS.map((item) => (
           <SidebarLink key={item.to} {...item} collapsed={collapsed} />
         ))}

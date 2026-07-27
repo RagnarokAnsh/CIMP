@@ -92,7 +92,7 @@ function ReporterChrome({ children }: { children: React.ReactNode }) {
             </div>
             <span>{t('nav.support')}</span>
           </div>
-          <nav className="flex items-center gap-1 text-sm">
+          <nav aria-label="Portal" className="flex items-center gap-1 text-sm">
             <ReporterNavLink to="/reporter/issues" icon={<ListChecks className="h-4 w-4" />}>
               {t('nav.myIssues')}
             </ReporterNavLink>
@@ -104,7 +104,7 @@ function ReporterChrome({ children }: { children: React.ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
+      <main id="main-content" className="mx-auto max-w-3xl px-4 py-8">{children}</main>
     </div>
   );
 }

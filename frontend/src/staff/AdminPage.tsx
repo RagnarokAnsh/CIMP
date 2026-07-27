@@ -683,7 +683,6 @@ function StaffRow({
               <DropdownMenuItem
                 className="gap-2"
                 disabled={lockedOut}
-                title={lockedOut ? lockoutReason : undefined}
                 onSelect={() => setConfirming('disable')}
               >
                 <Ban className="h-4 w-4" /> Disable account
@@ -693,11 +692,19 @@ function StaffRow({
             <DropdownMenuItem
               className="gap-2 text-destructive focus:text-destructive"
               disabled={lockedOut}
-              title={lockedOut ? lockoutReason : undefined}
               onSelect={() => setConfirming('delete')}
             >
               <Trash2 className="h-4 w-4" /> Delete account
             </DropdownMenuItem>
+
+            {/* The lockout reason used to live in `title` on the disabled items
+                above. shadcn's disabled menu item sets pointer-events:none, so
+                hover never fired and that tooltip could never appear — why you
+                can't delete the last admin was simply unknowable from the UI.
+                It is inline text now, which also survives touch and keyboard. */}
+            {lockedOut && (
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">{lockoutReason}</p>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </TableCell>

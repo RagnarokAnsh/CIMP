@@ -32,6 +32,7 @@ import { Spinner } from '@/components/ui/spinner';
 
 // The two-field intake: description + attachments (OD-04: ≤5 files, ≤10MB,
 // png/jpeg/webp/pdf). Mirrors the backend limits in src/common/constants.ts.
+const MIN_DESCRIPTION = 10; // mirrors the DTO's @MinLength
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
@@ -239,16 +240,19 @@ export function NewIssuePage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t('new.field.descriptionPlaceholder')}
               className="min-h-36"
-              minLength={10}
+              minLength={MIN_DESCRIPTION}
               maxLength={5000}
               required
             />
+            {/* The button is inert below ten characters; the counter used to
+                show the count without ever stating the minimum, so the control
+                was disabled for a reason the interface never gave. */}
             <p className="text-xs text-muted-foreground">
-              {t('new.field.counter', { count: description.length })}
+              {description.length < MIN_DESCRIPTION
+                ? t('new.field.minimum', { remaining: MIN_DESCRIPTION - description.length })
+                : t('new.field.counter', { count: description.length })}
             </p>
           </div>
-
-          <SimilarIssuesPanel description={description} />
 
           <div className="space-y-2">
             <Label htmlFor="files">{t('new.attachments')}</Label>
@@ -338,13 +342,18 @@ export function NewIssuePage() {
             </div>
           )}
 
+          {/* Below the attachment field, not between it and the description.
+              Injected mid-form it pushed the control you were reaching for
+              down the page 600ms after you stopped typing. */}
+          <SimilarIssuesPanel description={description} />
+
           {mutation.isError && (
             <Alert variant="destructive">
               <AlertDescription>{errorMessage}</AlertDescription>
             </Alert>
           )}
 
-          <Button type="submit" disabled={mutation.isPending || description.length < 10 || Boolean(fileError)}>
+          <Button type="submit" disabled={mutation.isPending || description.length < MIN_DESCRIPTION || Boolean(fileError)}>
             {mutation.isPending && <Spinner />}
             {mutation.isPending ? t('new.submitting') : t('new.submit')}
           </Button>

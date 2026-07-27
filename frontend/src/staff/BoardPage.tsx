@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin,
@@ -391,7 +391,11 @@ function Column({
             <Badge
               variant={over ? 'destructive' : 'secondary'}
               className="ml-auto tabular-nums"
-              title={limit !== undefined ? `WIP limit ${limit}` : undefined}
+              // The count/limit is now written out for assistive tech rather
+              // than left to a `title` that never appears on touch or keyboard.
+              aria-label={limit !== undefined
+                ? `${issues.length} of a ${limit} work-in-progress limit${over ? ' — at or over the limit' : ''}`
+                : `${issues.length} issues`}
             >
               {issues.length}{limit !== undefined ? ` / ${limit}` : ''}
             </Badge>
@@ -412,9 +416,25 @@ function Column({
         {loading &&
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
 
-        {!loading && issues.length === 0 && (
+        {/* The drop cue was a 5%-opacity tint that differed from the invalid
+            cue only in hue, and the wording that carried the meaning appeared
+            on empty columns only — exactly where it was least needed. Now every
+            column says what will happen while a card is over it. */}
+        {isOver && (isDropTarget || isInvalidTarget) && (
+          <p
+            role="status"
+            className={cn(
+              'rounded-md px-2 py-1.5 text-center text-xs font-medium',
+              isDropTarget ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive',
+            )}
+          >
+            {isDropTarget ? 'Release to move here' : `Can’t move to ${meta.label}`}
+          </p>
+        )}
+
+        {!loading && issues.length === 0 && !isOver && (
           <div className="flex min-h-20 flex-1 items-center justify-center rounded-lg border border-dashed border-border/60 px-2 py-6 text-center text-xs text-muted-foreground">
-            {isOver && isDropTarget ? 'Release to move here' : 'No issues'}
+            No issues
           </div>
         )}
 
@@ -454,14 +474,23 @@ function DraggableCard({
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
+    // The card is the DRAG surface only; the title inside it is a real link
+    // (see IssueCard). Previously this div was `role="button" tabIndex={0}` and
+    // contained the menu's <button> — a control nested inside a control — while
+    // its Enter handler and dnd-kit's KeyboardSensor both claimed Enter on the
+    // same node, and Space (which a role="button" must handle) did nothing.
+    // Splitting the two roles resolves all three at once: keyboard users tab to
+    // the link to open and to the drag handle to move, and a pointer click on
+    // the card body still opens the issue.
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      onClick={() => onOpen(issue.id)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') onOpen(issue.id); }}
+      onClick={(e) => {
+        // A click that landed on the link or the menu is already handled.
+        if ((e.target as HTMLElement).closest('a,button')) return;
+        onOpen(issue.id);
+      }}
       className={cn(canMove && !dragDisabled && 'cursor-grab active:cursor-grabbing', 'touch-none', isDragging && 'opacity-40')}
     >
       <IssueCard
@@ -517,6 +546,7 @@ function IssueCard({
   dragging?: boolean;
   actions?: React.ReactNode;
 }) {
+  const title = issue.descriptionPreview || issue.referenceNo;
   return (
     <div
       className={cn(
@@ -525,12 +555,22 @@ function IssueCard({
       )}
     >
       <div className="flex items-start gap-2">
-        <p
-          className="line-clamp-3 min-w-0 flex-1 text-sm font-medium leading-snug"
-          title={issue.descriptionPreview || issue.referenceNo}
-        >
-          {issue.descriptionPreview || issue.referenceNo}
-        </p>
+        {/* A real link, not a <p> inside a role="button" div. This is what
+            carries "open the issue" for keyboard and assistive tech, and it
+            means the card itself no longer has to pretend to be a button.
+            `dragging` renders the drag overlay, which must not be focusable. */}
+        {dragging ? (
+          <p className="line-clamp-3 min-w-0 flex-1 text-sm font-medium leading-snug">{title}</p>
+        ) : (
+          <Link
+            to={`/staff/issues/${issue.id}`}
+            title={title}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="focus-ring-surface line-clamp-3 min-w-0 flex-1 rounded-sm text-sm font-medium leading-snug hover:underline"
+          >
+            {title}
+          </Link>
+        )}
         {actions}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

@@ -26,6 +26,7 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { Kbd } from '@/components/ui/kbd';
+import { Separator } from '@/components/ui/separator';
 import { MergeIssueButton } from './IssueExtras';
 import { useDocumentTitle } from '@/lib/use-document-title';
 
@@ -212,9 +213,21 @@ export function TriagePage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
-              {detail?.description ?? current.descriptionPreview}
-            </p>
+            {/* tabIndex + role: this clips at 256px, so without a focusable
+                scroll container a keyboard-only operator could read the first
+                screenful of an issue and had no way to reach the rest — on the
+                page built specifically for keyboard-first triage. The Table
+                component already does exactly this; it just wasn't reused. */}
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Issue description"
+              className="focus-ring-surface max-h-64 overflow-y-auto rounded-sm"
+            >
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                {detail?.description ?? current.descriptionPreview}
+              </p>
+            </div>
 
             {!canWrite && (
               <p className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
@@ -229,21 +242,35 @@ export function TriagePage() {
                     <Kbd>a</Kbd>
                   </Button>
                 )}
-                {PRIORITIES.map((p, i) => (
-                  <Button
-                    key={p}
-                    size="sm"
-                    variant={detail.priority === p ? 'secondary' : 'ghost'}
-                    disabled={busy}
-                    onClick={() => setPriority.mutate(p)}
-                  >
-                    {PRIORITY_META[p].label}
-                    <Kbd className="ml-1">{i + 1}</Kbd>
-                  </Button>
-                ))}
-                <span className="mx-1 h-5 w-px bg-border" />
+                {/* A radio group, not four loose buttons. It had no group role,
+                    no aria-pressed, and the selected state was a `secondary` vs
+                    `ghost` tint that read identically to the status actions
+                    beside it — so "Medium (current)" and "In progress (do this)"
+                    looked the same. Selected is now `default`. */}
+                <div role="group" aria-label="Set priority" className="flex flex-wrap items-center gap-2">
+                  {PRIORITIES.map((p, i) => (
+                    <Button
+                      key={p}
+                      size="sm"
+                      variant={detail.priority === p ? 'default' : 'outline'}
+                      aria-pressed={detail.priority === p}
+                      disabled={busy}
+                      onClick={() => setPriority.mutate(p)}
+                    >
+                      {PRIORITY_META[p].label}
+                      <Kbd className="ml-1">{i + 1}</Kbd>
+                    </Button>
+                  ))}
+                </div>
+                <Separator orientation="vertical" className="mx-1 h-5" />
                 {transitions.map((s, i) => (
-                  <Button key={s} size="sm" variant="secondary" disabled={busy} onClick={() => setStatus.mutate(s)}>
+                  <Button
+                    key={s}
+                    size="sm"
+                    variant={i === 0 ? 'default' : 'secondary'}
+                    disabled={busy}
+                    onClick={() => setStatus.mutate(s)}
+                  >
                     {STATUS_META[s].label}
                     {i === 0 && <Kbd className="ml-1">s</Kbd>}
                   </Button>

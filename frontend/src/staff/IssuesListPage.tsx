@@ -484,7 +484,7 @@ export function IssuesListPage() {
                     </TableCell>
                     <TableCell><StatusBadge status={r.status} /></TableCell>
                     <TableCell><PriorityBadge priority={r.priority} /></TableCell>
-                    <TableCell><SlaBadge slaState={r.slaState} dueAt={r.dueAt} /></TableCell>
+                    <TableCell><SlaBadge slaState={r.slaState} dueAt={r.dueAt} showOnTrack /></TableCell>
                     <TableCell>
                       <span className="flex items-center gap-2 text-sm">
                         <Avatar className="size-6"><AvatarFallback className="text-2xs">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
