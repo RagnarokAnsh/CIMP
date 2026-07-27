@@ -90,6 +90,16 @@ export const en = {
   'status.RESOLVED': 'Resolved',
   'status.CLOSED': 'Closed',
   'status.REOPENED': 'Reopened',
+
+  'priority.LOW': 'Low',
+  'priority.MEDIUM': 'Medium',
+  'priority.HIGH': 'High',
+  'priority.CRITICAL': 'Critical',
+
+  'list.col.reference': 'Reference',
+  'list.col.status': 'Status',
+  'list.col.priority': 'Priority',
+  'list.col.updated': 'Updated',
 };
 
 export type TranslationKey = keyof typeof en;
@@ -177,6 +187,16 @@ const es: Dictionary = {
   'status.RESOLVED': 'Resuelta',
   'status.CLOSED': 'Cerrada',
   'status.REOPENED': 'Reabierta',
+
+  'priority.LOW': 'Baja',
+  'priority.MEDIUM': 'Media',
+  'priority.HIGH': 'Alta',
+  'priority.CRITICAL': 'Crítica',
+
+  'list.col.reference': 'Referencia',
+  'list.col.status': 'Estado',
+  'list.col.priority': 'Prioridad',
+  'list.col.updated': 'Actualizada',
 };
 
 const fr: Dictionary = {
@@ -261,6 +281,16 @@ const fr: Dictionary = {
   'status.RESOLVED': 'Résolu',
   'status.CLOSED': 'Clôturé',
   'status.REOPENED': 'Rouvert',
+
+  'priority.LOW': 'Basse',
+  'priority.MEDIUM': 'Moyenne',
+  'priority.HIGH': 'Haute',
+  'priority.CRITICAL': 'Critique',
+
+  'list.col.reference': 'Référence',
+  'list.col.status': 'Statut',
+  'list.col.priority': 'Priorité',
+  'list.col.updated': 'Mise à jour',
 };
 
 const de: Dictionary = {
@@ -345,6 +375,16 @@ const de: Dictionary = {
   'status.RESOLVED': 'Gelöst',
   'status.CLOSED': 'Geschlossen',
   'status.REOPENED': 'Wieder geöffnet',
+
+  'priority.LOW': 'Niedrig',
+  'priority.MEDIUM': 'Mittel',
+  'priority.HIGH': 'Hoch',
+  'priority.CRITICAL': 'Kritisch',
+
+  'list.col.reference': 'Referenz',
+  'list.col.status': 'Status',
+  'list.col.priority': 'Priorität',
+  'list.col.updated': 'Aktualisiert',
 };
 
 /** Every locale the portal ships, with its own endonym for the switcher. */

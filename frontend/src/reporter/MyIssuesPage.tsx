@@ -19,12 +19,13 @@ import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { relativeTime } from '@/lib/format';
 import { useT } from '@/i18n';
 import { useDocumentTitle } from '@/lib/use-document-title';
-import { useStatusLabel } from '@/i18n/useStatusLabel';
+import { usePriorityLabel, useStatusLabel } from '@/i18n/useStatusLabel';
 
 export function MyIssuesPage() {
   const { t } = useT();
   useDocumentTitle(t('list.title'));
   const statusLabel = useStatusLabel();
+  const priorityLabel = usePriorityLabel();
   const hasToken = Boolean(getHandoffToken());
   const { data, isLoading, isError } = useQuery({
     queryKey: ['reporter', 'issues'],
@@ -84,10 +85,14 @@ export function MyIssuesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reference</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead className="text-right">Updated</TableHead>
+                {/* These were English literals on the one fully localized
+                    surface in the product — a Spanish reporter saw Spanish
+                    navigation, Spanish empty states and Spanish status badges
+                    under four English column headers. */}
+                <TableHead>{t('list.col.reference')}</TableHead>
+                <TableHead>{t('list.col.status')}</TableHead>
+                <TableHead>{t('list.col.priority')}</TableHead>
+                <TableHead className="text-right">{t('list.col.updated')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -105,7 +110,7 @@ export function MyIssuesPage() {
                     </Link>
                   </TableCell>
                   <TableCell><StatusBadge status={i.status} label={statusLabel(i.status)} /></TableCell>
-                  <TableCell><PriorityBadge priority={i.priority} /></TableCell>
+                  <TableCell><PriorityBadge priority={i.priority} label={priorityLabel(i.priority)} /></TableCell>
                   <TableCell className="text-right text-sm text-muted-foreground">
                     {relativeTime(i.updatedAt)}
                   </TableCell>

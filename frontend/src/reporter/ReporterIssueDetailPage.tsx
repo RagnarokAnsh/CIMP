@@ -19,7 +19,7 @@ import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { firstLine, relativeTime, dateTime } from '@/lib/format';
 import { toastApiError } from '@/lib/toast-error';
 import { useT } from '@/i18n';
-import { useStatusLabel } from '@/i18n/useStatusLabel';
+import { usePriorityLabel, useStatusLabel } from '@/i18n/useStatusLabel';
 import { useDocumentTitle } from '@/lib/use-document-title';
 import { cn } from '@/lib/utils';
 
@@ -162,6 +162,7 @@ function UpdateBubble({ update: u }: { update: ReporterIssueDetail['updates'][nu
 export function ReporterIssueDetailPage() {
   const { t } = useT();
   const statusLabel = useStatusLabel();
+  const priorityLabel = usePriorityLabel();
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [reply, setReply] = useState('');
@@ -217,7 +218,7 @@ export function ReporterIssueDetailPage() {
           </CardTitle>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <StatusBadge status={data.status} label={statusLabel(data.status)} />
-            <PriorityBadge priority={data.priority} />
+            <PriorityBadge priority={data.priority} label={priorityLabel(data.priority)} />
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
