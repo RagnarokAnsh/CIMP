@@ -79,8 +79,13 @@ export function PublicStatusPage() {
               <Card>
                 <CardHeader><CardTitle className="text-base">Components</CardTitle></CardHeader>
                 <CardContent className="space-y-1">
+                  {/* The component's status is the primary information on this
+                      page, so it gets the same contrast-checked badge the staff
+                      side uses — it was previously set in muted grey at one
+                      weight for every severity, which read as metadata. */}
                   {data.components.map((c) => {
                     const meta = COMPONENT_STATUS_META[c.status];
+                    const Icon = meta.icon;
                     return (
                       <div key={c.id} className="flex items-start justify-between gap-3 py-2">
                         <div className="min-w-0">
@@ -89,10 +94,10 @@ export function PublicStatusPage() {
                             <p className="text-xs text-muted-foreground">{c.description}</p>
                           )}
                         </div>
-                        <span className="flex shrink-0 items-center gap-1.5 text-sm">
-                          <span className={cn('size-2 rounded-full', meta.dot)} aria-hidden />
-                          <span className="text-muted-foreground">{meta.label}</span>
-                        </span>
+                        <Badge variant="outline" className={cn('shrink-0 gap-1.5', meta.className)}>
+                          <Icon className="size-3" aria-hidden />
+                          {meta.label}
+                        </Badge>
                       </div>
                     );
                   })}
@@ -132,23 +137,14 @@ export function PublicStatusPage() {
 function OverallBanner({ data }: { data: PublicStatus }) {
   const meta = COMPONENT_STATUS_META[data.overall];
   const Icon = meta.icon;
-  const ok = data.overall === 'OPERATIONAL';
   return (
-    <section
-      className={cn(
-        'flex items-center gap-4 rounded-xl border p-6',
-        ok
-          ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/10'
-          : 'border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10',
-      )}
-    >
-      <Icon
-        className={cn(
-          'h-8 w-8 shrink-0',
-          ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
-        )}
-        aria-hidden
-      />
+    // Tone comes from COMPONENT_STATUS_META, so all five severities are
+    // distinguishable. This used to be a boolean (operational vs. everything
+    // else), which painted a major outage the same amber as a maintenance
+    // window. The icon differs per status too, so severity is never carried by
+    // colour alone.
+    <section className={cn('flex items-center gap-4 rounded-xl border p-6', meta.banner)}>
+      <Icon className={cn('h-8 w-8 shrink-0', meta.bannerIcon)} aria-hidden />
       <div className="min-w-0">
         <h1 className="text-lg font-semibold tracking-tight">{OVERALL_HEADLINE[data.overall]}</h1>
         <p className="text-sm text-muted-foreground">{data.platform.name}</p>

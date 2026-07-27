@@ -45,9 +45,9 @@ export function DashboardPage() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-              <p className="mt-1 text-sm text-white/80">An overview of issues across your scope.</p>
+              <p className="mt-1 text-sm text-white">An overview of issues across your scope.</p>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/90 ring-1 ring-white/15">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white ring-1 ring-white/25">
               {net > 0
                 ? <><TrendingUp className="h-3.5 w-3.5" /> Backlog up {net} over 14 days</>
                 : <><TrendingDown className="h-3.5 w-3.5" /> Backlog down {Math.abs(net)} over 14 days</>}

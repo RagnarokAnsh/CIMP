@@ -28,9 +28,28 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * Renders a real heading, not a styled `<div>`.
+ *
+ * Almost every section title in this product is a CardTitle, so while this
+ * rendered a div the document outline was empty — the dashboard exposed exactly
+ * one heading (its `<h1>`) and "Created vs resolved", "SLA health", "By status"
+ * and the rest were invisible to heading navigation, which is how screen-reader
+ * users move around a page.
+ *
+ * `h3` is the default because a CardTitle normally sits under a page `<h1>` and
+ * a section `<h2>`. Pass `as` where the nesting differs — the reporter pages use
+ * `as="h1"`, since there the card *is* the page.
+ */
+type CardTitleElement = "h1" | "h2" | "h3" | "h4" | "div"
+
+function CardTitle({
+  className,
+  as: Comp = "h3",
+  ...props
+}: React.HTMLAttributes<HTMLElement> & { as?: CardTitleElement }) {
   return (
-    <div
+    <Comp
       data-slot="card-title"
       className={cn("leading-none font-semibold", className)}
       {...props}

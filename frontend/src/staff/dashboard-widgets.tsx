@@ -23,11 +23,15 @@ export function HeroStat({
   context?: string;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-white/15 bg-white/10 p-4 backdrop-blur-sm">
+    // Solid white, not white/80 and white/70. Over the brand gradient those
+    // measured 3.20-3.84 against a 4.5 requirement in both themes — the
+    // translucency was buying a softness the gradient already provided while
+    // quietly failing the label and the supporting figure.
+    <div className="flex items-center justify-between rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur-sm">
       <div className="min-w-0">
-        <p className="text-sm text-white/80">{label}</p>
+        <p className="text-sm text-white">{label}</p>
         <AnimatedNumber value={value} className="mt-1 block text-3xl font-semibold tabular-nums" />
-        {context && <p className="mt-1 truncate text-xs text-white/70">{context}</p>}
+        {context && <p className="mt-1 truncate text-xs text-white">{context}</p>}
       </div>
       <div className="rounded-md bg-white/15 p-2.5">{icon}</div>
     </div>
@@ -58,7 +62,14 @@ export function KpiCard({
         </div>
         {progress !== undefined ? (
           <div className="space-y-1.5">
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-valuenow={progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${label}: ${progress}%`}
+            >
               <div
                 className={cn('h-full rounded-full transition-[width] duration-500', progressClass)}
                 style={{ width: `${progress}%` }}
@@ -85,22 +96,26 @@ export function SlaHealth({
   if (open === 0) {
     return (
       <div className="flex h-[200px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-        <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+        <CheckCircle2 className="h-6 w-6 text-success" />
         No open issues — nothing at risk.
       </div>
     );
   }
   const segs = [
-    { label: 'On track', value: onTrack, bar: 'bg-emerald-500', icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" /> },
-    { label: 'Due soon', value: atRisk, bar: 'bg-amber-500', icon: <Clock className="h-4 w-4 text-amber-500" /> },
-    { label: 'Overdue', value: overdue, bar: 'bg-red-500', icon: <AlertTriangle className="h-4 w-4 text-red-500" /> },
+    { label: 'On track', value: onTrack, bar: 'bg-success', icon: <CheckCircle2 className="h-4 w-4 text-success" /> },
+    { label: 'Due soon', value: atRisk, bar: 'bg-warning', icon: <Clock className="h-4 w-4 text-warning" /> },
+    { label: 'Overdue', value: overdue, bar: 'bg-danger', icon: <AlertTriangle className="h-4 w-4 text-danger" /> },
   ];
   return (
     <div className="space-y-4">
-      {/* Segmented meter. */}
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted">
+      {/* Segmented meter. The <ul> below is the accessible representation — it
+          carries the same three numbers as text — so the bar itself is decorative
+          and hidden rather than given a role it can't satisfy (a single
+          progressbar can't express three segments). It also no longer relies on
+          `title` for the values, which never appeared on touch or keyboard. */}
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden>
         {segs.map((s) => s.value > 0 && (
-          <div key={s.label} className={s.bar} style={{ width: `${pct(s.value, open)}%` }} title={`${s.label}: ${s.value}`} />
+          <div key={s.label} className={s.bar} style={{ width: `${pct(s.value, open)}%` }} />
         ))}
       </div>
       <ul className="space-y-2.5">
@@ -157,7 +172,6 @@ export function Breakdown({
 }) {
   const rows = orderRows(rawRows, kind);
   const total = rows.reduce((s, r) => s + r.count, 0);
-  const max = Math.max(1, ...rows.map((r) => r.count));
   const labelFor = (key: string) => {
     if (!key) return '—';
     if (kind === 'status') return STATUS_META[key as IssueStatus]?.label ?? key;
@@ -193,10 +207,24 @@ export function Breakdown({
                     <span className="font-medium text-foreground">{r.count}</span> · {pct(r.count, total)}%
                   </span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                {/* Bar length and the label beside it must share ONE
+                    denominator. The bar used to be count/max (proportion of the
+                    biggest row) while the label read count/total (proportion of
+                    all rows) — so the top row was always a full-width bar next
+                    to a label saying 38%, and every breakdown read as more
+                    concentrated than it was. Part-to-whole is the honest
+                    reading here, so both are count/total. */}
+                <div
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-valuenow={pct(r.count, total)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${labelFor(r.key)}: ${r.count} of ${total}`}
+                >
                   <div
                     className={cn('h-full rounded-full transition-[width] duration-500', barFor(r.key))}
-                    style={{ width: `${(r.count / max) * 100}%` }}
+                    style={{ width: `${pct(r.count, total)}%` }}
                   />
                 </div>
               </li>

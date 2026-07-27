@@ -271,7 +271,7 @@ export function BoardPage() {
       </div>
 
       {!isLoading && items.length === 0 ? (
-        <Empty className="rounded-xl border border-dashed border-border py-16">
+        <Empty className="rounded-xl py-16">
           <EmptyHeader>
             <EmptyMedia variant="icon"><Inbox /></EmptyMedia>
             <EmptyTitle>No issues to triage</EmptyTitle>
