@@ -13,6 +13,15 @@
 :root {
   --radius: 0.75rem;
 
+  /* Vertical space the staff workspace chrome takes above a full-height pane:
+     the h-14 top bar plus the main region's lg:p-8 top and bottom padding plus
+     the page header block. Full-height panes (the issues split view, the board
+     track) subtract this from 100vh.
+     It exists because those two panes each hard-coded their own guess — 15rem
+     and 13rem — for the same measurement, so they disagreed by 2rem and neither
+     tracked a change to the chrome. */
+  --workspace-chrome: 14rem;
+
   /* Neutrals */
   --background: oklch(0.985 0.004 265);
   --foreground: oklch(0.21 0.02 265);
@@ -296,6 +305,29 @@
 }
 
 @layer utilities {
+  /* ONE focus ring.
+     There were three recipes in use — ring-2/ring-ring/55 with an offset on
+     Button, ring-[3px]/ring-ring/50 with no offset on every form control, and a
+     bare ring-2/ring-ring on hand-rolled buttons — against a spec that names a
+     single one. Only 3 of 20+ ring declarations carried an offset, so most
+     rings sat flush on the control edge and read as a border change rather
+     than a focus indicator. Everything focusable uses this. */
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  /* For controls that sit on a card/popover rather than the page background,
+     so the offset gap matches what is actually behind the control. */
+  .focus-ring-surface {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-card;
+  }
+
+  /* Stacking ladder. These were ad-hoc (z-10 x8, z-20, z-30, z-50 x12,
+     z-[100]) with nothing recording the intended order. */
+  .z-sticky   { z-index: 20; }  /* in-page sticky toolbars */
+  .z-header   { z-index: 30; }  /* app chrome: top bar, sidebar */
+  .z-overlay  { z-index: 50; }  /* Radix portals: dialog, popover, dropdown */
+  .z-progress { z-index: 100; } /* global loading bar — above everything */
+
   .bg-gradient-brand {
     background-image: var(--gradient-brand);
   }

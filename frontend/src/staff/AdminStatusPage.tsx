@@ -33,7 +33,7 @@ import { cn } from '@/lib/utils';
 
 const DESTRUCTIVE_ICON =
   'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
-  + 'hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
+  + 'hover:bg-destructive/10 hover:text-destructive focus-ring';
 
 // Status-page management: components and incidents for one platform. Both write
 // to /staff/platforms/:id/status/* (write-role enforced server-side) and are

@@ -132,7 +132,7 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
               {!readOnly && (
                 <button
                   type="button"
-                  className="ml-0.5 grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="ml-0.5 grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-ring"
                   title="Remove"
                   aria-label={`Remove label ${l.name}`}
                   onClick={() => remove.mutate(l.id)}
@@ -350,7 +350,7 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
               {!readOnly && (
                 <button
                   type="button"
-                  className="ml-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  className="ml-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-ring"
                   title="Remove"
                   aria-label={`Remove link to ${l.issue.referenceNo}`}
                   onClick={() => remove.mutate(l.id)}

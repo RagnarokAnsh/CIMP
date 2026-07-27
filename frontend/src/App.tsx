@@ -84,7 +84,7 @@ function ReporterChrome({ children }: { children: React.ReactNode }) {
   const { t } = useT();
   return (
     <div className="min-h-screen bg-background">
-      <header className="glass sticky top-0 z-10 border-b border-border">
+      <header className="glass sticky top-0 z-header border-b border-border">
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
           <div className="flex items-center gap-2.5 font-semibold tracking-tight">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-brand text-white shadow-sm">

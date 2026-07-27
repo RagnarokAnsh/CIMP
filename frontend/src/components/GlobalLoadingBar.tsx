@@ -9,7 +9,7 @@ export function GlobalLoadingBar() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-0.5 overflow-hidden bg-primary/15"
+      className="pointer-events-none fixed inset-x-0 top-0 z-progress h-0.5 overflow-hidden bg-primary/15"
       role="status"
       aria-live="polite"
       aria-label="Loading"

@@ -271,7 +271,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
       {toolbar && (
         // bg-background/95: at /80 the status buttons scrolling underneath
         // showed through as ghosts behind the toolbar text.
-        <div className="sticky top-0 z-10 -mx-1 border-b border-border/60 bg-background/95 px-1 pb-3 pt-1 backdrop-blur">
+        <div className="sticky top-0 z-sticky -mx-1 border-b border-border/60 bg-background/95 px-1 pb-3 pt-1 backdrop-blur">
           {toolbar}
         </div>
       )}
@@ -544,11 +544,13 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
           <Card>
             <CardHeader><CardTitle className="text-base">Details</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
-              <Field label="Platform" value={data.platform?.name ?? '—'} />
-              <Field label="Reporter" value={data.reporter?.name ?? '—'} />
-              <Field label="Assignee" value={data.assignee?.name ?? 'Unassigned'} />
-              <Field label="Jira sync" value={enumLabel(data.jiraSyncStatus)} />
-              <Field label="Created" value={dateTime(data.createdAt)} />
+              <dl className="space-y-3">
+                <Field label="Platform" value={data.platform?.name ?? '—'} />
+                <Field label="Reporter" value={data.reporter?.name ?? '—'} />
+                <Field label="Assignee" value={data.assignee?.name ?? 'Unassigned'} />
+                <Field label="Jira sync" value={enumLabel(data.jiraSyncStatus)} />
+                <Field label="Created" value={dateTime(data.createdAt)} />
+              </dl>
               {data.duplicates.length > 0 && (
                 <div className="space-y-1.5 border-t border-border/60 pt-3">
                   <span className="text-muted-foreground">Duplicates ({data.duplicates.length})</span>
@@ -717,11 +719,14 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
   );
 }
 
+// A fixed label column, not `justify-between`. Justified apart, labels sat
+// flush left and values flush right with a variable gap, so pairing a label to
+// its value meant crossing a ragged strip of empty space in a 300px sidebar.
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium">{value}</span>
+    <div className="grid grid-cols-[7.5rem_1fr] items-baseline gap-x-3 gap-y-0.5">
+      <dt className="truncate text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 font-medium break-words">{value}</dd>
     </div>
   );
 }

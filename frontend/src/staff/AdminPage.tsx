@@ -644,7 +644,7 @@ function StaffRow({
                   <button
                     type="button"
                     aria-label={`Revoke ${roleLabel(r.role)} on ${r.platformKey ?? 'all platforms'} from ${staff.name}`}
-                    className="ml-0.5 grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    className="ml-0.5 grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-ring"
                   >
                     <Trash2 className="h-3 w-3" />
                   </button>

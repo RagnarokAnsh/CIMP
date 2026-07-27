@@ -35,12 +35,12 @@ import { toastApiError as onError } from '@/lib/toast-error';
 // reader, and the bare icon gave no hit target worth aiming at.
 const DESTRUCTIVE_ICON =
   'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
-  + 'hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
+  + 'hover:bg-destructive/10 hover:text-destructive focus-ring';
 
 // Neutral sibling of DESTRUCTIVE_ICON for non-destructive row actions (edit).
 const NEUTRAL_ICON =
   'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
-  + 'hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
+  + 'hover:bg-accent hover:text-foreground focus-ring';
 
 /**
  * Compact empty state for the small cards on this screen.

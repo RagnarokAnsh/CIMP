@@ -17,6 +17,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Kbd } from '@/components/ui/kbd';
 import { CommandPalette } from './CommandPalette';
 import { NotificationsBell } from './NotificationsBell';
 import { SupportButton } from './SupportButton';
@@ -75,7 +76,7 @@ export function StaffLayout({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="glass sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border px-4">
+        <header className="glass sticky top-0 z-header flex h-14 items-center gap-2 border-b border-border px-4">
           {/* Mobile nav trigger */}
           <Sheet>
             <SheetTrigger asChild>
@@ -96,9 +97,7 @@ export function StaffLayout({
           >
             <Search className="h-4 w-4" />
             <span className="flex-1 text-left">Search issues…</span>
-            <kbd className="hidden rounded border border-border bg-muted px-1.5 font-mono text-2xs sm:inline">
-              ⌘K
-            </kbd>
+            <Kbd className="hidden sm:inline-flex">⌘K</Kbd>
           </button>
 
           <div className="ml-auto flex items-center gap-1">

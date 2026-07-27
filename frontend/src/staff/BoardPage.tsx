@@ -295,7 +295,7 @@ export function BoardPage() {
         // lines held about 40 characters, so "API rate-limit headers (X-…" told
         // you nothing. Columns now hold a readable floor and the track scrolls,
         // which is how every Kanban handles more columns than fit.
-        <div className={cn(BOARD_TRACK, 'xl:h-[calc(100vh-13rem)]')}>
+        <div className={cn(BOARD_TRACK, 'xl:h-[calc(100vh-var(--workspace-chrome))]')}>
           {BOARD_STATUS_ORDER.map((status) => (
             <Column
               key={status}

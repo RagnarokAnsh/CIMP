@@ -74,24 +74,21 @@ export function DashboardPage() {
         <div className="pointer-events-none absolute -right-16 -top-20 size-60 rounded-full bg-white/10 blur-2xl" aria-hidden />
       </section>
 
-      {/* Operational KPIs. */}
+      {/* Two rows of four.
+          This was four cards above five, so the card edges of two stacked rows
+          never lined up, and below xl the five-card row left an orphan alone on
+          its last line — the exact problem moving CSAT down here was meant to
+          fix. Eight cards divide cleanly at every breakpoint (4/4 at xl, 2/2/2/2
+          at sm) and both rows now share a column count with each other and with
+          the platform report, which already had this shape.
+
+          The ninth card was "SLA on track", and it went rather than being
+          rearranged: the SLA health panel below shows the same number broken
+          into on-track / due-soon / overdue, so the KPI restated a figure the
+          reader gets in more detail two rows down.
+
+          Row one is 14-day volume, row two is 30-day quality. */}
       <Reveal className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          label="Resolution rate"
-          icon={<CheckCircle2 className="h-5 w-5" />}
-          value={`${pct(resolvedOrClosed, all)}%`}
-          sub={`${resolvedOrClosed} of ${all} closed out`}
-          progress={pct(resolvedOrClosed, all)}
-          progressClass={METER_TONE.good}
-        />
-        <KpiCard
-          label="SLA on track"
-          icon={<ShieldCheck className="h-5 w-5" />}
-          value={`${pct(onTrack, open)}%`}
-          sub={`${onTrack} of ${open} open within target`}
-          progress={pct(onTrack, open)}
-          progressClass={meterTone(overdue > 0)}
-        />
         <KpiCard
           label="Created"
           icon={<Inbox className="h-5 w-5" />}
@@ -105,12 +102,25 @@ export function DashboardPage() {
           value={<AnimatedNumber value={resolved14} className="tabular-nums" />}
           sub="closed out in the last 14 days"
         />
+        <KpiCard
+          label="Resolution rate"
+          icon={<CheckCircle2 className="h-5 w-5" />}
+          value={`${pct(resolvedOrClosed, all)}%`}
+          sub={`${resolvedOrClosed} of ${all} closed out`}
+          progress={pct(resolvedOrClosed, all)}
+          progressClass={METER_TONE.good}
+        />
+        <KpiCard
+          label="Deflected"
+          icon={<ShieldCheck className="h-5 w-5" />}
+          value={<AnimatedNumber value={data.ops.deflected} className="tabular-nums" />}
+          sub={data.ops.deflectionRate !== null
+            ? `${data.ops.deflectionRate}% of would-be reports subscribed instead`
+            : 'duplicate reports avoided (30d)'}
+        />
       </Reveal>
 
-      {/* Operational quality (last 30 days). CSAT lives here rather than in the
-          volume row above: it is a 30-day quality measure like the rest, and as
-          a 5th card up there it sat alone on its own line. */}
-      <Reveal className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <Reveal className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="First response"
           icon={<Clock className="h-5 w-5" />}
@@ -130,14 +140,6 @@ export function DashboardPage() {
           sub="of resolutions reopened (30d)"
           progress={data.ops.reopenRate ?? 0}
           progressClass={meterTone(data.ops.reopenRate !== null && data.ops.reopenRate > 20)}
-        />
-        <KpiCard
-          label="Deflected"
-          icon={<ShieldCheck className="h-5 w-5" />}
-          value={<AnimatedNumber value={data.ops.deflected} className="tabular-nums" />}
-          sub={data.ops.deflectionRate !== null
-            ? `${data.ops.deflectionRate}% of would-be reports subscribed instead`
-            : 'duplicate reports avoided (30d)'}
         />
         <KpiCard
           label="CSAT (30d)"
@@ -194,13 +196,18 @@ export function DashboardPage() {
   );
 }
 
+// Mirrors the real page exactly: hero, two KPI rows of four, the chart pair,
+// four breakdowns. It was missing a whole KPI row, so the layout jumped
+// downward as soon as the data landed — the shift a skeleton exists to prevent.
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
       <Skeleton className="h-44 rounded-2xl sm:h-40" />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
-      </div>
+      {Array.from({ length: 2 }).map((_, row) => (
+        <div key={row} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
+        </div>
+      ))}
       <div className="grid gap-4 lg:grid-cols-3">
         <Skeleton className="h-72 lg:col-span-2" />
         <Skeleton className="h-72" />

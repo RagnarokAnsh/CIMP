@@ -306,7 +306,10 @@ export function IssuesListPage() {
             <ToggleGroupItem value="list" aria-label="List view"><List className="h-4 w-4" /></ToggleGroupItem>
             <ToggleGroupItem value="split" aria-label="Detail view"><Columns2 className="h-4 w-4" /></ToggleGroupItem>
           </ToggleGroup>
-          <Button variant="outline" onClick={exportCsv} disabled={exporting}>
+          {/* size="sm" to match Views and the view toggle beside it — this was
+              the one default-height control in an h-8 cluster, so it stood 1px
+              proud top and bottom. */}
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={exporting}>
             {exporting ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
             Export CSV
           </Button>
@@ -361,9 +364,13 @@ export function IssuesListPage() {
             className="w-[13rem]"
           />
 
+          {/* Default height (h-9), not sm: this row is built around text inputs
+              and selects, so the two buttons at the end were the odd ones out
+              and broke the baseline the eye tracks across the filter bar.
+              aria-pressed because this is a toggle, not a command. */}
           <Button
             variant={filters.assignedToMe ? 'default' : 'outline'}
-            size="sm"
+            aria-pressed={filters.assignedToMe}
             onClick={() => patch({ assignedToMe: !filters.assignedToMe })}
           >
             <UserCheck className="h-4 w-4" /> Assigned to me
@@ -372,7 +379,6 @@ export function IssuesListPage() {
           {activeFilterCount > 0 && (
             <Button
               variant="ghost"
-              size="sm"
               className="text-muted-foreground"
               onClick={() => { setFilters(DEFAULT_FILTERS); setQInput(''); setPage(1); }}
             >
@@ -509,7 +515,7 @@ export function IssuesListPage() {
           Fixed height at lg+ so both panes are equal height and scroll
           independently (master–detail), instead of one column running long. */}
       {view === 'split' && (
-        <div className="grid gap-4 lg:h-[calc(100vh-15rem)] lg:min-h-[28rem] lg:grid-cols-[clamp(300px,30%,400px)_1fr]">
+        <div className="grid gap-4 lg:h-[calc(100vh-var(--workspace-chrome))] lg:min-h-[28rem] lg:grid-cols-[clamp(300px,30%,400px)_1fr]">
           <Card className="flex flex-col overflow-hidden">
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               <div className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto">
@@ -528,8 +534,10 @@ export function IssuesListPage() {
                       r.id === selectedId ? 'bg-primary/[0.06]' : 'hover:bg-accent/50',
                     )}
                   >
+                    {/* w-1 to match the sidebar's active marker — same idiom,
+                        same measure. It was w-0.5 here and w-1 there. */}
                     {r.id === selectedId && (
-                      <span className="absolute inset-y-0 left-0 w-0.5 bg-primary" aria-hidden />
+                      <span className="absolute inset-y-0 left-0 w-1 rounded-r-full bg-primary" aria-hidden />
                     )}
                     <div className="flex items-start gap-2">
                       <p className={cn('line-clamp-2 flex-1 text-sm leading-snug', r.id === selectedId ? 'font-semibold' : 'font-medium')}>
@@ -645,7 +653,7 @@ function SortableHead({
         aria-label={`Sort by ${label}`}
         className={cn(
           '-mx-1.5 flex items-center gap-1 rounded px-1.5 py-1 transition-colors hover:text-foreground',
-          'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+          'focus-ring',
           active && 'text-foreground',
         )}
         onClick={() => onSort({ sort: field, order: active && filters.order === 'DESC' ? 'ASC' : 'DESC' })}
@@ -686,7 +694,7 @@ function SavedViewsMenu({
             {/* focus-visible:opacity-100 — the button is tabbable, so revealing
                 it on hover alone left it invisible to keyboard users. */}
             <button
-              className="rounded text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none group-hover:opacity-100"
+              className="rounded text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 focus-ring group-hover:opacity-100"
               aria-label={`Delete ${v.name}`}
               onClick={(e) => { e.stopPropagation(); onDelete(v.id); }}
             >

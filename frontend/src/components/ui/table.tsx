@@ -51,7 +51,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
       <div
         ref={ref}
         data-slot="table-container"
-        className="relative w-full overflow-x-auto focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="relative w-full overflow-x-auto focus-ring"
         tabIndex={scrollable ? 0 : -1}
         role={scrollable ? "region" : undefined}
         aria-label={scrollable ? "Scrollable table" : undefined}

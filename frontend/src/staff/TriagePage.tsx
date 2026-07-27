@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
+import { Kbd } from '@/components/ui/kbd';
 import { MergeIssueButton } from './IssueExtras';
 import { useDocumentTitle } from '@/lib/use-document-title';
 
@@ -175,9 +176,12 @@ export function TriagePage() {
 
       {showKeys && (
         <div className="rounded-md border border-border/60 bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-          <kbd>j</kbd>/<kbd>k</kbd> next/prev · <kbd>1</kbd>–<kbd>4</kbd> priority ·{' '}
-          <kbd>s</kbd> {transitions[0] ? STATUS_META[transitions[0]].label : 'status'} ·{' '}
-          {canAssignToMe && <><kbd>a</kbd> assign to me · </>}<kbd>?</kbd> hide
+          {/* aria-hidden={false}: in a shortcut list the key IS the content. */}
+          <Kbd aria-hidden={false}>j</Kbd>/<Kbd aria-hidden={false}>k</Kbd> next/prev ·{' '}
+          <Kbd aria-hidden={false}>1</Kbd>–<Kbd aria-hidden={false}>4</Kbd> priority ·{' '}
+          <Kbd aria-hidden={false}>s</Kbd> {transitions[0] ? STATUS_META[transitions[0]].label : 'status'} ·{' '}
+          {canAssignToMe && <><Kbd aria-hidden={false}>a</Kbd> assign to me · </>}
+          <Kbd aria-hidden={false}>?</Kbd> hide
         </div>
       )}
 
@@ -222,7 +226,7 @@ export function TriagePage() {
                 {canAssignToMe && (
                   <Button size="sm" variant="outline" className="gap-1.5" disabled={busy} onClick={() => assignToMe.mutate()}>
                     <UserCheck className="h-3.5 w-3.5" /> Assign to me
-                    <kbd className="text-2xs text-muted-foreground">a</kbd>
+                    <Kbd>a</Kbd>
                   </Button>
                 )}
                 {PRIORITIES.map((p, i) => (
@@ -234,14 +238,14 @@ export function TriagePage() {
                     onClick={() => setPriority.mutate(p)}
                   >
                     {PRIORITY_META[p].label}
-                    <kbd className="ml-1 text-2xs text-muted-foreground">{i + 1}</kbd>
+                    <Kbd className="ml-1">{i + 1}</Kbd>
                   </Button>
                 ))}
                 <span className="mx-1 h-5 w-px bg-border" />
                 {transitions.map((s, i) => (
                   <Button key={s} size="sm" variant="secondary" disabled={busy} onClick={() => setStatus.mutate(s)}>
                     {STATUS_META[s].label}
-                    {i === 0 && <kbd className="ml-1 text-2xs text-muted-foreground">s</kbd>}
+                    {i === 0 && <Kbd className="ml-1">s</Kbd>}
                   </Button>
                 ))}
                 <MergeIssueButton
