@@ -40,3 +40,12 @@ export function firstLine(text: string, max = 100): string {
   const line = (text ?? '').split('\n').map((s) => s.trim()).find(Boolean) ?? '';
   return line.length > max ? `${line.slice(0, max).trimEnd()}…` : line;
 }
+
+/** Whole-number percentage, guarding the divide-by-zero empty state. */
+export const pct = (n: number, of: number) => (of > 0 ? Math.round((n / of) * 100) : 0);
+
+/** Humanize an hour count: 4.2h under two days, 2.1d beyond. */
+export function hoursFmt(hours: number | null): string {
+  if (hours === null) return '—';
+  return hours < 48 ? `${Math.round(hours * 10) / 10}h` : `${Math.round((hours / 24) * 10) / 10}d`;
+}

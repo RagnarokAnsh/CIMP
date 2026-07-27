@@ -6,15 +6,22 @@ import type { IssueStatus, Priority } from '@/api/types';
 export function StatusBadge({
   status,
   className,
+  label,
 }: {
   status: IssueStatus;
   className?: string;
+  /**
+   * Overrides the English label from STATUS_META. Used by the localized
+   * reporter portal so both surfaces keep one badge (and one set of
+   * contrast-checked colours) instead of forking the component.
+   */
+  label?: string;
 }) {
   const meta = STATUS_META[status];
   return (
     <Badge variant="outline" className={cn('gap-1.5 font-medium', meta.className, className)}>
       <span className={cn('size-1.5 rounded-full', meta.dot)} aria-hidden />
-      {meta.label}
+      {label ?? meta.label}
     </Badge>
   );
 }

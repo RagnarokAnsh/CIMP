@@ -1,11 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { IssueStatus } from '../common/enums';
 import { OPEN_ISSUE_STATUSES } from '../common/constants';
-import { Issue } from '../entities';
+import { Issue, Platform } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { ScopeService } from '../authz/scope.service';
+import { STAFF_READ_ROLES } from '../authz/role-sets';
 import { SLA_AT_RISK_FRACTION, slaDueSql } from '../issues/sla';
 
 const OPEN_STATUSES = OPEN_ISSUE_STATUSES;
@@ -16,6 +17,7 @@ const OPEN_STATUSES = OPEN_ISSUE_STATUSES;
 export class DashboardService {
   constructor(
     @InjectRepository(Issue) private readonly issues: Repository<Issue>,
+    @InjectRepository(Platform) private readonly platforms: Repository<Platform>,
     private readonly scope: ScopeService,
   ) {}
 
@@ -24,7 +26,52 @@ export class DashboardService {
     if (Array.isArray(scope) && scope.length === 0) {
       return this.empty();
     }
+    return this.computeForScope(scope);
+  }
 
+  // Single-platform report for a "tenant owner": any staff member holding a read
+  // role on the platform (including the read-only WATCHER — the natural
+  // tenant-observer grant) sees their platform's support health. Reuses every
+  // dashboard aggregate scoped to one platform, plus that platform's own
+  // published known-issues list.
+  async platformReport(staff: AuthenticatedStaff, platformId: string) {
+    if (!this.scope.canAccessPlatform(staff, platformId, STAFF_READ_ROLES)) {
+      throw new ForbiddenException('You do not have access to this platform.');
+    }
+    const platform = await this.platforms.findOne({ where: { id: platformId } });
+    if (!platform) throw new NotFoundException('Platform not found.');
+
+    const [summary, knownIssues] = await Promise.all([
+      this.computeForScope([platformId]),
+      this.publishedKnownIssues(platformId),
+    ]);
+    return {
+      platform: { id: platform.id, key: platform.key, name: platform.name },
+      ...summary,
+      knownIssues,
+    };
+  }
+
+  // The platform's staff-curated public known-issues (deflection), newest first.
+  private async publishedKnownIssues(platformId: string) {
+    const rows = await this.issues.find({
+      where: { platform: { id: platformId }, publiclyVisible: true },
+      order: { updatedAt: 'DESC' },
+      take: 20,
+      select: {
+        id: true, referenceNo: true, status: true, publicTitle: true, updatedAt: true,
+      },
+    });
+    return rows.map((i) => ({
+      id: i.id,
+      referenceNo: i.referenceNo,
+      status: i.status,
+      title: i.publicTitle ?? null,
+      updatedAt: i.updatedAt,
+    }));
+  }
+
+  private async computeForScope(scope: string[] | 'ALL') {
     const [byStatus, byPriority, byPlatform, byAssignee, trend, sla, csat, ops] = await Promise.all([
       this.groupCount(scope, 'issue.status', 'status'),
       this.groupCount(scope, 'issue.priority', 'priority'),

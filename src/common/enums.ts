@@ -89,3 +89,29 @@ export enum AutomationAction {
   ASSIGN = 'ASSIGN',
   ADD_LABEL = 'ADD_LABEL',
 }
+
+// ── Public status page ──────────────────────────────────────────────────────
+// Health of one named part of a platform ("API", "Login", "Reports"). Ordered
+// worst-last so the page can derive an overall banner by taking the max.
+export enum ComponentStatus {
+  OPERATIONAL = 'OPERATIONAL',
+  MAINTENANCE = 'MAINTENANCE',
+  DEGRADED = 'DEGRADED',
+  PARTIAL_OUTAGE = 'PARTIAL_OUTAGE',
+  MAJOR_OUTAGE = 'MAJOR_OUTAGE',
+}
+
+// The standard incident lifecycle. RESOLVED is terminal and stamps resolvedAt.
+export enum IncidentStatus {
+  INVESTIGATING = 'INVESTIGATING',
+  IDENTIFIED = 'IDENTIFIED',
+  MONITORING = 'MONITORING',
+  RESOLVED = 'RESOLVED',
+}
+
+export enum IncidentImpact {
+  MINOR = 'MINOR',
+  MAJOR = 'MAJOR',
+  CRITICAL = 'CRITICAL',
+  MAINTENANCE = 'MAINTENANCE',
+}

@@ -33,6 +33,9 @@ import { IntegrationsModule } from './integrations/integrations.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { CsatModule } from './csat/csat.module';
 import { DeflectionModule } from './deflection/deflection.module';
+import { CannedResponsesModule } from './canned-responses/canned-responses.module';
+import { StatusModule } from './status/status.module';
+import { TranslationModule } from './translation/translation.module';
 
 @Module({
   imports: [
@@ -87,6 +90,9 @@ import { DeflectionModule } from './deflection/deflection.module';
     WebhooksModule,
     CsatModule,
     DeflectionModule,
+    CannedResponsesModule,
+    StatusModule,
+    TranslationModule,
   ],
   providers: [
     // Global rate limiting; intake route tightens this further.

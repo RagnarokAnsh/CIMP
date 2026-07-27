@@ -31,7 +31,16 @@ export interface ReporterIssueDetail {
   attachments: {
     id: string; filename: string; contentType: string; sizeBytes: number; downloadable: boolean;
   }[];
-  updates: { body: string; createdAt: string; author: string; fromReporter: boolean }[];
+  updates: {
+    body: string;
+    createdAt: string;
+    author: string;
+    fromReporter: boolean;
+    /** True when `body` is a machine translation into the reporter's locale. */
+    translated?: boolean;
+    /** The text as originally written — present only when `translated`. */
+    originalBody?: string | null;
+  }[];
 }
 
 export interface SimilarIssue {
@@ -148,6 +157,22 @@ export interface DashboardSummary {
   };
 }
 
+/**
+ * Single-platform support-health report (GET /staff/platforms/:id/report).
+ * Same metric payload as the cross-scope dashboard, narrowed to one platform,
+ * plus that platform's published known issues.
+ */
+export interface PlatformReport extends DashboardSummary {
+  platform: { id: string; key: string; name: string };
+  knownIssues: {
+    id: string;
+    referenceNo: string;
+    status: IssueStatus;
+    title: string | null;
+    updatedAt: string;
+  }[];
+}
+
 export interface AssigneeOption {
   id: string;
   name: string;
@@ -221,6 +246,59 @@ export interface SavedViewDto {
   id: string;
   name: string;
   filters: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface CannedResponseView {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Public status page ──────────────────────────────────────────────────────
+export type ComponentStatus =
+  | 'OPERATIONAL' | 'MAINTENANCE' | 'DEGRADED' | 'PARTIAL_OUTAGE' | 'MAJOR_OUTAGE';
+export type IncidentStatus = 'INVESTIGATING' | 'IDENTIFIED' | 'MONITORING' | 'RESOLVED';
+export type IncidentImpact = 'MINOR' | 'MAJOR' | 'CRITICAL' | 'MAINTENANCE';
+
+export interface StatusComponentView {
+  id: string;
+  name: string;
+  description: string | null;
+  status: ComponentStatus;
+  /** Staff view only — the public payload omits ordering/timestamps. */
+  position?: number;
+  updatedAt?: string;
+}
+
+export interface IncidentUpdateView {
+  id: string;
+  status: IncidentStatus;
+  body: string;
+  createdAt: string;
+}
+
+export interface IncidentView {
+  id: string;
+  title: string;
+  status: IncidentStatus;
+  impact: IncidentImpact;
+  startedAt: string;
+  resolvedAt: string | null;
+  components: { id: string; name: string }[];
+  /** Newest first. */
+  updates: IncidentUpdateView[];
+}
+
+/** GET /api/public/platforms/:key/status — unauthenticated, staff-curated only. */
+export interface PublicStatusPage {
+  platform: { key: string; name: string };
+  overall: ComponentStatus;
+  components: StatusComponentView[];
+  activeIncidents: IncidentView[];
+  recentIncidents: IncidentView[];
   updatedAt: string;
 }
 

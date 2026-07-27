@@ -5,6 +5,7 @@ import * as jwt from 'jsonwebtoken';
 import { Platform } from '../entities';
 import { PlatformStatus } from '../common/enums';
 import { HandoffClaims, HandoffContext } from './handoff.types';
+import { baseLocale } from '../translation/translation.service';
 
 // Absolute server-side cap on hand-off token lifetime, independent of the exp
 // the portal set. Reporter tokens are meant to be short-lived (the sample mints
@@ -67,6 +68,9 @@ export class HandoffService {
         portalUserId: claims.portalUserId,
         name: claims.name,
         email: claims.email,
+        // Optional and untrusted-but-harmless: worst case is a wrong translation
+        // target, so normalise rather than reject the whole token.
+        locale: baseLocale(claims.locale),
       },
     };
   }

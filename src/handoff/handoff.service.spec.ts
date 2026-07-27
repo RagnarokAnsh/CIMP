@@ -48,10 +48,25 @@ describe('HandoffService.verify', () => {
     expect(ctx).toEqual({
       platformId: 'p-1',
       platformKey: 'portal-a',
-      reporter: { portalUserId: 'u-1', name: 'Asha Rao', email: 'asha@example.org' },
+      // locale is optional on the token; absent means "no declared language".
+      reporter: {
+        portalUserId: 'u-1', name: 'Asha Rao', email: 'asha@example.org', locale: null,
+      },
     });
     // platformId/platformKey come from the DB row, not the (attacker-controlled) claims.
     expect(findOne).toHaveBeenCalledWith({ where: { key: 'portal-a' } });
+  });
+
+  it('normalizes a declared reporter locale to its base language', async () => {
+    const ctx = await service.verify(sign({ ...validClaims, locale: 'fr-CA' }));
+    expect(ctx.reporter.locale).toBe('fr');
+  });
+
+  it('drops a malformed locale claim rather than rejecting the whole token', async () => {
+    // Worst case of a bad locale is an untranslated message — never a failed
+    // hand-off, so this must degrade rather than throw.
+    const ctx = await service.verify(sign({ ...validClaims, locale: '../../etc/passwd' }));
+    expect(ctx.reporter.locale).toBeNull();
   });
 
   it('rejects an empty token before any DB lookup', async () => {

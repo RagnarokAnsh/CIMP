@@ -234,15 +234,24 @@ export class ReporterService {
 
     // Only reporter-visible comments are exposed; internal notes stay hidden.
     // The reporter's own replies are labelled "You"; staff replies "Support".
+    // Each is served in the reporter's own language when a cached translation
+    // exists (see TranslationListener); `originalBody` is carried alongside so
+    // the portal can offer "show original" and never hides what was written.
+    const locale = ctx.reporter.locale ?? null;
     const visibleComments = (issue.comments ?? [])
       .filter((c) => c.visibility === CommentVisibility.REPORTER_VISIBLE)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-      .map((c) => ({
-        body: c.body,
-        createdAt: c.createdAt,
-        fromReporter: c.authorType === ActorType.REPORTER,
-        author: c.authorType === ActorType.REPORTER ? (c.authorName ?? 'You') : 'Support',
-      }));
+      .map((c) => {
+        const translated = locale ? c.translations?.[locale] : undefined;
+        return {
+          body: translated ?? c.body,
+          originalBody: translated ? c.body : null,
+          translated: Boolean(translated),
+          createdAt: c.createdAt,
+          fromReporter: c.authorType === ActorType.REPORTER,
+          author: c.authorType === ActorType.REPORTER ? (c.authorName ?? 'You') : 'Support',
+        };
+      });
 
     return {
       id: issue.id,
@@ -288,6 +297,9 @@ export class ReporterService {
           authorName: reporter.name,
           body: dto.body,
           visibility: CommentVisibility.REPORTER_VISIBLE,
+          // The portal told us what language this user writes in, so record it
+          // rather than paying for provider-side detection.
+          sourceLocale: ctx.reporter.locale ?? null,
         }),
       );
       // Bump updatedAt (without touching version) so staff see it as activity.

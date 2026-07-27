@@ -58,6 +58,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.error(`Non-error exception: ${safeStringify(exception)}`);
     }
 
+    // Rate-limit responses arrive as ThrottlerException, whose default message is
+    // the class-name-prefixed "ThrottlerException: Too Many Requests" — meaningless
+    // to a user and never something we want on the wire. Normalise every 429 to one
+    // friendly, actionable line so any client (staff UI, reporter portal, SDK,
+    // integrations) can show it verbatim.
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      message = 'You are making requests too quickly. Please wait a moment and try again.';
+      error = 'Too Many Requests';
+    }
+
     // Log security-relevant denials so an on-call/SIEM can see authz probing
     // (bad tokens, cross-scope attempts). Response body is unchanged.
     if (status === HttpStatus.UNAUTHORIZED || status === HttpStatus.FORBIDDEN) {

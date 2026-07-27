@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ActivitySquare, AtSign, ChevronDown, Copy, Lock, Megaphone, MessageSquare, Send,
+  ActivitySquare, AtSign, ChevronDown, Copy, Lock, Megaphone, MessageSquare, MessageSquareText, Send,
   ThumbsDown, ThumbsUp, UserCheck, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,7 +10,7 @@ import { staffApi } from '@/api/client';
 import { AttachmentGallery } from '@/components/AttachmentGallery';
 import { Spinner } from '@/components/ui/spinner';
 import type {
-  AssigneeOption, CommentVisibility, IssueStatus, Priority, StaffIssueDetail,
+  AssigneeOption, CannedResponseView, CommentVisibility, IssueStatus, Priority, StaffIssueDetail,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
@@ -35,6 +35,10 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { IssueWatch, IssueLabels, IssueLinks, MergeIssueButton } from './IssueExtras';
 import { DiagnosticsView } from '@/components/DiagnosticsView';
@@ -143,6 +147,16 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
     queryFn: async () => (await staffApi.get<AssigneeOption[]>(`/staff/issues/${id}/members`)).data,
     enabled: Boolean(id) && canWrite,
   });
+  // Reply templates for this issue's platform, inserted into the composer. Write
+  // roles only (watchers can't comment), so it rides the same canWrite gate as
+  // /members — the endpoint 403s for read-only roles.
+  const { data: cannedResponses } = useQuery({
+    queryKey: ['staff', 'canned-responses', data?.platform?.id],
+    queryFn: async () =>
+      (await staffApi.get<CannedResponseView[]>(`/staff/platforms/${data!.platform!.id}/canned-responses`)).data,
+    enabled: Boolean(data?.platform?.id) && canWrite,
+    staleTime: 5 * 60 * 1000,
+  });
   const changeAssignment = useMutation({
     mutationFn: (assigneeId: string | null) =>
       staffApi.patch(`/staff/issues/${id}/assignment`, { assigneeId, version: data!.version }),
@@ -205,6 +219,35 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
       const pos = (before + insert).length;
       taRef.current?.focus();
       taRef.current?.setSelectionRange(pos, pos);
+    });
+  }
+
+  // Fill a template's {{placeholders}} from this issue (data is narrowed to
+  // defined past the early return above). Matches the backend DTO's documented set.
+  function fillTemplate(templateBody: string): string {
+    if (!data) return templateBody; // narrowing is lost inside this closure
+    return templateBody
+      .replace(/\{\{\s*reporter\s*\}\}/gi, data.reporter?.name ?? 'there')
+      .replace(/\{\{\s*reference\s*\}\}/gi, data.referenceNo)
+      .replace(/\{\{\s*assignee\s*\}\}/gi, data.assignee?.name ?? 'the team')
+      .replace(/\{\{\s*platform\s*\}\}/gi, data.platform?.name ?? '');
+  }
+
+  // Insert a filled template at the caret (or append), then restore focus.
+  function insertCanned(templateBody: string) {
+    const filled = fillTemplate(templateBody);
+    const ta = taRef.current;
+    const caret = ta?.selectionStart ?? body.length;
+    const before = body.slice(0, caret);
+    const after = body.slice(caret);
+    // Start on a fresh line unless we're already at one, so the template reads cleanly.
+    const sep = before && !before.endsWith('\n') ? '\n' : '';
+    setBody(before + sep + filled + after);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const pos = (before + sep + filled).length;
+      ta?.focus();
+      ta?.setSelectionRange(pos, pos);
     });
   }
 
@@ -413,13 +456,38 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                       )}
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <Select value={visibility} onValueChange={(v) => setVisibility(v as CommentVisibility)}>
-                        <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="INTERNAL">Internal note</SelectItem>
-                          <SelectItem value="REPORTER_VISIBLE">Reporter-visible</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-2">
+                        <Select value={visibility} onValueChange={(v) => setVisibility(v as CommentVisibility)}>
+                          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="INTERNAL">Internal note</SelectItem>
+                            <SelectItem value="REPORTER_VISIBLE">Reporter-visible</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {(cannedResponses?.length ?? 0) > 0 && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button type="button" variant="outline" size="sm" className="gap-1.5" title="Insert a canned response">
+                                <MessageSquareText className="h-4 w-4" /> Templates
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="max-h-80 w-72 overflow-y-auto">
+                              <DropdownMenuLabel>Insert a canned response</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              {cannedResponses!.map((r) => (
+                                <DropdownMenuItem
+                                  key={r.id}
+                                  onSelect={() => insertCanned(r.body)}
+                                  className="flex-col items-start gap-0.5"
+                                >
+                                  <span className="font-medium">{r.title}</span>
+                                  <span className="line-clamp-1 text-xs text-muted-foreground">{fillTemplate(r.body)}</span>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
                       <Button onClick={() => addComment.mutate()} disabled={!body.trim() || addComment.isPending}>
                         {addComment.isPending ? <Spinner /> : <Send className="h-4 w-4" />}
                         Post

@@ -4,6 +4,7 @@ import { StaffIssueDetailPage } from './StaffIssueDetailPage';
 import { BoardPage } from './BoardPage';
 import { TriagePage } from './TriagePage';
 import { DashboardPage } from './DashboardPage';
+import { PlatformReportPage } from './PlatformReportPage';
 import { AdminPage } from './AdminPage';
 import { AuditPage } from './AuditPage';
 
@@ -17,6 +18,7 @@ export function StaffWorkspaceRoutes() {
       <Route path="board" element={<BoardPage />} />
       <Route path="triage" element={<TriagePage />} />
       <Route path="dashboard" element={<DashboardPage />} />
+      <Route path="reports" element={<PlatformReportPage />} />
       <Route path="admin" element={<AdminPage />} />
       <Route path="audit" element={<AuditPage />} />
     </Routes>

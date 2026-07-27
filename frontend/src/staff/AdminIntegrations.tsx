@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Plus, Trash2, Webhook, Zap } from 'lucide-react';
+import {
+  KeyRound, MessageSquareText, Pencil, Plus, Trash2, Webhook, Zap,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
-  ApiTokenView, AutomationRuleView, IssueStatus, LabelView, PlatformItem, Priority, WebhookView,
+  ApiTokenView, AutomationRuleView, CannedResponseView, IssueStatus, LabelView,
+  PlatformItem, Priority, WebhookView,
 } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
@@ -32,6 +36,11 @@ import { toastApiError as onError } from '@/lib/toast-error';
 const DESTRUCTIVE_ICON =
   'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
   + 'hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
+
+// Neutral sibling of DESTRUCTIVE_ICON for non-destructive row actions (edit).
+const NEUTRAL_ICON =
+  'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
+  + 'hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
 
 /**
  * Compact empty state for the small cards on this screen.
@@ -108,6 +117,7 @@ export function IntegrationsTab() {
         <div className="grid gap-4 xl:grid-cols-2">
           <AutomationRulesCard platformId={active} />
           <ApiTokensCard platformId={active} />
+          <CannedResponsesCard platformId={active} />
         </div>
       )}
     </div>
@@ -384,6 +394,122 @@ function ApiTokensCard({ platformId }: { platformId: string }) {
           ))}
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+// Per-platform reply templates ("macros"). Staff insert these in the comment
+// composer (IssueDetailPanel); the {{placeholders}} are filled there at insert.
+function CannedResponsesCard({ platformId }: { platformId: string }) {
+  const qc = useQueryClient();
+  const key = ['staff', 'canned-responses', platformId];
+  const { data: items, isLoading } = useQuery({
+    queryKey: key,
+    queryFn: async () =>
+      (await staffApi.get<CannedResponseView[]>(`/staff/platforms/${platformId}/canned-responses`)).data,
+  });
+  const refresh = () => qc.invalidateQueries({ queryKey: key });
+
+  const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+
+  const startCreate = () => { setEditingId(null); setTitle(''); setBody(''); setOpen(true); };
+  const startEdit = (r: CannedResponseView) => { setEditingId(r.id); setTitle(r.title); setBody(r.body); setOpen(true); };
+
+  const save = useMutation({
+    mutationFn: () => (editingId
+      ? staffApi.patch(`/staff/platforms/${platformId}/canned-responses/${editingId}`, { title, body })
+      : staffApi.post(`/staff/platforms/${platformId}/canned-responses`, { title, body })),
+    onSuccess: () => {
+      setOpen(false);
+      toast.success(editingId ? 'Template updated.' : 'Template created.');
+      refresh();
+    },
+    onError,
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => staffApi.delete(`/staff/platforms/${platformId}/canned-responses/${id}`),
+    onSuccess: () => { toast.success('Template deleted.'); refresh(); },
+    onError,
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <MessageSquareText className="h-4 w-4" /> Canned responses
+          <Button size="sm" className="ml-auto" onClick={startCreate}><Plus className="h-4 w-4" /> New</Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Reply templates staff insert in the comment box. Use{' '}
+          <code>{'{{reporter}}'}</code>, <code>{'{{reference}}'}</code>,{' '}
+          <code>{'{{assignee}}'}</code>, <code>{'{{platform}}'}</code>.
+        </p>
+        {isLoading && <ListSkeleton rows={2} />}
+        {!isLoading && (items ?? []).length === 0 && (
+          <CompactEmpty icon={<MessageSquareText />} title="No canned responses">
+            Save a reply you send often to reuse it in one click.
+          </CompactEmpty>
+        )}
+        {(items ?? []).map((r) => (
+          <div key={r.id} className="flex items-start gap-2 rounded-md border border-border/60 px-3 py-2 text-sm">
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{r.title}</p>
+              <p className="line-clamp-2 whitespace-pre-wrap text-xs text-muted-foreground">{r.body}</p>
+            </div>
+            <button type="button" className={NEUTRAL_ICON} aria-label={`Edit ${r.title}`} onClick={() => startEdit(r)}>
+              <Pencil className="h-4 w-4" />
+            </button>
+            <ConfirmDialog
+              title="Delete this canned response?"
+              confirmLabel="Delete"
+              onConfirm={() => remove.mutate(r.id)}
+              description={<p><strong>{r.title}</strong> will no longer be available to insert.</p>}
+              trigger={(
+                <button type="button" className={DESTRUCTIVE_ICON} aria-label={`Delete ${r.title}`}>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            />
+          </div>
+        ))}
+      </CardContent>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingId ? 'Edit canned response' : 'New canned response'}</DialogTitle>
+            <DialogDescription>
+              Placeholders like <code>{'{{reporter}}'}</code> are filled in when a template is inserted.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Title</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={80} placeholder="Ask for logs" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Body</Label>
+              <Textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                maxLength={5000}
+                className="min-h-32"
+                placeholder="Hi {{reporter}}, could you attach the console logs from when this happened? Thanks!"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => save.mutate()} disabled={!title.trim() || !body.trim() || save.isPending}>
+              {save.isPending && <Spinner />} {editingId ? 'Save changes' : 'Create'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

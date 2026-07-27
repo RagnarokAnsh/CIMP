@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { LifeBuoy } from 'lucide-react';
 import { setStaffTokenGetter, setStaffUnauthorizedHandler } from '@/api/client';
+import { friendlyError } from '@/lib/api-error';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,8 +65,8 @@ function LoginForm({ onLogin }: { onLogin: (token: string) => void }) {
         password,
       });
       onLogin(data.accessToken);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Sign-in failed. Please try again.');
+    } catch (err) {
+      setError(friendlyError(err, 'Sign-in failed. Please try again.'));
       setPending(false);
     }
   };

@@ -59,6 +59,8 @@ staffApi.interceptors.response.use(
       staffUnauthorizedHandler();
     } else if (status === 403) {
       authToast("You don't have access to that.");
+    } else if (status === 429) {
+      authToast("You're doing that a little too fast — wait a moment and try again.");
     }
     return Promise.reject(error);
   },
@@ -75,6 +77,8 @@ reporterApi.interceptors.response.use(
       authToast('Your support session has expired. Please reopen support from your portal.');
     } else if (status === 403) {
       authToast("You don't have access to that.");
+    } else if (status === 429) {
+      authToast("You're sending requests too quickly — wait a moment and try again.");
     }
     return Promise.reject(error);
   },

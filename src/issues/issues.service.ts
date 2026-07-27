@@ -34,6 +34,13 @@ const EXPORT_MAX_ROWS = 50_000;
 // bulk call can't be used to tell the two apart. See the catch in bulkUpdate.
 const NOT_VISIBLE_REASON = 'Not found or out of scope';
 
+// Normalize 'en-GB' → 'en'; mirrors baseLocale() in the translation seam. Kept
+// local so IssuesService doesn't take a dependency on an optional feature.
+const toBaseLocale = (l: string | undefined): string | null => {
+  const base = l?.trim().toLowerCase().replace('_', '-').split('-')[0];
+  return base && /^[a-z]{2,3}$/.test(base) ? base : null;
+};
+
 @Injectable()
 export class IssuesService {
   constructor(
@@ -48,6 +55,12 @@ export class IssuesService {
     private readonly events: EventEmitter2,
     private readonly config: ConfigService,
   ) {}
+
+  // The language the support team reads, used to pick a cached translation of a
+  // reporter's message. Null when translation is unconfigured → originals only.
+  private get staffLocale(): string | null {
+    return toBaseLocale(this.config.get<string>('translation.staffLocale'));
+  }
 
   // ---- Queries -------------------------------------------------------------
 
@@ -166,7 +179,15 @@ export class IssuesService {
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
         .map((c) => ({
           id: c.id,
-          body: c.body,
+          // A reporter writing in another language is shown to staff in the
+          // team's language when a cached translation exists, with the original
+          // kept alongside so nothing is ever hidden behind a machine guess.
+          body: this.staffLocale && c.translations?.[this.staffLocale]
+            ? c.translations[this.staffLocale]
+            : c.body,
+          originalBody: this.staffLocale && c.translations?.[this.staffLocale] ? c.body : null,
+          translated: Boolean(this.staffLocale && c.translations?.[this.staffLocale]),
+          sourceLocale: c.sourceLocale,
           visibility: c.visibility,
           authorType: c.authorType,
           author: c.author

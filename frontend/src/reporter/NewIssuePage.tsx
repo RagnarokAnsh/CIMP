@@ -9,6 +9,8 @@ import { reporterApi } from '@/api/client';
 import { getHandoffToken } from '@/api/handoff';
 import { clearDiagnostics, loadDiagnostics } from '@/api/diagnostics';
 import { toastApiError } from '@/lib/toast-error';
+import { friendlyError } from '@/lib/api-error';
+import { useT, type TFunction } from '@/i18n';
 import type { ReporterIssueDetail, SimilarIssue } from '@/api/types';
 import { useQuery } from '@tanstack/react-query';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -33,9 +35,11 @@ const MAX_FILES = 5;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
-function validateFiles(files: FileList | null): string | null {
+// Takes `t` so the message is in the reporter's language (this is pure logic,
+// so the translator is passed in rather than the hook being called here).
+function validateFiles(files: FileList | null, t: TFunction): string | null {
   if (!files || files.length === 0) return null;
-  if (files.length > MAX_FILES) return `At most ${MAX_FILES} files may be attached.`;
+  if (files.length > MAX_FILES) return t('new.error.tooManyFiles', { max: MAX_FILES });
   for (const f of Array.from(files)) {
     // Only reject a type the browser positively identified as unsupported.
     // File.type is '' for plenty of real files, and the server is the authority
@@ -43,10 +47,10 @@ function validateFiles(files: FileList | null): string | null {
     // rather than trusting this header, so blocking an unknown type here would
     // reject valid uploads the server would have accepted.
     if (f.type && !ALLOWED_MIME_TYPES.includes(f.type)) {
-      return `"${f.name}" is not a supported type (PNG, JPEG, WEBP, PDF).`;
+      return t('new.error.badType', { name: f.name });
     }
     if (f.size > MAX_FILE_BYTES) {
-      return `"${f.name}" is larger than 10 MB.`;
+      return t('new.error.tooLarge', { name: f.name });
     }
   }
   return null;
@@ -55,6 +59,7 @@ function validateFiles(files: FileList | null): string | null {
 // "Looks like this is already being tracked" — privacy-safe matches for the
 // draft description (status/age/count only), each with a one-click subscribe.
 function SimilarIssuesPanel({ description }: { description: string }) {
+  const { t } = useT();
   const [debounced, setDebounced] = useState('');
   const [dismissed, setDismissed] = useState(false);
   const [subscribedTokens, setSubscribedTokens] = useState<Set<string>>(new Set());
@@ -79,7 +84,7 @@ function SimilarIssuesPanel({ description }: { description: string }) {
     },
     onSuccess: (token) => {
       setSubscribedTokens((prev) => new Set(prev).add(token));
-      toast.success("You'll be notified when it's resolved.");
+      toast.success(t('similar.subscribeToast'));
     },
     onError: (e) => toastApiError(e),
   });
@@ -89,9 +94,9 @@ function SimilarIssuesPanel({ description }: { description: string }) {
   return (
     <Alert>
       <AlertTitle className="flex items-center justify-between">
-        This might already be tracked
+        {t('similar.title')}
         <button type="button" className="text-xs font-normal text-muted-foreground hover:underline" onClick={() => setDismissed(true)}>
-          dismiss
+          {t('similar.dismiss')}
         </button>
       </AlertTitle>
       <AlertDescription>
@@ -108,14 +113,17 @@ function SimilarIssuesPanel({ description }: { description: string }) {
               <StatusBadge status={m.status} />
               <span className="min-w-0 flex-1 basis-40">
                 <span className="block truncate font-medium text-foreground">
-                  {m.title ?? (i === 0 ? 'Closest match' : `Similar report #${i + 1}`)}
+                  {m.title ?? (i === 0 ? t('similar.closest') : t('similar.other', { n: i + 1 }))}
                 </span>
                 <span className="block text-xs text-muted-foreground">
-                  first reported {relativeTime(m.firstReportedAt)} · {m.reportCount} report{m.reportCount === 1 ? '' : 's'}
+                  {t('similar.meta', {
+                    when: relativeTime(m.firstReportedAt),
+                    count: m.reportCount,
+                  })}
                 </span>
               </span>
               {subscribedTokens.has(m.subscribeToken) ? (
-                <span className={cn('shrink-0', TEXT_TONE.success)}>✓ You&apos;ll be notified</span>
+                <span className={cn('shrink-0', TEXT_TONE.success)}>{t('similar.subscribed')}</span>
               ) : (
                 <Button
                   type="button"
@@ -125,14 +133,14 @@ function SimilarIssuesPanel({ description }: { description: string }) {
                   disabled={subscribe.isPending}
                   onClick={() => subscribe.mutate(m.subscribeToken)}
                 >
-                  Notify me instead
+                  {t('similar.subscribe')}
                 </Button>
               )}
             </li>
           ))}
         </ul>
         <p className="mt-2 text-xs text-muted-foreground">
-          If yours is different, just continue with the form below.
+          {t('similar.footer')}
         </p>
       </AlertDescription>
     </Alert>
@@ -140,6 +148,7 @@ function SimilarIssuesPanel({ description }: { description: string }) {
 }
 
 export function NewIssuePage() {
+  const { t } = useT();
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<FileList | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -178,7 +187,7 @@ export function NewIssuePage() {
           const ext = mediaType.split('/')[1] || 'jpg';
           form.append('files', new File([blob], `screenshot.${ext}`, { type: mediaType }));
         } else {
-          toast.warning('Screenshot not attached — the file limit is already used by your attachments.');
+          toast.warning(t('new.screenshotDropped'));
         }
       }
       const { data } = await reporterApi.post<ReporterIssueDetail>('/issues', form);
@@ -187,7 +196,7 @@ export function NewIssuePage() {
     onSuccess: (issue) => {
       clearDiagnostics();
       queryClient.invalidateQueries({ queryKey: ['reporter', 'issues'] });
-      toast.success(`Issue ${issue.referenceNo} submitted.`);
+      toast.success(t('new.submitted', { ref: issue.referenceNo }));
       navigate(`/reporter/issues/${issue.id}`);
     },
   });
@@ -195,22 +204,22 @@ export function NewIssuePage() {
   if (!getHandoffToken()) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>No portal session</AlertTitle>
-        <AlertDescription>Open this page from your portal to raise an issue.</AlertDescription>
+        <AlertTitle>{t('new.noSession.title')}</AlertTitle>
+        <AlertDescription>{t('new.noSession.body')}</AlertDescription>
       </Alert>
     );
   }
 
   const fileCount = files?.length ?? 0;
-  const errorMessage = (mutation.error as any)?.response?.data?.message;
+  const errorMessage = mutation.isError
+    ? friendlyError(mutation.error, t('new.error.generic'))
+    : null;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Raise an issue</CardTitle>
-        <CardDescription>
-          Tell us what's wrong. Attach screenshots or documents if they help.
-        </CardDescription>
+        <CardTitle>{t('new.title')}</CardTitle>
+        <CardDescription>{t('new.subtitle')}</CardDescription>
       </CardHeader>
       <CardContent>
         <form
@@ -221,26 +230,26 @@ export function NewIssuePage() {
           }}
         >
           <div className="space-y-2">
-            <Label htmlFor="desc">What's wrong?</Label>
+            <Label htmlFor="desc">{t('new.field.description')}</Label>
             <Textarea
               id="desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the problem in as much detail as you can…"
+              placeholder={t('new.field.descriptionPlaceholder')}
               className="min-h-36"
               minLength={10}
               maxLength={5000}
               required
             />
             <p className="text-xs text-muted-foreground">
-              {description.length}/5000 — at least 10 characters.
+              {t('new.field.counter', { count: description.length })}
             </p>
           </div>
 
           <SimilarIssuesPanel description={description} />
 
           <div className="space-y-2">
-            <Label htmlFor="files">Attachments (optional)</Label>
+            <Label htmlFor="files">{t('new.attachments')}</Label>
             <Input
               id="files"
               type="file"
@@ -248,12 +257,12 @@ export function NewIssuePage() {
               accept="image/png,image/jpeg,image/webp,application/pdf"
               onChange={(e) => {
                 setFiles(e.target.files);
-                setFileError(validateFiles(e.target.files));
+                setFileError(validateFiles(e.target.files, t));
               }}
             />
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Paperclip className="h-3 w-3" />
-              Up to 5 files, 10&nbsp;MB each. PNG, JPEG, WEBP, PDF.
+              {t('new.attachmentsHint')}
             </p>
             {/* The native control only ever names the first file ("3 files"),
                 so list them — people need to confirm they picked the right ones. */}
@@ -282,20 +291,20 @@ export function NewIssuePage() {
             <div className="flex items-center gap-3 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
               <Dialog>
                 <DialogTrigger asChild>
-                  <button type="button" title="View screenshot">
-                    <img src={screenshot} alt="Screenshot to attach" className="h-10 rounded border border-border object-cover" />
+                  <button type="button" title={t('new.screenshot.dialogTitle')}>
+                    <img src={screenshot} alt={t('new.screenshot.dialogTitle')} className="h-10 rounded border border-border object-cover" />
                   </button>
                 </DialogTrigger>
                 <DialogContent className="max-w-3xl">
-                  <DialogHeader><DialogTitle>Screenshot to be attached</DialogTitle></DialogHeader>
-                  <img src={screenshot} alt="Screenshot" className="max-h-[70vh] w-full rounded object-contain" />
+                  <DialogHeader><DialogTitle>{t('new.screenshot.dialogTitle')}</DialogTitle></DialogHeader>
+                  <img src={screenshot} alt={t('new.screenshot.dialogTitle')} className="max-h-[70vh] w-full rounded object-contain" />
                 </DialogContent>
               </Dialog>
-              <span>A screenshot from your app will be attached.</span>
+              <span>{t('new.screenshot.notice')}</span>
               <button
                 type="button"
                 className="ml-auto text-muted-foreground hover:text-destructive"
-                title="Remove screenshot"
+                title={t('new.screenshot.remove')}
                 onClick={() => setScreenshot(null)}
               >
                 <X className="h-4 w-4" />
@@ -306,20 +315,20 @@ export function NewIssuePage() {
           {diagnostics && (
             <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
               <ActivitySquare className="h-4 w-4 shrink-0 text-emerald-500" />
-              <span>Technical diagnostics from your app will be included.</span>
+              <span>{t('new.diagnostics.notice')}</span>
               <Dialog>
                 <DialogTrigger asChild>
-                  <button type="button" className="text-primary hover:underline">view</button>
+                  <button type="button" className="text-primary hover:underline">{t('new.diagnostics.view')}</button>
                 </DialogTrigger>
                 <DialogContent className="max-h-[80vh] overflow-y-auto">
-                  <DialogHeader><DialogTitle>Diagnostics to be sent</DialogTitle></DialogHeader>
+                  <DialogHeader><DialogTitle>{t('new.diagnostics.dialogTitle')}</DialogTitle></DialogHeader>
                   <DiagnosticsView context={diagnostics} />
                 </DialogContent>
               </Dialog>
               <button
                 type="button"
                 className="ml-auto text-muted-foreground hover:text-destructive"
-                title="Remove diagnostics"
+                title={t('new.diagnostics.remove')}
                 onClick={() => { setDiagnostics(null); clearDiagnostics(); }}
               >
                 <X className="h-4 w-4" />
@@ -329,13 +338,13 @@ export function NewIssuePage() {
 
           {mutation.isError && (
             <Alert variant="destructive">
-              <AlertDescription>{errorMessage ?? 'Submission failed. Please try again.'}</AlertDescription>
+              <AlertDescription>{errorMessage}</AlertDescription>
             </Alert>
           )}
 
           <Button type="submit" disabled={mutation.isPending || description.length < 10 || Boolean(fileError)}>
             {mutation.isPending && <Spinner />}
-            {mutation.isPending ? 'Submitting…' : 'Submit issue'}
+            {mutation.isPending ? t('new.submitting') : t('new.submit')}
           </Button>
         </form>
       </CardContent>

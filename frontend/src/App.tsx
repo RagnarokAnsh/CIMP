@@ -4,8 +4,11 @@ import { NewIssuePage } from './reporter/NewIssuePage';
 import { MyIssuesPage } from './reporter/MyIssuesPage';
 import { ReporterIssueDetailPage } from './reporter/ReporterIssueDetailPage';
 import { StaffApp } from './staff/StaffApp';
+import { PublicStatusPage } from './status/PublicStatusPage';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { GlobalLoadingBar } from '@/components/GlobalLoadingBar';
+import { I18nProvider, useT } from '@/i18n';
+import { LanguageSwitcher } from '@/i18n/LanguageSwitcher';
 import { cn } from '@/lib/utils';
 
 export function App() {
@@ -22,6 +25,9 @@ export function App() {
         element={<ReporterShell><ReporterIssueDetailPage /></ReporterShell>}
       />
 
+      {/* Public status page — no auth, no tokens; safe to link from anywhere. */}
+      <Route path="/status/:key" element={<PublicStatusPage />} />
+
       {/* Staff workspace. */}
       <Route path="/staff/*" element={<StaffApp />} />
 
@@ -31,7 +37,18 @@ export function App() {
   );
 }
 
+// The reporter portal is embedded in partner portals whose users may read any
+// language, so this surface (unlike the internal staff workspace) is localized.
 function ReporterShell({ children }: { children: React.ReactNode }) {
+  return (
+    <I18nProvider>
+      <ReporterChrome>{children}</ReporterChrome>
+    </I18nProvider>
+  );
+}
+
+function ReporterChrome({ children }: { children: React.ReactNode }) {
+  const { t } = useT();
   return (
     <div className="min-h-screen bg-background">
       <header className="glass sticky top-0 z-10 border-b border-border">
@@ -40,15 +57,16 @@ function ReporterShell({ children }: { children: React.ReactNode }) {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-brand text-white shadow-sm">
               <LifeBuoy className="h-[18px] w-[18px]" />
             </div>
-            <span>Support</span>
+            <span>{t('nav.support')}</span>
           </div>
           <nav className="flex items-center gap-1 text-sm">
             <ReporterNavLink to="/reporter/issues" icon={<ListChecks className="h-4 w-4" />}>
-              My issues
+              {t('nav.myIssues')}
             </ReporterNavLink>
             <ReporterNavLink to="/reporter/new" icon={<PlusCircle className="h-4 w-4" />}>
-              Raise an issue
+              {t('nav.raiseIssue')}
             </ReporterNavLink>
+            <LanguageSwitcher />
             <ThemeToggle />
           </nav>
         </div>

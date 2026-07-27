@@ -68,6 +68,22 @@ export default () => ({
     // inbound sync (the endpoint then rejects everything).
     webhookSecret: process.env.JIRA_WEBHOOK_SECRET,
   },
+  // Machine translation of reporter↔staff messages. 'none' (default) disables
+  // it entirely; 'libretranslate' posts to a LibreTranslate-compatible API.
+  // TRANSLATE_STAFF_LOCALE is the language your support team reads — inbound
+  // reporter messages are translated into it. Reporter-facing replies are
+  // translated into the reporter's own locale (from the hand-off token, or
+  // TRANSLATE_REPORTER_LOCALES as a fallback set to pre-warm).
+  translation: {
+    driver: process.env.TRANSLATE_DRIVER ?? 'none',
+    apiUrl: process.env.TRANSLATE_API_URL,
+    apiKey: process.env.TRANSLATE_API_KEY,
+    staffLocale: process.env.TRANSLATE_STAFF_LOCALE ?? 'en',
+    reporterLocales: (process.env.TRANSLATE_REPORTER_LOCALES ?? '')
+      .split(',')
+      .map((l) => l.trim())
+      .filter(Boolean),
+  },
   // Authorization policy seam for OD-09: may focal points change issue status?
   focalPointCanTransition:
     (process.env.FOCAL_POINT_CAN_TRANSITION ?? 'false') === 'true',

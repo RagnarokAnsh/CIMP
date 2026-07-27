@@ -41,6 +41,7 @@ import { useMe } from '@/lib/use-me';
 import { cn } from '@/lib/utils';
 import { roleLabel, TEXT_TONE } from '@/lib/issue-meta';
 import { IntegrationsTab, WebhooksTab } from './AdminIntegrations';
+import { StatusPageTab } from './AdminStatusPage';
 
 export function AdminPage() {
   return (
@@ -54,11 +55,13 @@ export function AdminPage() {
           <TabsTrigger value="platforms">Platforms</TabsTrigger>
           <TabsTrigger value="staff">Staff &amp; roles</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="status">Status page</TabsTrigger>
           <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
         </TabsList>
         <TabsContent value="platforms"><PlatformsTab /></TabsContent>
         <TabsContent value="staff"><StaffTab /></TabsContent>
         <TabsContent value="integrations"><IntegrationsTab /></TabsContent>
+        <TabsContent value="status"><StatusPageTab /></TabsContent>
         <TabsContent value="webhooks"><WebhooksTab /></TabsContent>
       </Tabs>
     </div>
