@@ -9,6 +9,7 @@ import type {
   ApiTokenView, AutomationRuleView, CannedResponseView, IssueStatus, LabelView,
   PlatformItem, Priority, WebhookView,
 } from '@/api/types';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,19 +30,11 @@ import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { shortDate } from '@/lib/format';
 
 import { toastApiError as onError } from '@/lib/toast-error';
+import { DESTRUCTIVE_ICON, NEUTRAL_ICON } from '@/lib/icon-button';
 
 // Shared trigger styling for the row-level destructive icon buttons below.
 // `aria-label` is set per use — `title` alone leaves them unnamed to a screen
 // reader, and the bare icon gave no hit target worth aiming at.
-const DESTRUCTIVE_ICON =
-  'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
-  + 'hover:bg-destructive/10 hover:text-destructive focus-ring';
-
-// Neutral sibling of DESTRUCTIVE_ICON for non-destructive row actions (edit).
-const NEUTRAL_ICON =
-  'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
-  + 'hover:bg-accent hover:text-foreground focus-ring';
-
 /**
  * Compact empty state for the small cards on this screen.
  *
@@ -63,6 +56,22 @@ function CompactEmpty({
       <p className="text-sm font-medium">{title}</p>
       <p className="text-xs text-muted-foreground">{children}</p>
     </div>
+  );
+}
+
+// A failed fetch must not fall through to the empty state. On these cards that
+// reads as "nothing is configured" and invites the admin to create a duplicate
+// of something that already exists — a second API token while the first stays
+// live, a second webhook with a fresh signing secret. AdminPage's PlatformsTab
+// and StaffTab already branch on isError; this brings the integrations cards
+// in line with them.
+function LoadError({ what }: { what: string }) {
+  return (
+    <Alert variant="destructive">
+      <AlertDescription>
+        Couldn’t load {what}. Refresh to try again — existing configuration is unchanged.
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -127,7 +136,7 @@ export function IntegrationsTab() {
 function AutomationRulesCard({ platformId }: { platformId: string }) {
   const qc = useQueryClient();
   const key = ['admin', 'automation', platformId];
-  const { data: rules, isLoading: rulesLoading } = useQuery({
+  const { data: rules, isLoading: rulesLoading, isError: rulesError } = useQuery({
     queryKey: key,
     queryFn: async () =>
       (await staffApi.get<AutomationRuleView[]>(`/staff/platforms/${platformId}/automation-rules`)).data,
@@ -267,7 +276,8 @@ function AutomationRulesCard({ platformId }: { platformId: string }) {
       </CardHeader>
       <CardContent className="space-y-2">
         {rulesLoading && <ListSkeleton rows={2} />}
-        {!rulesLoading && (rules ?? []).length === 0 && (
+        {rulesError && <LoadError what="automation rules" />}
+        {!rulesLoading && !rulesError && (rules ?? []).length === 0 && (
           <CompactEmpty icon={<Zap />} title="No automation rules">
             New issues stay exactly as reported.
           </CompactEmpty>
@@ -313,7 +323,7 @@ function ApiTokensCard({ platformId }: { platformId: string }) {
   const [name, setName] = useState('');
   const [freshToken, setFreshToken] = useState<string | null>(null);
 
-  const { data: tokens, isLoading: tokensLoading } = useQuery({
+  const { data: tokens, isLoading: tokensLoading, isError: tokensError } = useQuery({
     queryKey: key,
     queryFn: async () =>
       (await staffApi.get<ApiTokenView[]>(`/staff/platforms/${platformId}/api-tokens`)).data,
@@ -359,7 +369,8 @@ function ApiTokensCard({ platformId }: { platformId: string }) {
         </div>
         <div className="space-y-1.5">
           {tokensLoading && <ListSkeleton rows={2} />}
-          {!tokensLoading && (tokens ?? []).length === 0 && (
+          {tokensError && <LoadError what="API tokens" />}
+          {!tokensLoading && !tokensError && (tokens ?? []).length === 0 && (
             <CompactEmpty icon={<KeyRound />} title="No API tokens">
               Issue one to give a system read-only access to this platform&apos;s issues.
             </CompactEmpty>
@@ -403,7 +414,7 @@ function ApiTokensCard({ platformId }: { platformId: string }) {
 function CannedResponsesCard({ platformId }: { platformId: string }) {
   const qc = useQueryClient();
   const key = ['staff', 'canned-responses', platformId];
-  const { data: items, isLoading } = useQuery({
+  const { data: items, isLoading, isError } = useQuery({
     queryKey: key,
     queryFn: async () =>
       (await staffApi.get<CannedResponseView[]>(`/staff/platforms/${platformId}/canned-responses`)).data,
@@ -450,7 +461,8 @@ function CannedResponsesCard({ platformId }: { platformId: string }) {
           <code>{'{{assignee}}'}</code>, <code>{'{{platform}}'}</code>.
         </p>
         {isLoading && <ListSkeleton rows={2} />}
-        {!isLoading && (items ?? []).length === 0 && (
+        {isError && <LoadError what="canned responses" />}
+        {!isLoading && !isError && (items ?? []).length === 0 && (
           <CompactEmpty icon={<MessageSquareText />} title="No canned responses">
             Save a reply you send often to reuse it in one click.
           </CompactEmpty>
@@ -525,7 +537,7 @@ export function WebhooksTab() {
   const [events, setEvents] = useState<Set<string>>(new Set());
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
 
-  const { data: hooks, isLoading: hooksLoading } = useQuery({
+  const { data: hooks, isLoading: hooksLoading, isError: hooksError } = useQuery({
     queryKey: key,
     queryFn: async () => (await staffApi.get<WebhookView[]>('/admin/webhooks')).data,
   });
@@ -622,7 +634,8 @@ export function WebhooksTab() {
 
         <div className="space-y-1.5">
           {hooksLoading && <ListSkeleton rows={2} />}
-          {!hooksLoading && (hooks ?? []).length === 0 && (
+          {hooksError && <LoadError what="webhooks" />}
+          {!hooksLoading && !hooksError && (hooks ?? []).length === 0 && (
             <CompactEmpty icon={<Webhook />} title="No webhooks configured">
               Add one to push signed issue events to your own systems.
             </CompactEmpty>

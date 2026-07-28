@@ -327,12 +327,13 @@ export function IssuesListPage() {
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
               placeholder="Search reference, description and comments…"
+              aria-label="Search issues"
               className="pl-9"
             />
           </form>
 
           <Select value={filters.status || ALL} onValueChange={(v) => patch({ status: v === ALL ? '' : v })}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-40" aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All statuses</SelectItem>
               {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>)}
@@ -340,7 +341,7 @@ export function IssuesListPage() {
           </Select>
 
           <Select value={filters.priority || ALL} onValueChange={(v) => patch({ priority: v === ALL ? '' : v })}>
-            <SelectTrigger className="w-36"><SelectValue placeholder="Priority" /></SelectTrigger>
+            <SelectTrigger className="w-36" aria-label="Filter by priority"><SelectValue placeholder="Priority" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All priorities</SelectItem>
               {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>)}
@@ -349,7 +350,7 @@ export function IssuesListPage() {
 
           {(platforms?.length ?? 0) > 1 && (
             <Select value={filters.platformId || ALL} onValueChange={(v) => patch({ platformId: v === ALL ? '' : v })}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Platform" /></SelectTrigger>
+              <SelectTrigger className="w-40" aria-label="Filter by platform"><SelectValue placeholder="Platform" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All platforms</SelectItem>
                 {platforms!.map((p) => <SelectItem key={p.id} value={p.id}>{p.key}</SelectItem>)}
@@ -393,13 +394,13 @@ export function IssuesListPage() {
           <span className="text-sm font-medium">{selected.size} selected</span>
           <div className="flex flex-wrap items-center gap-2">
             <Select onValueChange={(v) => runBulk('status', v)}>
-              <SelectTrigger size="sm" className="w-36"><SelectValue placeholder="Set status…" /></SelectTrigger>
+              <SelectTrigger size="sm" className="w-36" aria-label="Set status on selected issues"><SelectValue placeholder="Set status…" /></SelectTrigger>
               <SelectContent>
                 {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select onValueChange={(v) => runBulk('priority', v)}>
-              <SelectTrigger size="sm" className="w-36"><SelectValue placeholder="Set priority…" /></SelectTrigger>
+              <SelectTrigger size="sm" className="w-36" aria-label="Set priority on selected issues"><SelectValue placeholder="Set priority…" /></SelectTrigger>
               <SelectContent>
                 {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>)}
               </SelectContent>
@@ -644,7 +645,10 @@ function SortableHead({
   const active = filters.sort === field;
   const Icon = !active ? ChevronsUpDown : filters.order === 'ASC' ? ChevronUp : ChevronDown;
   return (
-    <TableHead>
+    // aria-sort belongs on the header cell, not the control: it is how a screen
+    // reader announces which column the table is ordered by and in which
+    // direction. The arrow icon conveyed that visually only.
+    <TableHead aria-sort={active ? (filters.order === 'ASC' ? 'ascending' : 'descending') : 'none'}>
       {/* -mx-1.5 px-1.5 py-1: keeps the label optically aligned with the column
           while giving the sort control a 24px-tall target and a visible focus
           ring — it was a bare 20px text run. */}

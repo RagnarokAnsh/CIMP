@@ -17,9 +17,29 @@ let staffTokenGetter: () => string | undefined = () => undefined;
 export function setStaffTokenGetter(fn: () => string | undefined): void {
   staffTokenGetter = fn;
 }
+
+// Where staff/local-auth.tsx persists the session. Exported so there is one
+// spelling of the key rather than a literal in each module.
+export const STAFF_TOKEN_STORAGE_KEY = 'staff_token';
+
+// Resolve the token, falling back to sessionStorage when the registered getter
+// has nothing. The fallback is not belt-and-braces — it is load-bearing: this
+// module can end up with TWO instances, because Vite serves a re-transformed
+// module under a distinct URL (`client.ts` and `client.ts?t=…` are separate
+// registry entries, each with its own `staffTokenGetter`). When that happens the
+// components holding the second copy send unauthenticated requests and 401 while
+// their siblings succeed in the same tick — which is exactly how `/staff/me` and
+// `/staff/notifications` failed while `/staff/issues` worked. sessionStorage is
+// shared by construction, so it cannot desync between instances.
+function currentStaffToken(): string | undefined {
+  const fromGetter = staffTokenGetter();
+  if (fromGetter) return fromGetter;
+  return sessionStorage.getItem(STAFF_TOKEN_STORAGE_KEY) ?? undefined;
+}
+
 // The current staff token (used by the SSE client, which can't send headers).
 export function getStaffToken(): string | undefined {
-  return staffTokenGetter();
+  return currentStaffToken();
 }
 
 // Called when a staff request comes back 401 (expired/invalid session). The staff
@@ -32,7 +52,7 @@ export function setStaffUnauthorizedHandler(fn: () => void): void {
 
 export const staffApi = axios.create({ baseURL: '/api' });
 staffApi.interceptors.request.use((config) => {
-  const token = staffTokenGetter();
+  const token = currentStaffToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });

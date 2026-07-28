@@ -100,7 +100,11 @@ export function TriagePage() {
   const transitions = detail ? STATUS_TRANSITIONS[detail.status] : [];
 
   const hotkeys = useMemo(() => {
-    if (!current || !detail || !canWrite || busy) return {};
+    if (!current || !detail) return {};
+    // Moving through the queue and toggling the shortcut help are READS. Gating
+    // them on canWrite meant a watcher saw the advertised shortcut list and
+    // found that none of it worked — including the "?" that opens the list.
+    // Only the mutating keys below depend on write access.
     const map: Record<string, () => void> = {
       j: () => setIndex((i) => Math.min(i + 1, items.length - 1)),
       arrowright: () => setIndex((i) => Math.min(i + 1, items.length - 1)),
@@ -108,6 +112,7 @@ export function TriagePage() {
       arrowleft: () => setIndex((i) => Math.max(i - 1, 0)),
       '?': () => setShowKeys((s) => !s),
     };
+    if (!canWrite || busy) return map;
     PRIORITIES.forEach((p, i) => { map[String(i + 1)] = () => setPriority.mutate(p); });
     if (transitions[0]) map.s = () => setStatus.mutate(transitions[0]);
     if (canAssignToMe) map.a = () => assignToMe.mutate();

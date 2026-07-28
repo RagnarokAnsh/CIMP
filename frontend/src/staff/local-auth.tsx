@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Eye, EyeOff, LifeBuoy } from 'lucide-react';
-import { setStaffTokenGetter, setStaffUnauthorizedHandler } from '@/api/client';
+import {
+  STAFF_TOKEN_STORAGE_KEY, setStaffTokenGetter, setStaffUnauthorizedHandler,
+} from '@/api/client';
 import { friendlyError } from '@/lib/api-error';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -14,7 +16,9 @@ import { StaffLayout } from './StaffLayout';
 import { StaffWorkspaceRoutes } from './routes';
 
 // Self-issued JWT (email/password) login — the only staff auth. No external IdP.
-const TOKEN_KEY = 'staff_token';
+// The key is defined in api/client.ts because the request interceptor reads the
+// same slot as a fallback (see currentStaffToken there for why).
+const TOKEN_KEY = STAFF_TOKEN_STORAGE_KEY;
 
 // Holds the stored token; the getter is registered from the component (see
 // below) so the dev/local/OIDC modules never clobber each other's getter at

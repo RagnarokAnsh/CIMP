@@ -49,14 +49,45 @@ import { DiagnosticsView } from '@/components/DiagnosticsView';
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const UNASSIGNED = '__unassigned__';
 
+// A ceiling for very large platforms, not a display cap — the dropdown scrolls,
+// and anything beyond this is reported rather than silently dropped.
+const MENTION_SUGGESTION_LIMIT = 50;
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// The single definition of "this text mentions this person", shared by the
+// highlight and by the notification list so the two can never disagree. Longest
+// name first, so "@Asha Rao" resolves to Asha Rao and does not also match a
+// colleague called "Asha".
+function mentionRegex(names: string[]): RegExp | null {
+  const known = names.filter(Boolean);
+  if (known.length === 0) return null;
+  const alternation = [...known].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|');
+  return new RegExp(`@(${alternation})`, 'g');
+}
+
+// Who a comment body actually mentions. Derived from the text rather than from
+// what the user clicked in the picker: the picker is easy to bypass (typing a
+// full name past it, pasting, or editing an existing draft), and relying on the
+// click meant a comment could render a highlighted mention that notified nobody.
+function mentionedMemberIds(text: string, members: AssigneeOption[]): string[] {
+  const re = mentionRegex(members.map((m) => m.name));
+  if (!re) return [];
+  const byName = new Map(members.map((m) => [m.name, m.id]));
+  const ids = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const id = byName.get(m[1]);
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
 
 // Renders a comment body with @mentions highlighted (distinct colour for UX).
 // Matches against the known platform member names so multi-word names colour fully.
 function renderBody(text: string, names: string[]) {
-  const known = names.filter(Boolean);
-  if (known.length === 0) return text;
-  const re = new RegExp(`@(${[...known].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})`, 'g');
+  const re = mentionRegex(names);
+  if (!re) return text;
   const out: React.ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
@@ -82,7 +113,6 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
   const [visibility, setVisibility] = useState<CommentVisibility>('INTERNAL');
   const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
   const [activeIdx, setActiveIdx] = useState(0);
-  const [picked, setPicked] = useState<Map<string, string>>(new Map());
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -110,9 +140,10 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
   });
   const addComment = useMutation({
     mutationFn: () => {
-      const mentionStaffIds = [...picked.entries()]
-        .filter(([, name]) => body.includes(`@${name}`))
-        .map(([sid]) => sid);
+      // Read the mentions back out of the body so what was highlighted is
+      // exactly what gets notified. The server re-checks platform membership.
+      const mentionStaffIds = mentionedMemberIds(body, members ?? [])
+        .filter((sid) => sid !== me?.id);
       return staffApi.post(`/staff/issues/${id}/comments`, {
         body,
         visibility,
@@ -120,7 +151,7 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
       });
     },
     onSuccess: () => {
-      setBody(''); setPicked(new Map()); setMention(null);
+      setBody(''); setMention(null);
       toast.success('Comment posted.'); refresh();
     },
     onError,
@@ -194,17 +225,29 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
   const isAssignedToMe = Boolean(me && data.assignee && me.id === data.assignee.id);
   const memberNames = (members ?? []).map((m) => m.name);
 
-  const mentionSuggestions = mention
-    ? (members ?? [])
-        .filter((m) => m.id !== me?.id && m.name.toLowerCase().includes(mention.query))
-        .slice(0, 6)
+  // Match name OR email: people reach for "@wei.chen" as readily as "@Wei".
+  // The list scrolls rather than truncating at six — capping it silently hid
+  // most of the platform's staff behind no affordance at all.
+  const mentionMatches = mention
+    ? (members ?? []).filter((m) => {
+        if (m.id === me?.id) return false;
+        if (!mention.query) return true;
+        return m.name.toLowerCase().includes(mention.query)
+          || m.email.toLowerCase().includes(mention.query);
+      })
     : [];
+  const mentionSuggestions = mentionMatches.slice(0, MENTION_SUGGESTION_LIMIT);
+  const mentionOverflow = mentionMatches.length - mentionSuggestions.length;
 
   function onBodyChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const value = e.target.value;
     setBody(value);
     const caret = e.target.selectionStart ?? value.length;
-    const m = value.slice(0, caret).match(/(?:^|\s)@([\p{L}\p{N}._-]{0,30})$/u);
+    // One internal space is allowed so a full name ("@Asha Rao") keeps the
+    // picker open; without it the picker closed the moment you typed a space,
+    // making anyone past the first page unreachable by typing.
+    const m = value.slice(0, caret)
+      .match(/(?:^|\s)@([\p{L}\p{N}._-]{0,30}(?: [\p{L}\p{N}._-]{0,30})?)$/u);
     if (m) { setMention({ query: m[1].toLowerCase(), start: caret - m[1].length - 1 }); setActiveIdx(0); }
     else setMention(null);
   }
@@ -216,7 +259,6 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
     const after = body.slice(caret);
     const insert = `@${mb.name} `;
     setBody(before + insert + after);
-    setPicked((p) => new Map(p).set(mb.id, mb.name));
     setMention(null);
     requestAnimationFrame(() => {
       const pos = (before + insert).length;
@@ -437,13 +479,35 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                         onKeyDown={onCommentKeyDown}
                         placeholder="Add a comment… type @ to mention a teammate"
                         className="min-h-24"
+                        aria-label="Comment"
+                        role="combobox"
+                        aria-expanded={Boolean(mention && mentionSuggestions.length > 0)}
+                        aria-controls="mention-listbox"
+                        aria-autocomplete="list"
+                        // Without this the listbox is announced but the active
+                        // option never is: arrow keys move a purely visual
+                        // highlight, so a screen-reader user commits a mention
+                        // blind and only learns who they picked afterwards.
+                        aria-activedescendant={
+                          mention && mentionSuggestions[activeIdx]
+                            ? `mention-opt-${mentionSuggestions[activeIdx].id}`
+                            : undefined
+                        }
                       />
                       {mention && mentionSuggestions.length > 0 && (
-                        <div className="absolute left-2 top-full z-20 mt-1 w-64 overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md">
+                        <div
+                          id="mention-listbox"
+                          role="listbox"
+                          aria-label="Mention a teammate"
+                          className="absolute left-2 top-full z-20 mt-1 max-h-64 w-72 overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-md"
+                        >
                           {mentionSuggestions.map((m, i) => (
                             <button
                               key={m.id}
+                              id={`mention-opt-${m.id}`}
                               type="button"
+                              role="option"
+                              aria-selected={i === activeIdx}
                               onMouseDown={(e) => { e.preventDefault(); applyMention(m); }}
                               onMouseEnter={() => setActiveIdx(i)}
                               className={cn(
@@ -451,10 +515,16 @@ export function IssueDetailPanel({ issueId: id, toolbar }: { issueId: string; to
                                 i === activeIdx ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60',
                               )}
                             >
-                              <AtSign className="size-3.5 text-muted-foreground" />
-                              <span className="truncate">{m.name}</span>
+                              <AtSign className="size-3.5 shrink-0 text-muted-foreground" />
+                              <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                              <span className="shrink-0 text-2xs text-muted-foreground">{m.email}</span>
                             </button>
                           ))}
+                          {mentionOverflow > 0 && (
+                            <p className="px-3 py-2 text-2xs text-muted-foreground">
+                              {mentionOverflow} more — keep typing to narrow.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

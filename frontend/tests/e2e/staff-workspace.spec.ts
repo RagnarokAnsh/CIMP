@@ -12,10 +12,12 @@ test.describe('staff workspace', () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 
-  // The JQL bar is hidden behind `false &&` in IssuesListPage — the dropdown
-  // filters cover the real use and the raw query box read as clutter. The
-  // backend grammar and the `jql` filter are still wired, so this un-skips
-  // together with that flag. Backend coverage lives in src/issues/jql.spec.ts.
+  // There is no JQL bar to drive: the control was REMOVED from IssuesListPage,
+  // not feature-flagged (an earlier version of this comment claimed a `false &&`
+  // guard that does not exist — don't go looking for a flag). What remains wired
+  // is the `jql` field in the filter state, the query param, and saved views
+  // that persist one, so the grammar is still reachable without any UI.
+  // Un-skip by re-adding a query input; backend coverage: src/issues/jql.spec.ts.
   test.skip('JQL: a valid query filters, an invalid one surfaces the parse error', async ({ page }) => {
     await page.goto('/staff/issues');
     const jql = page.getByLabel('Filter query');

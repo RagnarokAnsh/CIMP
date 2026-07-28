@@ -63,32 +63,23 @@ export function DateRangeFilter({
   const activePreset = PRESETS.find((p) => p.from() === from && p.to() === to)?.label;
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn('justify-start gap-2 font-normal', active && 'border-ring/50', className)}
-        >
-          <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          <span className={cn(!active && 'text-muted-foreground')}>{label}</span>
-          {active && (
-            <span
-              role="button"
-              tabIndex={0}
-              aria-label="Clear date filter"
-              className="ml-auto -mr-1 grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange({ from: '', to: '' }); }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault(); e.stopPropagation(); onChange({ from: '', to: '' });
-                }
-              }}
-            >
-              <X className="h-3.5 w-3.5" />
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
+    // The clear control is a SIBLING of the trigger, not a child of it. It used
+    // to be a role="button" span inside the <Button>, i.e. a control nested in a
+    // control: invalid, and it forced the click/keydown handlers to fight the
+    // trigger with preventDefault + stopPropagation on every activation. As a
+    // sibling it is a plain <button> that needs none of that, and both controls
+    // get their own tab stop and accessible name.
+    <div className={cn('relative inline-flex items-center', className)}>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn('justify-start gap-2 font-normal', active && 'border-ring/50', active && 'pr-8')}
+          >
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+            <span className={cn(!active && 'text-muted-foreground')}>{label}</span>
+          </Button>
+        </PopoverTrigger>
 
       {/* Wide enough that the two native date fields still show their full
           `dd-mm-yyyy` mask plus the picker icon — at w-72 they clipped. */}
@@ -143,7 +134,19 @@ export function DateRangeFilter({
             </Button>
           )}
         </div>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+
+      {active && (
+        <button
+          type="button"
+          aria-label="Clear date filter"
+          className="focus-ring absolute right-1.5 grid size-5 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          onClick={() => onChange({ from: '', to: '' })}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
   );
 }

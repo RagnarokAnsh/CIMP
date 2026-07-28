@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   AlertTriangle, CheckCircle2, CircleDot, Clock, FolderKanban, Gauge, Inbox,
-  ListTodo, ShieldCheck, ThumbsUp, TrendingDown, TrendingUp,
+  ListTodo, Minus, ShieldCheck, ThumbsUp, TrendingDown, TrendingUp,
 } from 'lucide-react';
 import { staffApi } from '@/api/client';
 import type { DashboardSummary } from '@/api/types';
@@ -50,9 +50,12 @@ export function DashboardPage() {
               <p className="mt-1 text-sm text-white">An overview of issues across your scope.</p>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium text-white ring-1 ring-white/25">
-              {net > 0
-                ? <><TrendingUp className="h-3.5 w-3.5" /> Backlog up {net} over 14 days</>
-                : <><TrendingDown className="h-3.5 w-3.5" /> Backlog down {Math.abs(net)} over 14 days</>}
+              {/* Flat is its own case: `net === 0` fell into the "down" branch
+                  and rendered "Backlog down 0 over 14 days" under a downward
+                  arrow — a movement claim and a direction, for no movement. */}
+              {net === 0 && <><Minus className="h-3.5 w-3.5" /> Backlog unchanged over 14 days</>}
+              {net > 0 && <><TrendingUp className="h-3.5 w-3.5" /> Backlog up {net} over 14 days</>}
+              {net < 0 && <><TrendingDown className="h-3.5 w-3.5" /> Backlog down {Math.abs(net)} over 14 days</>}
             </span>
           </div>
           <Reveal className="grid gap-4 sm:grid-cols-3">

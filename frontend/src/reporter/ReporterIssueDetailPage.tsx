@@ -101,6 +101,7 @@ function CsatWidget({ issueId, existing }: {
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder={t('csat.commentPlaceholder')}
+            aria-label={t('csat.commentPlaceholder')}
             className="min-h-16"
             maxLength={500}
           />
@@ -267,6 +268,10 @@ export function ReporterIssueDetailPage() {
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
                 placeholder={t('detail.reply.placeholder')}
+                // A placeholder is not a label: it disappears on first keypress
+                // and is not announced as the field's name. This is the reporter
+                // portal's primary input.
+                aria-label={t('detail.reply.placeholder')}
                 className="min-h-20"
                 maxLength={5000}
               />

@@ -21,10 +21,17 @@ import { useDocumentTitle } from '@/lib/use-document-title';
 // never send). Everything rendered here is staff-curated and already public.
 const publicApi = axios.create({ baseURL: '/api/public' });
 
+// Distinguishes "this page does not exist" from "we could not reach the API".
+// axios is not imported here (this page deliberately uses a bare fetch/axios
+// call without credentials), so read the status defensively.
+function isNotFound(err: unknown): boolean {
+  return (err as { response?: { status?: number } } | null)?.response?.status === 404;
+}
+
 export function PublicStatusPage() {
   const { key } = useParams<{ key: string }>();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['public', 'status', key],
     queryFn: async () => (await publicApi.get<PublicStatus>(`/platforms/${key}/status`)).data,
     enabled: Boolean(key),
@@ -59,7 +66,21 @@ export function PublicStatusPage() {
           </div>
         )}
 
-        {isError && (
+        {/* A wrong or retired platform key is a permanent 404, not a blip.
+            Telling a visitor to "refresh in a moment" sends them into a retry
+            loop over a page that will never exist — and on the one surface
+            whose entire job is telling people whether something is down, an
+            unknown URL reading as an outage is the worst possible default. */}
+        {isError && isNotFound(error) && (
+          <Alert>
+            <AlertDescription>
+              There’s no status page at this address. Check the link you were given —
+              the address may have changed, or the page may no longer be published.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isError && !isNotFound(error) && (
           <Alert variant="destructive">
             <AlertDescription>
               We couldn&apos;t load the status page. Please refresh in a moment.

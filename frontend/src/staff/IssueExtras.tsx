@@ -146,7 +146,7 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
 
         {!readOnly && addable.length > 0 && (
           <Select value="" onValueChange={(v) => add.mutate(v)}>
-            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Add existing label…" /></SelectTrigger>
+            <SelectTrigger className="h-8 text-sm" aria-label="Add an existing label"><SelectValue placeholder="Add existing label…" /></SelectTrigger>
             <SelectContent>
               {addable.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
             </SelectContent>
@@ -160,6 +160,7 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submitNew(); }}
               placeholder="New label…"
+              aria-label="New label name"
               className="h-8 text-sm"
             />
             <Button
@@ -245,6 +246,7 @@ export function MergeIssueButton({
             value={q}
             onChange={(e) => { setQ(e.target.value); setSelected(null); }}
             placeholder="Search by reference or words in the description…"
+            aria-label="Search issues to link"
             autoFocus
           />
           {debouncedQ.length >= 2 && (
@@ -320,7 +322,15 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
       const q = ref.trim();
       const res = (await staffApi.get<Paginated<StaffIssueSummary>>(`/staff/issues?q=${encodeURIComponent(q)}&pageSize=5`)).data;
       const match = res.data.find((i) => i.referenceNo.toLowerCase() === q.toLowerCase());
-      if (!match) throw { response: { data: { message: `No issue "${q}" you can access.` } } };
+      // `status` is required, not decorative: the shared error formatter reads
+      // it to decide between a domain message and "Can't reach the server". A
+      // status-less synthetic error looked like a network failure, so the common
+      // case — a mistyped reference — told staff the app was down.
+      if (!match) {
+        throw {
+          response: { status: 404, data: { message: `No issue "${q}" you can access.` } },
+        };
+      }
       await staffApi.post(`/staff/issues/${issueId}/links`, { targetIssueId: match.id, type });
     },
     onSuccess: () => { setRef(''); refresh(); },
@@ -377,6 +387,7 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
             onChange={(e) => setRef(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') create.mutate(); }}
             placeholder="SUP-XXXXXXXX"
+            aria-label="Issue reference to link"
             className="h-8 font-mono text-sm"
           />
           <Button

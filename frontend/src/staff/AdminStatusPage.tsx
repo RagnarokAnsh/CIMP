@@ -30,10 +30,7 @@ import {
 } from '@/lib/status-meta';
 import { dateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
-
-const DESTRUCTIVE_ICON =
-  'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors '
-  + 'hover:bg-destructive/10 hover:text-destructive focus-ring';
+import { DESTRUCTIVE_ICON } from '@/lib/icon-button';
 
 // Status-page management: components and incidents for one platform. Both write
 // to /staff/platforms/:id/status/* (write-role enforced server-side) and are

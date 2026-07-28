@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { ScrollText } from 'lucide-react';
@@ -30,16 +30,25 @@ export function AuditPage() {
   useDocumentTitle('Audit log');
   const [actorType, setActorType] = useState('');
   const [action, setAction] = useState('');
+  const [debouncedAction, setDebouncedAction] = useState('');
   const [page, setPage] = useState(1);
 
+  // Debounced like every other free-text filter in the app (CommandPalette,
+  // merge search). Typing "STATUS_CHANGED" here used to fire fourteen requests
+  // against the audit log — the heaviest table in the product — one per key.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedAction(action.trim()), 200);
+    return () => clearTimeout(t);
+  }, [action]);
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['staff', 'audit', actorType, action, page],
+    queryKey: ['staff', 'audit', actorType, debouncedAction, page],
     placeholderData: keepPreviousData,
     queryFn: async () =>
       (await staffApi.get<Paginated<AuditEntry>>('/admin/audit', {
         params: {
           actorType: actorType || undefined,
-          action: action || undefined,
+          action: debouncedAction || undefined,
           page,
         },
       })).data,
@@ -63,7 +72,7 @@ export function AuditPage() {
             value={actorType || ALL}
             onValueChange={(v) => { setActorType(v === ALL ? '' : v); setPage(1); }}
           >
-            <SelectTrigger className="w-44"><SelectValue placeholder="Actor type" /></SelectTrigger>
+            <SelectTrigger className="w-44" aria-label="Filter by actor type"><SelectValue placeholder="Actor type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All actors</SelectItem>
               {ACTOR_TYPES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
@@ -73,6 +82,7 @@ export function AuditPage() {
             value={action}
             onChange={(e) => { setAction(e.target.value); setPage(1); }}
             placeholder="Action (e.g. STATUS_CHANGED)"
+            aria-label="Filter by action"
             className="w-64"
           />
         </CardContent>

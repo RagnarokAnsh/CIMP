@@ -5,7 +5,7 @@ import { staffApi } from '@/api/client';
 import type { NotificationFeed, StaffNotification } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { CenteredSpinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
@@ -21,7 +21,7 @@ export function NotificationsBell() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['staff', 'notifications'],
     queryFn: async () => (await staffApi.get<NotificationFeed>('/staff/notifications')).data,
     // SSE drives live freshness (see useStaffRealtime); this long poll is just a
@@ -88,6 +88,19 @@ export function NotificationsBell() {
         <div className="max-h-96 overflow-y-auto">
           {isLoading && items.length === 0 ? (
             <CenteredSpinner label="Loading…" className="min-h-32" />
+          ) : isError && items.length === 0 ? (
+            // A failed fetch used to render "You're all caught up" — the app
+            // asserting there is nothing waiting when it does not know. For a
+            // notification feed that is the one message it must never guess.
+            <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+              <div className="rounded-full bg-destructive/10 p-3 text-destructive">
+                <Bell className="size-5" />
+              </div>
+              <p className="text-sm font-medium">Couldn’t load notifications</p>
+              <p className="text-xs text-muted-foreground">
+                Reopen this menu to try again.
+              </p>
+            </div>
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
               <div className="rounded-full bg-muted p-3 text-muted-foreground">
@@ -103,12 +116,16 @@ export function NotificationsBell() {
               const meta = TRIGGER_META[n.trigger] ?? { label: n.trigger, icon: Bell };
               const Icon = meta.icon;
               return (
-                <button
+                // A plain <button> inside a role="menu" is invisible to the
+                // menu: Radix only tracks DropdownMenuItem children, so arrow
+                // keys and typeahead reached nothing, and clicking navigated
+                // without closing — leaving the destination page behind an
+                // aria-hidden overlay with the scroll locked.
+                <DropdownMenuItem
                   key={n.id}
-                  type="button"
-                  onClick={() => open(n)}
+                  onSelect={() => open(n)}
                   className={cn(
-                    'flex w-full items-start gap-3 border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-0 hover:bg-accent',
+                    'flex w-full items-start gap-3 rounded-none border-b border-border/60 px-3 py-2.5 text-left transition-colors last:border-0',
                     !n.readAt && 'bg-primary/[0.04]',
                   )}
                 >
@@ -126,7 +143,7 @@ export function NotificationsBell() {
                       <span className="ml-auto">{relativeTime(n.createdAt)}</span>
                     </span>
                   </span>
-                </button>
+                </DropdownMenuItem>
               );
             })
           )}

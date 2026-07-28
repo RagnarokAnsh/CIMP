@@ -715,7 +715,7 @@ function StaffRow({
         <EditStaffDialog staff={staff} onClose={() => setDialog(null)} onSaved={onChanged} />
       )}
       {dialog === 'password' && (
-        <SetPasswordDialog staff={staff} onClose={() => setDialog(null)} />
+        <SetPasswordDialog staff={staff} isSelf={isSelf} onClose={() => setDialog(null)} />
       )}
       <ConfirmDialog
         open={confirming === 'disable'}
@@ -915,14 +915,22 @@ function EditStaffDialog({
 
 // Admin-initiated password reset. The endpoint existed from the start but had
 // no UI — it was reachable only through Swagger.
-function SetPasswordDialog({ staff, onClose }: { staff: StaffWithRoles; onClose: () => void }) {
+function SetPasswordDialog(
+  { staff, isSelf, onClose }:
+  { staff: StaffWithRoles; isSelf: boolean; onClose: () => void },
+) {
   const [password, setPassword] = useState('');
 
   const save = useMutation({
     mutationFn: () => staffApi.post(`/admin/staff/${staff.id}/password`, { password }),
     onSuccess: () => {
       onClose();
-      toast.success('Password set — their existing sessions were revoked.');
+      // Setting your OWN password revokes your own sessions, including this
+      // one — the third-person copy ("their sessions") described someone else
+      // while the admin was about to be signed out mid-task with no warning.
+      toast.success(isSelf
+        ? 'Password set — you have been signed out everywhere and will need to sign in again.'
+        : 'Password set — their existing sessions were revoked.');
     },
     onError: toastApiError,
   });
@@ -931,10 +939,13 @@ function SetPasswordDialog({ staff, onClose }: { staff: StaffWithRoles; onClose:
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Set password — {staff.name}</DialogTitle>
+          <DialogTitle>Set password — {isSelf ? 'your account' : staff.name}</DialogTitle>
           <DialogDescription>
-            Replaces their current password and signs them out everywhere. Share it over a
-            channel they already trust.
+            {isSelf
+              ? 'Replaces your current password and signs you out everywhere — including this'
+                + ' session. You will need to sign in again with the new password.'
+              : 'Replaces their current password and signs them out everywhere. Share it over a'
+                + ' channel they already trust.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1.5">
