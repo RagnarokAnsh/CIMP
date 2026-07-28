@@ -1,4 +1,4 @@
-import { IssueStatus } from './enums';
+import { IssueStatus, ScanStatus } from './enums';
 
 // The statuses that count as "live work" — SLA tracking, dashboards, the
 // escalation sweep and deflection all share this one definition.
@@ -15,3 +15,13 @@ export const ALLOWED_MIME_TYPES = [
   'image/webp',
   'application/pdf',
 ];
+
+// Attachments that have cleared (or skipped) scanning may be downloaded by
+// reporters and staff, and pushed to Jira. PENDING and INFECTED must never leave
+// the system. This is a security boundary, so it is defined exactly once — it
+// previously lived in three places (reporter, attachments, jira listener) that
+// happened to agree; the risk was always the next edit to one of them.
+export const SERVABLE_SCAN_STATUSES: ReadonlySet<ScanStatus> = new Set([
+  ScanStatus.CLEAN,
+  ScanStatus.SKIPPED,
+]);

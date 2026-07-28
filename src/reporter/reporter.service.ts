@@ -5,13 +5,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
-import { fromBuffer } from 'file-type';
 import {
   CommentAddedEvent, IssueCreatedEvent, IssueEvents,
 } from '../events/issue-events';
 import {
-  ALLOWED_MIME_TYPES, MAX_FILES, MAX_FILE_BYTES,
+  ALLOWED_MIME_TYPES, MAX_FILES, MAX_FILE_BYTES, SERVABLE_SCAN_STATUSES,
 } from '../common/constants';
+import { sniffAllowedMime } from '../common/magic-bytes';
 import {
   ActorType, CommentVisibility, ScanStatus,
 } from '../common/enums';
@@ -24,9 +24,6 @@ import { CreateIssueDto } from './dto/create-issue.dto';
 import { ReporterCommentDto } from './dto/reporter-comment.dto';
 import { sanitizeContext } from './context-sanitizer';
 import { upsertReporter } from './reporter-upsert';
-
-// Attachments that have cleared (or skipped) scanning may be downloaded.
-const SERVABLE_SCAN = new Set([ScanStatus.CLEAN, ScanStatus.SKIPPED]);
 
 @Injectable()
 export class ReporterService {
@@ -61,13 +58,16 @@ export class ReporterService {
       if (f.size > MAX_FILE_BYTES) {
         throw new BadRequestException(`"${f.originalname}" exceeds the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
       }
-      const sniffed = await fromBuffer(f.buffer);
-      if (!sniffed || !ALLOWED_MIME_TYPES.includes(sniffed.mime)) {
+      // Signature check runs against our own table rather than `file-type`: that
+      // library hangs the event loop synchronously on a crafted container, and a
+      // timeout cannot rescue a synchronous hang. See common/magic-bytes.ts.
+      const sniffed = sniffAllowedMime(f.buffer);
+      if (!sniffed || !ALLOWED_MIME_TYPES.includes(sniffed)) {
         throw new BadRequestException(
           `"${f.originalname}" content is not a supported file type (PNG, JPEG, WEBP, PDF).`,
         );
       }
-      detectedTypes.push(sniffed.mime);
+      detectedTypes.push(sniffed);
     }
     return detectedTypes;
   }
@@ -78,13 +78,34 @@ export class ReporterService {
     const reporter = await this.upsertReporter(ctx);
 
     // Persist files to storage first (outside the transaction).
-    const stored = await Promise.all(
+    //
+    // allSettled, not all: with Promise.all a rejection anywhere abandons the
+    // writes that already succeeded — `stored` is never assigned, so the cleanup
+    // below never runs and those blobs sit in storage forever with nothing
+    // pointing at them. The 5-file limit makes a partial failure cheap to hit
+    // (one flaky S3 PUT) and impossible to notice.
+    const results = await Promise.allSettled(
       files.map(async (f, i) => ({
         ...(await this.storage.save(f.buffer, f.originalname, detectedTypes[i])),
         filename: f.originalname,
         contentType: detectedTypes[i],
         sizeBytes: f.size,
       })),
+    );
+    const firstFailure = results.find((r) => r.status === 'rejected');
+    if (firstFailure) {
+      const written = results
+        .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof this.storage.save>> & {
+          filename: string; contentType: string; sizeBytes: number;
+        }> => r.status === 'fulfilled')
+        .map((r) => r.value.storageKey);
+      await Promise.allSettled(written.map((key) => this.storage.delete(key)));
+      throw (firstFailure as PromiseRejectedResult).reason;
+    }
+    const stored = results.map(
+      (r) => (r as PromiseFulfilledResult<{
+        storageKey: string; filename: string; contentType: string; sizeBytes: number;
+      }>).value,
     );
 
     // The blobs are written before the row exists, so if persistence ultimately
@@ -164,7 +185,7 @@ export class ReporterService {
               sizeBytes: s.sizeBytes,
               // PENDING is the safe default: ScanningListener picks the file up
               // off IssueEvents.CREATED and writes the real verdict, and PENDING
-              // files are never served (SERVABLE_SCAN above). A scanner outage
+              // files are never served (SERVABLE_SCAN_STATUSES). A scanner outage
               // therefore leaves the file un-downloadable, not wrongly trusted.
               scanStatus: ScanStatus.PENDING,
             }),
@@ -269,7 +290,7 @@ export class ReporterService {
         filename: a.filename,
         contentType: a.contentType,
         sizeBytes: a.sizeBytes,
-        downloadable: SERVABLE_SCAN.has(a.scanStatus),
+        downloadable: SERVABLE_SCAN_STATUSES.has(a.scanStatus),
       })),
       updates: visibleComments,
     };
@@ -344,7 +365,7 @@ export class ReporterService {
       where: { id: attachmentId, issue: { id: issueId, reporter: { id: reporter.id } } },
     });
     if (!attachment) throw new NotFoundException('Attachment not found');
-    if (!SERVABLE_SCAN.has(attachment.scanStatus)) {
+    if (!SERVABLE_SCAN_STATUSES.has(attachment.scanStatus)) {
       throw new ForbiddenException(
         `Attachment is not available (scan status: ${attachment.scanStatus}).`,
       );

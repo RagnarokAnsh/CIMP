@@ -8,6 +8,7 @@ describe('ApiTokensService', () => {
   const admin = { id: 's1', roles: [{ role: Role.ADMIN, platformId: null }] } as any;
   let tokens: any;
   let issues: any;
+  let audit: any;
   let service: ApiTokensService;
 
   beforeEach(() => {
@@ -19,7 +20,9 @@ describe('ApiTokensService', () => {
       update: jest.fn().mockResolvedValue({}),
     };
     issues = { findAndCount: jest.fn(), findOne: jest.fn() };
-    service = new ApiTokensService(tokens, issues, new ScopeService());
+    // Minting/revoking a platform credential must leave an audit trail.
+    audit = { record: jest.fn().mockResolvedValue(undefined) };
+    service = new ApiTokensService(tokens, issues, new ScopeService(), audit);
   });
 
   it('forbids creating a token without platform access', async () => {
@@ -57,5 +60,31 @@ describe('ApiTokensService', () => {
     await expect(service.authenticate('cimp_whatever')).resolves.toBeNull();
     // No last-used stamp for a request we refused.
     expect(tokens.update).not.toHaveBeenCalled();
+  });
+
+  // The audit trail is the only durable record of who issued a long-lived
+  // platform credential — the plaintext is unrecoverable and lastFour is all
+  // that identifies it later.
+  it('records an audit event when a token is minted, without the plaintext', async () => {
+    const admin = { id: 's1', roles: [{ role: Role.ADMIN, platformId: null }] } as any;
+    const result = await service.create(admin, 'pA', 'ci-bot');
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'API_TOKEN_CREATED',
+      actorId: 's1',
+    }));
+    const recorded = JSON.stringify(audit.record.mock.calls[0][0]);
+    expect(recorded).not.toContain(result.token);
+  });
+
+  it('records an audit event when a token is revoked', async () => {
+    const admin = { id: 's1', roles: [{ role: Role.ADMIN, platformId: null }] } as any;
+    tokens.findOne.mockResolvedValue({
+      id: 't1', name: 'ci-bot', lastFour: 'abcd', revokedAt: null, platform: { id: 'pA' },
+    });
+    await service.revoke(admin, 'pA', 't1');
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'API_TOKEN_REVOKED',
+      actorId: 's1',
+    }));
   });
 });

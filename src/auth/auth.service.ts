@@ -82,13 +82,21 @@ export class AuthService {
   // via upsertFromClaims, but that stream is authenticated once and held open for
   // hours. Returns null when the account is gone or no longer ACTIVE.
   //
-  // Note: tokenVersion can't be re-checked here — the caller holds an
-  // AuthenticatedStaff, not the claims — so a password reset only takes effect on
-  // the next connect. Status + grant revocation are the ones that must be live.
-  async refreshAuthenticated(staffUserId: string): Promise<AuthenticatedStaff | null> {
+  // Returns the current tokenVersion alongside the refreshed principal so the
+  // caller can pin it and detect a bump mid-stream. This used to be documented
+  // as impossible ("the caller holds an AuthenticatedStaff, not the claims"),
+  // which left a real hole: a password reset is the product's forced-logout
+  // lever, and an already-connected stream ignored it entirely — the one case
+  // where you most want the session gone is an attacker who is already on.
+  async refreshAuthenticated(
+    staffUserId: string,
+  ): Promise<{ staff: AuthenticatedStaff; tokenVersion: number } | null> {
     const user = await this.staff.findOne({ where: { id: staffUserId } });
     if (!user || user.status !== AccountStatus.ACTIVE) return null;
-    return { ...this.toAuthenticated(user), roles: await this.loadRoles(user.id) };
+    return {
+      staff: { ...this.toAuthenticated(user), roles: await this.loadRoles(user.id) },
+      tokenVersion: user.tokenVersion,
+    };
   }
 
   private isUniqueViolation(err: unknown): boolean {

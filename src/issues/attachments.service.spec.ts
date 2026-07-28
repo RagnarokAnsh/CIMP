@@ -55,9 +55,11 @@ describe('AttachmentsService.getForStaff (scan gating + scope)', () => {
     },
   );
 
-  it('refuses (403) an attachment on a platform outside the staff scope', async () => {
+  // 404, not 403: a 403 would confirm the id exists on another tenant's issue.
+  // Must stay indistinguishable from the unknown-attachment case below.
+  it('404s an attachment on a platform outside the staff scope (no existence oracle)', async () => {
     findOne.mockResolvedValue(attachment(ScanStatus.CLEAN, 'p2'));
-    await expect(service.getForStaff(staff, 'a1')).rejects.toThrow(ForbiddenException);
+    await expect(service.getForStaff(staff, 'a1')).rejects.toThrow(NotFoundException);
     expect(read).not.toHaveBeenCalled();
   });
 

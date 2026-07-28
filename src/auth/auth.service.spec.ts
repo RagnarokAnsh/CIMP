@@ -141,10 +141,22 @@ describe('AuthService.refreshAuthenticated', () => {
 
     expect(staff.findOne).toHaveBeenCalledWith({ where: { id: 'w1' } });
     expect(res).toMatchObject({
-      id: 'w1',
-      email: 'watcher@cimp.dev',
-      roles: [{ role: Role.WATCHER, platformId: 'p1' }],
+      staff: {
+        id: 'w1',
+        email: 'watcher@cimp.dev',
+        roles: [{ role: Role.WATCHER, platformId: 'p1' }],
+      },
+      // Surfaced so the SSE stream can pin it and drop the connection when a
+      // password reset bumps it — otherwise the forced-logout lever does not
+      // reach anyone already connected.
+      tokenVersion: 1,
     });
+  });
+
+  it('reports a bumped tokenVersion so an open stream can be dropped', async () => {
+    staff.findOne.mockResolvedValue({ ...watcher(), tokenVersion: 7 });
+    const res = await service.refreshAuthenticated('w1');
+    expect(res?.tokenVersion).toBe(7);
   });
 
   it('returns null once the account is no longer ACTIVE', async () => {

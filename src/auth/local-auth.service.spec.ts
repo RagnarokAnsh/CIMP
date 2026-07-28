@@ -1,6 +1,7 @@
 import * as jwt from 'jsonwebtoken';
+import * as bcrypt from 'bcryptjs';
 import { UnauthorizedException } from '@nestjs/common';
-import { LocalAuthService } from './local-auth.service';
+import { DUMMY_PASSWORD_HASH, LocalAuthService } from './local-auth.service';
 import { AccountStatus } from '../common/enums';
 
 const SECRET = 'test-secret';
@@ -87,5 +88,25 @@ describe('LocalAuthService.verifyToken', () => {
     });
     expect(await make().verifyToken(subscribe)).toBeNull();
     expect(upsertFromClaims).not.toHaveBeenCalled();
+  });
+});
+
+// Regression: the unknown-email path compares against DUMMY_PASSWORD_HASH purely
+// to burn the same CPU a real hash would. That only works if the constant is a
+// STRUCTURALLY VALID bcrypt hash — `bcrypt.compare` short-circuits on a malformed
+// one and returns in ~0 ms, turning the defence into a clean binary oracle for
+// "does this email exist". The original constant was 59 characters (a real hash
+// is 60) and measured 0.00 ms vs 83 ms for a known email.
+describe('DUMMY_PASSWORD_HASH', () => {
+  it('is a structurally valid bcrypt hash, so the compare cannot short-circuit', () => {
+    expect(DUMMY_PASSWORD_HASH).toHaveLength(60);
+    expect(DUMMY_PASSWORD_HASH).toMatch(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/);
+  });
+
+  it('actually costs real work to compare against', async () => {
+    // A malformed hash resolves near-instantly; a valid one runs the KDF.
+    const started = Date.now();
+    await bcrypt.compare('any-guess', DUMMY_PASSWORD_HASH);
+    expect(Date.now() - started).toBeGreaterThan(5);
   });
 });

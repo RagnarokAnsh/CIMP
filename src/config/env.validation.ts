@@ -3,6 +3,7 @@ import {
   IsBooleanString, IsIn, IsInt, IsOptional, IsString, Max, Min, validateSync,
 } from 'class-validator';
 import { isProductionEnv } from './is-production';
+import { BOOLEAN_ENV_FLAGS, parseEnvFlag } from '../common/env-flag';
 
 // Environment schema. We validate the *raw* process env at boot so a typo or a
 // missing required var fails fast with a clear message instead of silently
@@ -74,6 +75,14 @@ export function validate(config: Record<string, unknown>): Record<string, unknow
   });
   if (errors.length > 0) {
     throw new Error(`Invalid environment configuration:\n${errors.toString()}`);
+  }
+
+  // The scheduled-job kill switches. A malformed value here is fatal in EVERY
+  // environment, not just production: `SLA_SWEEP_ENABLED=False` used to leave
+  // the sweep running while reading as "off" at a glance, and a kill switch that
+  // silently does nothing is worse than one that refuses to boot.
+  for (const name of BOOLEAN_ENV_FLAGS) {
+    parseEnvFlag(name, config[name] as string | undefined, true);
   }
 
   // Fail CLOSED: unset or unrecognized NODE_ENV counts as production, so a

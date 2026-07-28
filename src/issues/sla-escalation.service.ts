@@ -9,6 +9,7 @@ import { Issue } from '../entities';
 import { AuditService } from '../audit/audit.service';
 import { IssueEvents, IssueSlaBreachedEvent } from '../events/issue-events';
 import { slaDueSql } from './sla';
+import { envFlag } from '../common/env-flag';
 
 const OPEN_STATUSES = OPEN_ISSUE_STATUSES;
 
@@ -29,7 +30,7 @@ export class SlaEscalationService {
 
   @Cron(CronExpression.EVERY_5_MINUTES)
   async sweep(): Promise<number> {
-    if (process.env.SLA_SWEEP_ENABLED === 'false') return 0;
+    if (!envFlag('SLA_SWEEP_ENABLED', true)) return 0;
     try {
       const due = slaDueSql('issue.sla_started_at', 'platform');
       const rows = await this.issues

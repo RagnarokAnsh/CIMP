@@ -48,7 +48,12 @@ export default () => ({
   throttle: {
     ttl: parseInt(process.env.THROTTLE_TTL ?? '60', 10),
     limit: parseInt(process.env.THROTTLE_LIMIT ?? '120', 10),
-    intakeLimit: parseInt(process.env.THROTTLE_INTAKE_LIMIT ?? '10', 10),
+    // No `intakeLimit` here on purpose. The per-route limits (reporter intake,
+    // login, SSE tickets) are @Throttle decorator arguments, which are evaluated
+    // at class-definition time and cannot read runtime config. A key here that
+    // nothing consumes is worse than none: an operator sets
+    // THROTTLE_INTAKE_LIMIT, sees it accepted, and believes the limit changed.
+    // Change the decorator in reporter.controller.ts instead.
   },
   mail: {
     host: process.env.SMTP_HOST,

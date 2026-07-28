@@ -6,6 +6,7 @@ import { AccountStatus, PlatformStatus, Role } from '../common/enums';
 import { OPEN_ISSUE_STATUSES } from '../common/constants';
 import { Platform, StaffUser, UserPlatformRole } from '../entities';
 import { MailService } from './mail.service';
+import { envFlag } from '../common/env-flag';
 
 // SQL literal list built from the shared constant (enum values, injection-safe)
 // so the digest can never drift from the canonical open-status definition.
@@ -27,7 +28,7 @@ export class DigestService {
 
   @Cron('0 8 * * 1')
   async sendWeeklyDigests(): Promise<number> {
-    if (process.env.DIGEST_ENABLED === 'false') return 0;
+    if (!envFlag('DIGEST_ENABLED', true)) return 0;
     let sent = 0;
     try {
       const platforms = await this.platforms.find({ where: { status: PlatformStatus.ACTIVE } });

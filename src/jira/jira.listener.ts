@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JiraSyncStatus, ScanStatus } from '../common/enums';
+import { JiraSyncStatus } from '../common/enums';
+import { SERVABLE_SCAN_STATUSES } from '../common/constants';
 import { Attachment, Issue } from '../entities';
 import {
   AttachmentsScannedEvent, IssueCreatedEvent, IssueEvents, IssueStatusChangedEvent,
@@ -10,7 +11,6 @@ import {
 import { StorageService } from '../storage/storage.service';
 import { JiraService } from './jira.service';
 
-const SERVABLE_SCAN = [ScanStatus.CLEAN, ScanStatus.SKIPPED];
 
 const MAX_ATTEMPTS = 3;
 
@@ -117,7 +117,7 @@ export class JiraListener {
   private async syncAttachments(issueId: string, jiraKey: string): Promise<void> {
     const files = await this.attachments.find({ where: { issue: { id: issueId } } });
     for (const a of files) {
-      if (a.jiraSynced || !SERVABLE_SCAN.includes(a.scanStatus)) continue;
+      if (a.jiraSynced || !SERVABLE_SCAN_STATUSES.has(a.scanStatus)) continue;
 
       // Claim the file; skip if another path already claimed it.
       const claim = await this.attachments.update(

@@ -9,6 +9,7 @@ import { AttachmentsScannedEvent, IssueEvents } from '../events/issue-events';
 import { StorageService } from '../storage/storage.service';
 import { ScanService } from './scan.service';
 import { ScanDeps, scanAndPersist } from './scanning.listener';
+import { envFlag } from '../common/env-flag';
 
 // A just-uploaded file is legitimately PENDING while the intake listener scans
 // it — ignore anything younger than this so the sweep never races that first
@@ -40,7 +41,7 @@ export class ScanRetryService {
 
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sweep(): Promise<number> {
-    if (process.env.SCAN_RETRY_ENABLED === 'false') return 0;
+    if (!envFlag('SCAN_RETRY_ENABLED', true)) return 0;
     try {
       const stuck = await this.attachments.find({
         where: {
