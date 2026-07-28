@@ -2,12 +2,126 @@
 title: Changelog
 tags: [cimp, changelog, updates]
 type: log
-updated: 2026-07-27
+updated: 2026-07-28
 ---
 # Changelog / Updates Log
 ← [[CIMP - Home]] · [[Session Handoff]]
 
-> Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~26 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+> Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~42 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
+
+## 2026-07-28 (3) — Second audit pass (5 agents) + all 25 findings fixed
+
+A focused 5-agent audit covering what the failed 10-agent run never reached: the per-controller IDOR sweep, API-token/SSE authorization, injection outside `src/issues`, backend correctness, and frontend/UX. **All 5 agents completed** (the earlier run lost all 10 to the session limit). 25 findings, **zero critical, zero high** — all now fixed.
+
+**The headline is a negative result.** The IDOR sweep enumerated ~80 routes across **31** controllers — note *31*, not 24: `src/deflection/deflection.controllers.ts` is plural and the `*.controller.ts` glob had been missing it in every prior count — and returned **one low finding**. It verified every nested-resource load joins back to its parent, no mutation is authorized with `scopedPlatformIds`, no route escapes a guard, and `STAFF_READ_ROLES` gates only reads. The access-control layer holds.
+
+### Staff emails were enumerable by login timing (measured, not estimated)
+`local-auth.service.ts` compared against a dummy hash to burn equal CPU on an unknown email. That hash was **59 characters**; a real bcrypt hash is 60. bcryptjs rejects a malformed hash immediately, so the defence inverted into the exact oracle it existed to prevent. Measured on the installed copy: **0.00 ms** for an unknown email vs **83 ms** for a known one — not a timing skew, a clean binary signal. The agent estimated ~80×; the truth was worse. Fixed with a valid 60-char constant (`DUMMY_PASSWORD_HASH`) plus a spec asserting the structural property *and* that a compare still costs real work. The pre-existing "rejects an unknown email without leaking existence" test now takes 80 ms instead of ~0.
+
+### Optimistic locking: the code comment asserted the opposite of the behaviour
+`comments.service.ts` bumped `Issue.updatedAt` via `UpdateQueryBuilder` with a comment saying it did so "without touching the version". **Verified against TypeORM's source**: `UpdateQueryBuilder` appends `version = version + 1` whenever the entity has a `@VersionColumn` not already in the SET clause, and there is no opt-out short of raw SQL. Four sites do this (`comments`, `reporter`, `merge`, `automation`), so *any* comment on an issue bumps its version and a staff member holding it open gets a 409 on their next edit. Behaviour left as-is (a spurious conflict is safer than a silent overwrite, and the client refetches on 409) but the comments now say what actually happens.
+
+### Fixed — security and correctness
+- **SSE had no connection cap.** The stream route skips the global throttler (a held connection is not a request), so nothing bounded it: any staff principal could pin unbounded sockets, each costing a re-auth query every 25 s. `RealtimeService` now tracks streams per account (`MAX_STREAMS_PER_STAFF = 6`) with the slot released in a `finalize()` so it is returned however the connection ends. Per-process, like the throttler — same Redis decision as M8.
+- **SSE ignored the forced-logout lever.** `refreshAuthenticated` was documented as unable to re-check `tokenVersion`; it now returns it, and the stream pins the value on the first heartbeat and drops the connection if it moves. A password reset previously stopped nothing that was already connected — the one case where you most want the session gone.
+- **The last 403/404 existence oracle.** Staff attachment download answered 403 cross-tenant and 404 for not-found, confirming ids on other tenants' issues. Now 404 both ways, matching `PlatformAccessGuard`. Its spec asserted the old behaviour and was updated with the reason.
+- **Partial upload failures orphaned blobs.** `Promise.all` abandoned already-written files when one save rejected — `stored` was never assigned, so the existing cleanup never ran. Now `allSettled`, deleting what succeeded before rethrowing.
+- **Pagination had no unique tiebreak.** Sorting by status or priority (massively non-unique) let Postgres return a different arrangement per page, so paging silently repeated and skipped issues. `addOrderBy('issue.id')` makes the total order deterministic.
+- **Bulk assignee accepted a non-UUID.** The up-front validation block handled STATUS and PRIORITY; the third case was simply missing, so a bad value reached Postgres as `invalid input syntax for type uuid`.
+- **Merge audit conflated two facts.** It recorded the duplicate's *status* as the old value of `duplicateOf` — rendering "duplicateOf: NEW → &lt;uuid&gt;" — and never audited the close at all. Now two rows. (tsc then proved the `from !== CLOSED` guard was dead code, since merge rejects an already-closed duplicate upstream.)
+- **API-token mint/revoke wrote no audit event**, unlike every other credential operation. Added, with a spec asserting the plaintext never reaches the audit row.
+- **Comment edits kept stale translations.** A reporter on a non-source locale kept being served the pre-edit text — worst exactly when the edit matters. The cache is cleared on edit; an empty cache means "show the original".
+- **`THROTTLE_INTAKE_LIMIT` was dead config** — parsed, documented, read by nothing. Removed from `configuration.ts` and `.env.example`: per-route limits are `@Throttle` decorator arguments, evaluated at class-definition time and not readable from runtime config. A key nothing consumes is worse than none.
+
+### Fixed — frontend and UX
+- **Failed queries rendered as empty states** across four admin integration cards and the notification bell — "No API tokens, issue one" on a 500, inviting a duplicate token while the old one stayed live. All now branch on `isError`, matching what `AdminPage`'s tabs already did.
+- **Notification rows were plain buttons inside a Radix menu**, so the menu never closed on click (leaving the destination behind an `aria-hidden` overlay with scroll locked) and arrow keys reached nothing. Now `DropdownMenuItem`s.
+- **"Link an issue" reported the wrong failure.** The synthetic error carried no `status`, so the shared formatter read it as a network failure — a mistyped reference told staff the app was down.
+- **Mention picker gained `aria-activedescendant`** (a gap in the fix from batch 2: roles were set, the active option was not announced).
+- **Unknown `/staff/*` URLs rendered blank chrome** — the app-level 404 never fires there. Added a staff-shell 404 that links back into the workspace.
+- **Triage keyboard navigation was gated behind write access**, so watchers saw an advertised shortcut list where nothing worked — including the `?` that opens it. Navigation and help are reads and are now ungated; only the mutating keys check `canWrite`.
+- **The date filter's clear control was a `role="button"` span nested inside the trigger `<button>`** — a control inside a control, needing `preventDefault` + `stopPropagation` to fight its parent. Now a sibling `<button>` that needs neither.
+- **Self-targeted password reset signed you out with third-person copy** ("their sessions"). Now says so in the first person, before you commit.
+- Reporter reply/CSAT textareas labelled; `aria-sort` on sortable issue columns; the audit "Action" filter debounced (it was the only undebounced free-text filter, firing one request per keystroke at the heaviest table); a flat backlog no longer renders "Backlog down 0" under a downward arrow.
+
+**Green:** 262 unit / 32 suites, 40 backend e2e, both typechecks, both lints 0 errors, frontend build.
+
+## 2026-07-28 (2) — Remediation: every finding below is now FIXED, plus two new bugs found while verifying
+
+**All of the 2026-07-28 audit findings are closed**, plus a user-reported mentions bug and two defects that only surfaced during verification. **257 unit / 32 suites, 40 backend e2e, 13 Playwright — all green**; both typechecks clean; both lints 0 errors; frontend build clean. 21 files changed, 5 added.
+
+### 🔴 The Critical is fixed — and the mitigation this vault previously recommended would NOT have worked
+The earlier entry proposed wrapping the sniff in `Promise.race`. **That cannot work, and the PoC proves it:** the 1-second heartbeat never fires, so the hang is *synchronous*. A timer cannot fire to rescue a blocked event loop. Anything built on a timeout would have looked like a fix and shipped a still-vulnerable API.
+
+The actual fix removes the vulnerable parser from the request path entirely: new **`src/common/magic-bytes.ts`** checks the four accepted signatures (PNG/JPEG/PDF/WEBP — WEBP validates `RIFF` *and* the `WEBP` form type at offset 8) and `reporter.service.ts:64` now calls it instead of `fromBuffer`. Detecting these four ourselves is not a downgrade — a library does the same leading-byte comparison — it just means no attacker-chosen container parser is ever reached. **`file-type` is uninstalled** (it was the only call site). `magic-bytes.spec.ts` pins the exploit: the 118-byte ASF payload now returns `null` in **<1 ms**.
+> Note the advisory count does not drop: `@nestjs/common` still vendors `file-type@20.4.1` transitively. That copy is only reachable via `FileTypeValidator`/`ParseFilePipe`, which this codebase never uses — verified by grep. Our path is closed; the tree entry is cosmetic.
+
+### 🔴 NEW — staff requests were being sent unauthenticated (found while verifying, pre-existing)
+Three Playwright tests failed after the fixes. They failed **identically with every frontend change reverted**, so this predates this batch. The trace showed the cause: `/api/staff/me` and `/api/staff/notifications` went out with **no `Authorization` header** and 401'd, while `/staff/issues`, `/staff/platforms` and `/admin/staff` carried a `Bearer` token **in the same tick**. `client.ts` was being fetched twice — once plain, once as `client.ts?t=…`.
+
+Two module instances, therefore two copies of the module-level `staffTokenGetter`. `local-auth.tsx` registers the getter on one; `use-me.ts` and `NotificationsBell` import the other, whose getter is still the default `() => undefined`. With no `me`, `isSelf` is false everywhere — hence no `(you)` marker and an un-armed self-lockout guard. Clearing `node_modules/.vite` did **not** help.
+
+Fixed in `api/client.ts`: `currentStaffToken()` falls back to `sessionStorage` (the shared slot `local-auth.tsx` already writes), and the key is exported so there is one spelling. **sessionStorage cannot desync between module instances** — the singleton could. A module-level mutable singleton is simply the wrong shape for shared auth state.
+
+### 🟠 NEW — the e2e suite sits right on the login rate limit
+`POST /auth/login` is `@Throttle({ limit: 10, ttl: 60_000 })` and `staffLogin` runs in `beforeEach` for ~8 tests. Add Playwright's `retries: 1` and a single failure pushes logins past 10/min — login then times out and reports as *"the app is broken"*, which is exactly how the run above presented. Clean run: 13 passed in **33.5 s**; the retry-laden run took 2.1 m. **Before CI adopts this suite**, reuse an authenticated `storageState` instead of logging in per test, or the pipeline will flake on day one. Left as-is here — it is a suite change, not a product fix.
+
+### Mentions picker (user-reported): not all users appear
+`IssueDetailPanel` hard-capped suggestions at **`.slice(0, 6)`** with no scroll and no overflow hint. Against the dev data that meant 6 of 11 mentionable staff were reachable and **Noah Schmidt, Omar Haddad, Raj Malhotra (the global developer), Sofia Marquez and Wei Chen were invisible**. Also fixed: the filter matched `name` only (now `name` **or** `email`, so `@wei.chen` works), and the trigger regex terminated at a space so a full name could never be typed (now allows one internal space).
+
+The subtler defect: mentions were notified from `picked`, the click-tracked map. Type `@Asha Rao` by hand — easy, since the picker closed at the space — and the comment **rendered a highlighted mention that notified nobody**. `picked` is gone; `mentionedMemberIds()` now derives recipients from the body using the *same* longest-name-first regex as the highlighter, so what is highlighted is exactly what is notified. The picker also gained `role="listbox"`/`option` + `aria-expanded` (it was keyboard-navigable but announced nothing).
+
+### The rest, all fixed
+- **`SERVABLE_SCAN` consolidated** into `src/common/constants.ts` as `SERVABLE_SCAN_STATUSES`; the three copies (one of them an `Array`, two `Set`s) are gone.
+- **Fail-open env flags closed.** New `src/common/env-flag.ts` parses `true/false/1/0/yes/no/on/off` and **throws on anything else**; `env.validation.ts` validates all three at boot in *every* environment. `SLA_SWEEP_ENABLED=False` used to read as "off" and leave the sweep running.
+- **Reporter cache cleared on identity change.** `handoff.ts` now has one write path that fires `onIdentityChange` → `queryClient.clear()`, wired in `main.tsx`; `clearHandoffToken` fires it too, so an expired session cannot leave the previous reporter's issues readable. This also gives the previously-dead `setHandoffToken` export a purpose.
+- **12 filter controls labelled** across `IssuesListPage`, `AuditPage` and `IssueExtras`. Note the earlier entry over-reported this: `AdminPage:457` already had `aria-label="Filter staff"` and the SLA/password inputs already had `<Label htmlFor>` — the real gaps were the issue filter bar, the bulk-action selects and the label/link controls.
+- **DB port corrected to 5433** in `docker-compose.yml`, `.env.example` and `CLAUDE.md`, with a comment explaining why (a sibling project owns 5432).
+- **`DESTRUCTIVE_ICON`/`NEUTRAL_ICON`** extracted to `lib/icon-button.ts`.
+- **The stale JQL comment** in `staff-workspace.spec.ts` rewritten — it sent readers hunting for a `false &&` flag that does not exist.
+
+## 2026-07-28 — Audit pass: one Critical found (unfixed), Playwright finally run and green
+
+**No code changed in this pass** — it was audit + verification only. Findings are recorded here and in `SECURITY_AUDIT.md` as **open**; fixes are the next session's work.
+
+**The Playwright suite ran for the first time since the 2026-07-27 UI/UX batch: 13 passed, 1 skipped, 0 failed (29.5s).** The batch's interaction-semantics changes (board card → link, Triage priority → group, second button on the login form) did **not** break it. The suite is **14 tests**, not the 12 this vault claimed.
+
+**Why it had never run — two environment faults, neither of them code:**
+1. **Playwright's browsers were never installed.** `~/AppData/Local/ms-playwright` did not exist, so every browser test died instantly. `npx playwright install chromium` fixes it, and this belongs in the README's dev setup — it is a one-time step nothing documents.
+2. **The documented Postgres port is wrong.** `docker-compose.yml` maps `5432:5432` and `.env.example` + `CLAUDE.md` both say `:5432`, but the working `.env` uses **`DB_PORT=5433`** and `playwright.config.ts` comments `:5433`. FAFICS squats 5432, so the documented `docker compose up -d postgres` cannot bind — the proof is the `cimp-postgres-1` container sitting in **Created** state, never started. The real container is `cimp-pg` (`docker start cimp-pg`).
+
+Also learned: running `npm run test:e2e` **twice concurrently** makes both runs fail with `ERR_CONNECTION_REFUSED` as they race for :3972/:5199. Starting the API and Vite yourself and letting `reuseExistingServer: true` pick them up is the reliable path.
+
+### 🔴 Critical — remote DoS via reporter attachment upload (OPEN)
+`src/reporter/reporter.service.ts:64` sniffs uploads with `fromBuffer` from **`file-type` 16.5.4**, inside the vulnerable range for GHSA-5v7r-6r5c-r473 (ASF-parser infinite loop). **Verified with a working PoC against the installed copy:** a 118-byte crafted ASF header hangs `fromBuffer` forever and a 1-second heartbeat timer never fires once — the event loop is blocked **synchronously**, not awaiting. Single-threaded Node + no request timeout anywhere in `main.ts` = one request takes the whole API down for every tenant.
+
+The `ALLOWED_MIME_TYPES` allowlist does **not** protect this: `fromBuffer` parses the buffer to *determine* the type, and the allowlist check at line 65 only runs on its return value — the hanging parse happens strictly first. The 10/min throttle is irrelevant; one request suffices. Mitigate today with a `Promise.race` timeout around the sniff; the real fix is `file-type` 22.x (major, ESM/async-iterator API — the call site needs rework).
+
+### 🟠 High — the dependency picture is worse than recorded
+Now **31 backend (10 high) / 12 frontend (9 high)**, not the "18 / 7, mostly build-time tooling" this vault claimed. Several are **runtime** deps: **`nodemailer` 6.10.1** (8 advisories — SMTP command injection via CRLF in transport name, CRLF `List-*` header injection, improper TLS validation in OAuth2 token fetch), **`multer` 2.0.2** (5 DoS, same upload path as the Critical), **`react-router-dom`** (open redirect via backslash → XSS). The NestJS-mediated ones need semver-major bumps of `@nestjs/platform-express` and `@nestjs/swagger` — planned work, not `npm audit fix`.
+
+### 🟡 Medium (all open)
+- **A security-boundary constant is defined three times.** The servable-scan set lives at `reporter.service.ts:29` (`Set`, `SERVABLE_SCAN`), `issues/attachments.service.ts:13` (`Set`, `SERVABLE`) and `jira/jira.listener.ts:13` (**Array**, `SERVABLE_SCAN`). All three agree on `{CLEAN, SKIPPED}` today; the risk is the next change. Belongs in `src/common/constants.ts`.
+- **Reporter query cache survives a hand-off token swap.** `queryClient.clear()` appears nowhere, and `MyIssuesPage.tsx:31` keys as `['reporter','issues']` with no identity component. Query-param hand-off is safe (full page load), but the **postMessage** path (`api/handoff.ts:33-38`) swaps the token in place with no reload — reporter B sees A's cached list until refetch.
+- **Filter/search controls are labelled by placeholder only** — WCAG 2.2 AA 4.1.2 + 3.3.2. `IssuesListPage.tsx:326` and `:335/:343/:352`, `AuditPage.tsx:66/:72`, `AdminPage.tsx:457`, several in `IssueExtras.tsx`. Notably the *forms* are correct (`NewIssuePage.tsx:236/258` use `<Label htmlFor>`), so this is specifically the filter bars — the one region the 2026-07-27 accessibility batch did not reach.
+- **In-memory webhook health/mute state** (`webhooks.service.ts:30`) — per-process `Map`, so N replicas give a failing endpoint N× the retries and "muted" holds nowhere. Same shape as the in-memory throttler (M8).
+- **Three documented off-switches fail open on a typo.** `SLA_SWEEP_ENABLED`, `DIGEST_ENABLED`, `SCAN_RETRY_ENABLED` are read as `process.env.X === 'false'` (`sla-escalation.service.ts:32`, `digest.service.ts:30`, `scan-retry.service.ts:43`) and **none appear in `src/config/env.validation.ts`** — so `=False` or `=0` silently leaves them ON, outside the fail-closed config guarantee.
+
+### ⚪ Low / trivial (all open)
+- **JQL escapes LIKE wildcards inconsistently:** `text ~` escapes `\ % _` (`jql.ts:247`) but `assignee ~` (`:194`) and `reporter ~` (`:214-215`) interpolate raw into `%…%`. Values stay parameterized — not a security issue — but searching `100%` behaves as a wildcard in two of three cases.
+- `DESTRUCTIVE_ICON` duplicated verbatim: `AdminIntegrations.tsx:36` and `AdminStatusPage.tsx:34`.
+- `setHandoffToken` (`api/handoff.ts:45`) is exported and never called.
+- **The skipped JQL test documents a mechanism that does not exist.** `staff-workspace.spec.ts:15-18` says the bar "is hidden behind `false &&` in IssuesListPage" and will un-skip "together with that flag" — **there is no `false &&` in that file** (verified 2026-07-28). The control was deleted outright; `IssuesListPage.tsx:65-71` describes this correctly. So the test's stated un-skip condition is fiction and the next reader will hunt for a flag that isn't there. Fix the comment, not the code.
+- **`jql` survives as dead filter state that is still user-reachable.** No control writes it, yet it is kept in `Filters` (`IssuesListPage.tsx:71`), sent to the API (`:94`) and counted in the active-filter badge (`:260`). Because saved views persist a `jql`, the grammar remains a **live user-reachable input surface** with no UI — worth remembering when scoping the JQL injection review (backend coverage: `src/issues/jql.spec.ts`).
+
+### Verified clean (negative results worth keeping)
+Injection is genuinely closed: every JQL value is a bound parameter, fields are keys of a closed `FIELDS` record and ops come from a fixed tokenizer regex checked per-field, so the `${f.op}` interpolation at `jql.ts:241` can only ever be `>=`/`<=`; the `ORDER BY` interpolation at `issues.service.ts:87/89/106` is safe because `sort`/`order` are `@IsEnum`-bound; `buildPrefixTsQuery` strips every non-alphanumeric; JQL is applied **after** the scope filter so it can only narrow. Hand-off JWT verification is sound (HS256 pinned, per-portal secret, server-side `maxAge` cap, `exp` required, platform status checked, unverified `decode` used only to *select* the secret). Attachment scan-gating holds on both reporter and staff paths; internal comments never reach reporters. Webhook SSRF: https-only, private/loopback/link-local/CGNAT blocked, `redirect:'manual'`. Only one `dangerouslySetInnerHTML` (shadcn chart, developer-defined colors). **Zero** raw-palette violations outside `issue-meta.ts`/`status-meta.ts`. Backend and frontend status machines are behaviourally identical (the frontend's extra `from === to` guard is redundant, not divergent) — still unenforced by a test.
+
+**Green at time of audit:** 244 unit / 30 suites, 40 backend e2e, 13 Playwright, both typechecks clean.
+
+**Independently re-run later the same day** against `cimp-pg` with the stock `npm run test:e2e` (letting `webServer` boot both servers): **13 passed, 1 skipped, 0 failed in 58.2s** — same result, so the green is reproducible and not an artefact of the hand-started-servers recipe. Note the two runs differ only in wall-clock (29.5s vs 58.2s, cold API boot), and the stock command worked fine when not run concurrently.
+
+> Coverage caveat: a 10-agent audit workflow was launched and **all 10 agents died on the session usage limit**, so the exhaustive per-controller IDOR sweep, API-token scope enforcement, SSE authorization and a full loading/empty/error-state UX pass did **not** complete. Everything above was hand-verified. Resume those as two or three smaller workflows.
 
 ## 2026-07-27 — UI/UX audit: 48 findings measured and fixed (6 commits)
 

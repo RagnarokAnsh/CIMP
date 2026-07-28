@@ -6,7 +6,11 @@ services:
       POSTGRES_PASSWORD: support
       POSTGRES_DB: support_platform
     ports:
-      - "5432:5432"
+      # Host 5433, not 5432: a sibling project's Postgres commonly owns 5432 on
+      # dev machines, and binding there silently produced a container that never
+      # started while the app pointed at the wrong database. DB_PORT in .env
+      # matches this.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
