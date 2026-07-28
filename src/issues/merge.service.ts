@@ -136,6 +136,10 @@ export class MergeService {
         }),
       );
 
+      // Two separate facts, previously conflated into one row: the issue became
+      // a duplicate, AND it was closed. `from` is the duplicate's *status*, so
+      // recording it as the old value of `duplicateOf` rendered the history as
+      // "duplicateOf: NEW → <uuid>" — and left the close entirely unaudited.
       await this.audit.record(
         {
           issueId: duplicate.id,
@@ -143,9 +147,28 @@ export class MergeService {
           actorId: staff.id,
           action: 'MERGED',
           field: 'duplicateOf',
-          oldValue: from,
+          // It was not a duplicate of anything before this.
+          oldValue: null,
           newValue: canonicalId,
           metadata: { canonicalReferenceNo: canonical.referenceNo },
+        },
+        em,
+      );
+      // The merge closes the duplicate (a sanctioned status-machine exception,
+      // see above). Audit it like any other close so the history is complete.
+      // No `from !== CLOSED` guard: merge already refuses an already-closed
+      // duplicate upstream, so the type of `from` excludes CLOSED and the
+      // comparison would be dead code (tsc rejects it outright).
+      await this.audit.record(
+        {
+          issueId: duplicate.id,
+          actorType: ActorType.STAFF,
+          actorId: staff.id,
+          action: 'STATUS_CHANGED',
+          field: 'status',
+          oldValue: from,
+          newValue: IssueStatus.CLOSED,
+          metadata: { reason: 'merged-as-duplicate', canonicalReferenceNo: canonical.referenceNo },
         },
         em,
       );

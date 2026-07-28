@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Brackets, DataSource, Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import { AccountStatus, ActorType, IssueStatus, Priority, Role } from '../common/enums';
 import { CsatResponse, Issue, Platform, StaffUser, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
@@ -88,6 +89,13 @@ export class IssuesService {
     } else {
       qb.orderBy(`issue.${dto.sort}`, dto.order);
     }
+    // Unique tiebreak. `sort` may be status/priority — massively non-unique — and
+    // Postgres gives no ordering guarantee between equal keys, so it is free to
+    // return a different arrangement per page request. Without this, paging a
+    // status-sorted list silently repeats some issues and skips others. `id` is
+    // the primary key, so this makes the total order deterministic; it is a no-op
+    // when `sort` is already unique.
+    qb.addOrderBy('issue.id', 'ASC');
 
     const [rows, total] = await qb.getManyAndCount();
     return {
@@ -459,6 +467,13 @@ export class IssuesService {
     }
     if (dto.op === BulkOp.PRIORITY && !Object.values(Priority).includes(dto.value as Priority)) {
       throw new BadRequestException('Invalid priority value.');
+    }
+    // The third case, previously missing. `value` is only @IsString on the DTO,
+    // so a non-uuid assignee reached the id comparison and made Postgres throw
+    // `invalid input syntax for type uuid` — a 500 per issue rather than one
+    // clean 400. Empty string is the documented "unassign" sentinel.
+    if (dto.op === BulkOp.ASSIGNEE && dto.value && !isUUID(dto.value)) {
+      throw new BadRequestException('Invalid assignee id.');
     }
 
     const skipped: { id: string; reason: string }[] = [];

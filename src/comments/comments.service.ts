@@ -66,8 +66,17 @@ export class CommentsService {
 
       // A reporter-visible comment must surface as an unread update in the
       // reporter's "My issues" view (in-app only, OD-02). hasUpdates is derived
-      // from issue.updatedAt vs lastViewedAt, so bump updatedAt — without
-      // touching the version (no optimistic-lock conflict for concurrent edits).
+      // from issue.updatedAt vs lastViewedAt, so bump updatedAt.
+      //
+      // NOTE: this DOES also bump Issue.version. TypeORM's UpdateQueryBuilder
+      // appends `version = version + 1` whenever the entity has a @VersionColumn
+      // that is not already in the SET clause (see UpdateQueryBuilder, the
+      // metadata.versionColumn branch) — there is no way to opt out short of
+      // raw SQL. So a staff member holding this issue open gets a 409 on their
+      // next edit because somebody commented. That is recoverable (the client
+      // refetches on 409) and erring toward a conflict is safer than silently
+      // overwriting, so it stays — but the previous comment here claimed the
+      // opposite, which is why this note is explicit.
       if (reporterVisible) {
         await em
           .createQueryBuilder()
@@ -132,6 +141,17 @@ export class CommentsService {
     const oldBody = comment.body;
     comment.body = dto.body;
     comment.editedAt = new Date();
+    // Drop the cached machine translations: they were produced from `oldBody`,
+    // and the reporter's view prefers a cached translation over the source. Left
+    // stale, an edit is invisible to every non-source-locale reporter — they
+    // keep reading the text the author just corrected, which is worst exactly
+    // when the edit matters (a wrong figure, a reversed decision). A null cache
+    // means "show the original", so this degrades to the untranslated body
+    // rather than to the wrong one. Re-translation happens on the next
+    // COMMENT_ADDED-style pass; there is deliberately no re-emit here, because
+    // TranslationListener keys off comment creation.
+    comment.translations = null;
+    comment.sourceLocale = null;
 
     await this.dataSource.transaction(async (em) => {
       await em.save(comment);
