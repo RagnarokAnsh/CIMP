@@ -9,6 +9,23 @@ updated: 2026-07-28
 
 > Reverse-chronological record of significant work. Branch **`dev`** holds all of the below (~42 commits ahead of `main`, the deploy branch). Detailed tracker for security: `SECURITY_AUDIT.md`.
 
+## 2026-07-29 — Deployed to production, Reports folded into Dashboard, pm2 crash-loop guard
+
+**`dev` merged to `main` and deployed twice.** Schema **11 → 20** (nine additive migrations), `pg_dump` snapshot taken first. Two config blockers had to be cleared before the merge, both invisible until you looked:
+- **`SSH_KNOWN_HOSTS` was never set**, and main's `deploy.yml` had no host-key guard — the hardened workflow lived only on dev. Merging brought the guard to main *and* ran the deploy that used it, so this would have failed at the SSH step. Pinned after verifying the scanned key against the server's own `/etc/ssh/ssh_host_ed25519_key.pub`.
+- **`RUN_MIGRATIONS` existed as a *secret*, but the workflow reads `vars.`** — so it always resolved to `false`. Migrations would have silently skipped, shipping code for schema 12–20 against a DB at 11. Set as a repo **variable**.
+
+**Reports merged into Dashboard.** They were the same page with a different `WHERE` clause: same widget kit, hero, trend chart, SLA panel, status/priority breakdowns, and **seven of eight KPI cards**. Now one page with a platform selector — "All platforms" is the old dashboard, picking one is the old report; `PlatformReport extends DashboardSummary` so a single render path serves both. Published known issues show for a platform; by-platform/by-assignee show across the scope. **"SLA on track" dropped**, not made conditional — the SLA health panel directly below already breaks that number into on-track/due-soon/overdue, the same reasoning that removed it from the dashboard originally. `/staff/reports` redirects rather than 404s.
+
+### The 20,985 restarts: diagnosed, and the real gap closed
+`cimp-api`'s restart counter looked alarming. It is **cumulative and almost entirely one incident**: 17,805 restarts on 2026-07-07 and 3,170 on 07-08; every day since is 1–4, i.e. deploys.
+
+**Cause:** the WATCHER deploy shipped the fail-closed config check while the server's `.env` had `SCAN_DRIVER=noop` and no opt-out. The app refused to boot, exited 1, and pm2 restarted it ~16×/minute for **22 hours** until `ALLOW_UNSCANNED_UPLOADS=true` was added. The deploy script's pre-flight check was written afterwards and already prevents *that* failure.
+
+**What was still missing** is a bound on everything the pre-flight cannot know about — Postgres unreachable at boot, a bound port, a schema the code can't use. New **`ecosystem.config.cjs`** (`min_uptime: 60s`, `max_restarts: 10`, `exp_backoff_restart_delay`) makes pm2 give up and mark the app `errored` instead of looping; the deploy health gate already treats `errored` as fatal. `pm2_restart()` prefers the file so the policy is reapplied every deploy rather than living in pm2's dump, where it would vanish the first time the process was recreated. Deliberately **no `max_memory_restart`**: it would add a new restart trigger, and the CSV export legitimately holds up to 50k rows.
+
+**Correction to an earlier read.** I initially suspected our deploy of bouncing the co-hosted `whoop` processes. It doesn't: something restarts both of them every ~28 minutes regardless of whether a deploy ran, and `whoop-server` crash-loops on its own every ~93 s. Their watchdog, not ours — but the box is under constant churn, which matters for memory headroom. → [[Deployment, CI-CD and Dev Workflow]]
+
 ## 2026-07-28 (3) — Second audit pass (5 agents) + all 25 findings fixed
 
 A focused 5-agent audit covering what the failed 10-agent run never reached: the per-controller IDOR sweep, API-token/SSE authorization, injection outside `src/issues`, backend correctness, and frontend/UX. **All 5 agents completed** (the earlier run lost all 10 to the session limit). 25 findings, **zero critical, zero high** — all now fixed.

@@ -176,8 +176,19 @@ swap_frontend() {
 }
 
 # --- pm2 helpers --------------------------------------------------------
+# Prefer the versioned ecosystem file so the restart policy (min_uptime,
+# max_restarts, backoff) is reapplied on every deploy. `pm2 restart <name>`
+# keeps whatever options the process was originally created with, so without
+# this the policy would live only in pm2's dump file and disappear the first
+# time the process was deleted and recreated by hand.
+#
+# Only ever names one app, so the other services sharing this pm2 daemon are
+# never touched.
 pm2_restart() {
-    if pm2 describe "$PM2_APP" >/dev/null 2>&1; then
+    local ecosystem="$APP_DIR/ecosystem.config.cjs"
+    if [ -f "$ecosystem" ]; then
+        PM2_APP="$PM2_APP" pm2 startOrRestart "$ecosystem" --update-env
+    elif pm2 describe "$PM2_APP" >/dev/null 2>&1; then
         pm2 restart "$PM2_APP" --update-env
     else
         pm2 start dist/main.js --name "$PM2_APP" --update-env --time
