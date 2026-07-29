@@ -1,4 +1,4 @@
-import { Link, Route, Routes } from 'react-router-dom';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import { Compass, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,7 +10,6 @@ import { StaffIssueDetailPage } from './StaffIssueDetailPage';
 import { BoardPage } from './BoardPage';
 import { TriagePage } from './TriagePage';
 import { DashboardPage } from './DashboardPage';
-import { PlatformReportPage } from './PlatformReportPage';
 import { AdminPage } from './AdminPage';
 import { AuditPage } from './AuditPage';
 
@@ -49,7 +48,10 @@ export function StaffWorkspaceRoutes() {
       <Route path="board" element={<BoardPage />} />
       <Route path="triage" element={<TriagePage />} />
       <Route path="dashboard" element={<DashboardPage />} />
-      <Route path="reports" element={<PlatformReportPage />} />
+      {/* Reports merged into the dashboard's platform selector. Kept as a
+          redirect so existing bookmarks and links land somewhere useful
+          instead of the 404 below. */}
+      <Route path="reports" element={<Navigate to="/staff/dashboard" replace />} />
       <Route path="admin" element={<AdminPage />} />
       <Route path="audit" element={<AuditPage />} />
       <Route path="*" element={<StaffNotFound />} />

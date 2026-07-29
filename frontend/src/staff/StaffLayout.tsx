@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-  ChevronsLeft, FileBarChart, Inbox, LayoutDashboard, LifeBuoy, ListChecks, LogOut,
+  ChevronsLeft, Inbox, LayoutDashboard, LifeBuoy, ListChecks, LogOut,
   Menu, ScrollText, Search, Settings, Trello,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -159,10 +159,11 @@ const NAV_ITEMS = [
   { to: '/staff/triage', icon: Inbox, label: 'Triage' },
   { to: '/staff/issues', icon: ListChecks, label: 'Issues' },
   { to: '/staff/board', icon: Trello, label: 'Board' },
+  // One dashboard, filtered by a platform selector. There used to be a
+  // separate "Reports" item for the single-platform view; it shared seven of
+  // its eight KPI cards with this one, so the split asked people to diff two
+  // near-identical screens to find a filter.
   { to: '/staff/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  // Per-platform report — available to every staff role (the endpoint is
-  // read-role scoped), so it sits outside the isAdmin-only links below.
-  { to: '/staff/reports', icon: FileBarChart, label: 'Reports' },
 ];
 
 function SidebarNav({ isAdmin, collapsed }: { isAdmin: boolean; collapsed: boolean }) {
