@@ -22,7 +22,7 @@ Emitted by the issues/comments services; consumed by `@OnEvent` listeners **outs
 | `issue.status_changed` | status patch | notifications (assignee+focals+**watchers**), jira echo, realtime, **automation** |
 | `issue.priority_changed` | priority patch | realtime |
 | `issue.assigned` | assignment | notifications (assignee), realtime |
-| `comment.added` | comment | notifications (mentions, scoped to platform members), realtime |
+| `comment.added` | comment | notifications (mentions, scoped to platform members), realtime, **translation** ([[Module - Translation]] — fills the machine-translation cache; no-op unless `TRANSLATE_DRIVER` is set) |
 | `issue.attachments_scanned` | scan done | jira (push now-servable files) |
 
 ## Listeners

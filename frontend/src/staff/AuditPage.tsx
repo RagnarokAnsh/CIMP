@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { ScrollText } from 'lucide-react';
@@ -9,11 +9,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { dateTime } from '@/lib/format';
+import { Pager } from '@/components/Pager';
+import { actionLabel } from '@/lib/issue-meta';
+import { useDocumentTitle } from '@/lib/use-document-title';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
@@ -24,18 +27,28 @@ const ALL = '__all__';
 const ACTOR_TYPES = ['STAFF', 'REPORTER', 'SYSTEM'];
 
 export function AuditPage() {
+  useDocumentTitle('Audit log');
   const [actorType, setActorType] = useState('');
   const [action, setAction] = useState('');
+  const [debouncedAction, setDebouncedAction] = useState('');
   const [page, setPage] = useState(1);
 
+  // Debounced like every other free-text filter in the app (CommandPalette,
+  // merge search). Typing "STATUS_CHANGED" here used to fire fourteen requests
+  // against the audit log — the heaviest table in the product — one per key.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedAction(action.trim()), 200);
+    return () => clearTimeout(t);
+  }, [action]);
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['staff', 'audit', actorType, action, page],
+    queryKey: ['staff', 'audit', actorType, debouncedAction, page],
     placeholderData: keepPreviousData,
     queryFn: async () =>
       (await staffApi.get<Paginated<AuditEntry>>('/admin/audit', {
         params: {
           actorType: actorType || undefined,
-          action: action || undefined,
+          action: debouncedAction || undefined,
           page,
         },
       })).data,
@@ -59,7 +72,7 @@ export function AuditPage() {
             value={actorType || ALL}
             onValueChange={(v) => { setActorType(v === ALL ? '' : v); setPage(1); }}
           >
-            <SelectTrigger className="w-44"><SelectValue placeholder="Actor type" /></SelectTrigger>
+            <SelectTrigger className="w-44" aria-label="Filter by actor type"><SelectValue placeholder="Actor type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All actors</SelectItem>
               {ACTOR_TYPES.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
@@ -69,6 +82,7 @@ export function AuditPage() {
             value={action}
             onChange={(e) => { setAction(e.target.value); setPage(1); }}
             placeholder="Action (e.g. STATUS_CHANGED)"
+            aria-label="Filter by action"
             className="w-64"
           />
         </CardContent>
@@ -117,10 +131,10 @@ export function AuditPage() {
               {!isLoading && rows.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {new Date(e.createdAt).toLocaleString()}
+                    {dateTime(e.createdAt)}
                   </TableCell>
                   <TableCell><Badge variant="outline">{e.actorType}</Badge></TableCell>
-                  <TableCell className="font-medium">{e.action.replace(/_/g, ' ').toLowerCase()}</TableCell>
+                  <TableCell className="font-medium">{actionLabel(e.action)}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {e.field ? `${e.field}: ${e.oldValue ?? '∅'} → ${e.newValue ?? '∅'}` : '—'}
                   </TableCell>
@@ -137,16 +151,14 @@ export function AuditPage() {
           </Table>
         </CardContent>
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border px-4 py-3">
-            <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </Button>
-            </div>
+          <div className="border-t border-border px-4 py-3">
+            <Pager
+              page={page}
+              totalPages={totalPages}
+              total={data?.total ?? 0}
+              pageSize={data?.pageSize ?? 0}
+              onPage={setPage}
+            />
           </div>
         )}
       </Card>

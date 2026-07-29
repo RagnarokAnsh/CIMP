@@ -13,6 +13,15 @@
 :root {
   --radius: 0.75rem;
 
+  /* Vertical space the staff workspace chrome takes above a full-height pane:
+     the h-14 top bar plus the main region's lg:p-8 top and bottom padding plus
+     the page header block. Full-height panes (the issues split view, the board
+     track) subtract this from 100vh.
+     It exists because those two panes each hard-coded their own guess — 15rem
+     and 13rem — for the same measurement, so they disagreed by 2rem and neither
+     tracked a change to the chrome. */
+  --workspace-chrome: 14rem;
+
   /* Neutrals */
   --background: oklch(0.985 0.004 265);
   --foreground: oklch(0.21 0.02 265);
@@ -36,28 +45,41 @@
   --accent-2: oklch(0.70 0.13 195);
   --accent-2-foreground: oklch(0.18 0.03 220);
 
-  /* Semantic */
-  --success: oklch(0.62 0.15 155);
+  /* Semantic. Lightness is set by the worst-case job each token has to do, not
+     by eye: success/info/destructive carry white text on a solid fill (4.5:1),
+     warning and accent-2 carry a dark foreground and are also used as meter
+     fills and icons (3:1 non-text). Every value below was solved against white
+     rather than sampled — the previous set was tuned in dark mode and measured
+     2.49-4.10 in light. Dark-mode values already passed and are unchanged. */
+  --success: oklch(0.53 0.15 155);
   --success-foreground: oklch(0.99 0 0);
-  --warning: oklch(0.70 0.15 75);
-  --warning-foreground: oklch(0.24 0.05 75);
-  --info: oklch(0.58 0.16 240);
+  --warning: oklch(0.64 0.14 70);
+  --warning-foreground: oklch(0.22 0.05 75);
+  --info: oklch(0.54 0.16 245);
   --info-foreground: oklch(0.99 0 0);
-  --destructive: oklch(0.58 0.22 25);
+  --destructive: oklch(0.56 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
-  --danger: oklch(0.58 0.22 25);
+  --danger: oklch(0.56 0.22 25);
 
-  /* Lines + focus */
-  --border: oklch(0.915 0.005 265);
-  --input: oklch(0.885 0.006 265);
+  /* Lines + focus.
+     Two border tokens, because they have different obligations. `--border` is
+     decorative (row dividers, card edges) and only needs to be visible.
+     `--input` is the boundary of a form control — a UI component under WCAG
+     1.4.11 — and must clear 3:1 against the field behind it. Shipping one token
+     for both left every input at 1.41:1, i.e. effectively borderless. */
+  --border: oklch(0.87 0.006 265);
+  --input: oklch(0.66 0.02 265);
   --ring: oklch(0.52 0.20 264);
 
-  /* Charts */
-  --chart-1: oklch(0.52 0.20 264);
-  --chart-2: oklch(0.70 0.13 195);
-  --chart-3: oklch(0.62 0.15 155);
-  --chart-4: oklch(0.70 0.15 75);
-  --chart-5: oklch(0.60 0.20 18);
+  /* Charts. Hue separation was already colour-blind safe; lightness was not —
+     the five series sat within 24 points of greyscale luminance, so they
+     collapsed in print and on monochrome displays. Lightness is now staggered
+     in even ~5% steps while every series still clears 3:1 on white. */
+  --chart-1: oklch(0.43 0.20 264);
+  --chart-2: oklch(0.65 0.11 195);
+  --chart-3: oklch(0.53 0.15 155);
+  --chart-4: oklch(0.62 0.14 70);
+  --chart-5: oklch(0.52 0.20 18);
 
   /* Sidebar (cooler neutral layer) */
   --sidebar: oklch(0.97 0.006 265);
@@ -66,12 +88,15 @@
   --sidebar-primary-foreground: oklch(0.99 0 0);
   --sidebar-accent: oklch(0.93 0.015 265);
   --sidebar-accent-foreground: oklch(0.27 0.05 265);
-  --sidebar-border: oklch(0.91 0.006 265);
+  --sidebar-border: oklch(0.86 0.006 265);
   --sidebar-ring: oklch(0.52 0.20 264);
 
-  /* Brand gradient + glass */
-  --gradient-brand: linear-gradient(135deg, oklch(0.55 0.20 264) 0%, oklch(0.58 0.20 295) 100%);
-  --gradient-brand-soft: linear-gradient(135deg, oklch(0.55 0.20 264 / 0.12) 0%, oklch(0.58 0.20 295 / 0.12) 100%);
+  /* Brand gradient + glass. The gradient is a text-bearing surface (the whole
+     dashboard hero sits on it), so both stops are held below the lightness at
+     which white text drops under 4.5:1 — the violet end used to measure 4.67
+     here and 3.79 in dark. */
+  --gradient-brand: linear-gradient(135deg, oklch(0.53 0.20 264) 0%, oklch(0.555 0.20 295) 100%);
+  --gradient-brand-soft: linear-gradient(135deg, oklch(0.53 0.20 264 / 0.12) 0%, oklch(0.555 0.20 295 / 0.12) 100%);
   --glass-bg: oklch(1 0 0 / 0.72);
 
   /* Tinted, layered elevation */
@@ -114,14 +139,16 @@
   --destructive-foreground: oklch(0.15 0.03 25);
   --danger: oklch(0.68 0.20 25);
 
-  --border: oklch(1 0 0 / 0.09);
-  --input: oklch(1 0 0 / 0.14);
+  /* Same split as light: decorative vs. form-control boundary. 0.14 measured
+     1.52:1 against the field behind it. */
+  --border: oklch(1 0 0 / 0.12);
+  --input: oklch(1 0 0 / 0.36);
   --ring: oklch(0.67 0.17 264);
 
-  --chart-1: oklch(0.67 0.17 264);
-  --chart-2: oklch(0.76 0.12 195);
-  --chart-3: oklch(0.72 0.15 158);
-  --chart-4: oklch(0.80 0.15 80);
+  --chart-1: oklch(0.61 0.17 264);
+  --chart-2: oklch(0.79 0.12 195);
+  --chart-3: oklch(0.73 0.15 158);
+  --chart-4: oklch(0.86 0.15 85);
   --chart-5: oklch(0.70 0.18 18);
 
   --sidebar: oklch(0.15 0.016 265);
@@ -130,11 +157,11 @@
   --sidebar-primary-foreground: oklch(0.15 0.02 265);
   --sidebar-accent: oklch(0.245 0.02 265);
   --sidebar-accent-foreground: oklch(0.97 0.005 265);
-  --sidebar-border: oklch(1 0 0 / 0.07);
+  --sidebar-border: oklch(1 0 0 / 0.10);
   --sidebar-ring: oklch(0.67 0.17 264);
 
-  --gradient-brand: linear-gradient(135deg, oklch(0.60 0.20 264) 0%, oklch(0.63 0.20 295) 100%);
-  --gradient-brand-soft: linear-gradient(135deg, oklch(0.60 0.20 264 / 0.16) 0%, oklch(0.63 0.20 295 / 0.16) 100%);
+  --gradient-brand: linear-gradient(135deg, oklch(0.55 0.20 264) 0%, oklch(0.575 0.20 295) 100%);
+  --gradient-brand-soft: linear-gradient(135deg, oklch(0.55 0.20 264 / 0.16) 0%, oklch(0.575 0.20 295 / 0.16) 100%);
   --glass-bg: oklch(0.21 0.016 265 / 0.66);
 
   --elevation-xs: 0 1px 2px oklch(0 0 0 / 0.40);
@@ -199,6 +226,34 @@
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
+  /* Type scale (DESIGN.md). This block did not exist, so Tailwind's default
+     16px-base scale was silently in force and every documented size was wrong
+     by 2-6px — a flatter hierarchy than the spec describes.
+     `text-sm` (14px) is the product's working base: it is what body copy,
+     table cells and every control actually use, and it already matches the
+     14px the spec asks for. So xs/sm/base keep their values and the display
+     steps are corrected upward, which is where the hierarchy was being lost.
+     `--text-2xs` is new: it replaces eighteen arbitrary text-[9px]/[10px]/[11px]
+     values and sets 11px as the hard floor. */
+  --text-2xs: 0.6875rem;      /* 11px */
+  --text-2xs--line-height: 1.45;
+  --text-xs: 0.75rem;         /* 12px */
+  --text-xs--line-height: 1.45;
+  --text-sm: 0.875rem;        /* 14px — working base */
+  --text-sm--line-height: 1.5;
+  --text-base: 1rem;          /* 16px */
+  --text-base--line-height: 1.55;
+  --text-lg: 1.125rem;        /* 18px */
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.375rem;        /* 22px (was 20) */
+  --text-xl--line-height: 1.3;
+  --text-2xl: 1.75rem;        /* 28px (was 24) */
+  --text-2xl--line-height: 1.2;
+  --text-3xl: 2.25rem;        /* 36px (was 30) */
+  --text-3xl--line-height: 1.15;
+  --text-4xl: 3rem;           /* 48px — display */
+  --text-4xl--line-height: 1.05;
+
   --shadow-xs: var(--elevation-xs);
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -250,6 +305,29 @@
 }
 
 @layer utilities {
+  /* ONE focus ring.
+     There were three recipes in use — ring-2/ring-ring/55 with an offset on
+     Button, ring-[3px]/ring-ring/50 with no offset on every form control, and a
+     bare ring-2/ring-ring on hand-rolled buttons — against a spec that names a
+     single one. Only 3 of 20+ ring declarations carried an offset, so most
+     rings sat flush on the control edge and read as a border change rather
+     than a focus indicator. Everything focusable uses this. */
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  /* For controls that sit on a card/popover rather than the page background,
+     so the offset gap matches what is actually behind the control. */
+  .focus-ring-surface {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-card;
+  }
+
+  /* Stacking ladder. These were ad-hoc (z-10 x8, z-20, z-30, z-50 x12,
+     z-[100]) with nothing recording the intended order. */
+  .z-sticky   { z-index: 20; }  /* in-page sticky toolbars */
+  .z-header   { z-index: 30; }  /* app chrome: top bar, sidebar */
+  .z-overlay  { z-index: 50; }  /* Radix portals: dialog, popover, dropdown */
+  .z-progress { z-index: 100; } /* global loading bar — above everything */
+
   .bg-gradient-brand {
     background-image: var(--gradient-brand);
   }

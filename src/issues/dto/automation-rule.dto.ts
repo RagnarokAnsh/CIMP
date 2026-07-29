@@ -23,6 +23,9 @@ export class CreateAutomationRuleDto {
   @IsEnum(AutomationAction)
   action: AutomationAction;
 
+  // Shape depends on `action` and the target has to exist on this platform, so
+  // the real check is AutomationService.assertActionValue — this is only a
+  // length guard.
   @ApiProperty({ description: 'Priority value | assignee staff id | label id, per action.' })
   @IsString()
   @Length(1, 200)
@@ -61,6 +64,9 @@ export class UpdateAutomationRuleDto {
   @IsEnum(AutomationAction)
   action?: AutomationAction;
 
+  // Independently optional from `action`: the service validates the effective
+  // pair (whatever is sent, falling back to the stored rule) so a half-update
+  // can't leave an action pointing at a value meant for a different one.
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

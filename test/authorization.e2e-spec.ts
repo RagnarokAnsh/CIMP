@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { IssuesController } from '../src/issues/issues.controller';
 import { IssuesService } from '../src/issues/issues.service';
+import { MergeService } from '../src/issues/merge.service';
 import { AttachmentsController } from '../src/issues/attachments.controller';
 import { AttachmentsService } from '../src/issues/attachments.service';
 import { JwtAuthGuard } from '../src/auth/jwt-auth.guard';
@@ -39,6 +40,7 @@ describe('PlatformAccessGuard (e2e)', () => {
       controllers: [IssuesController, AttachmentsController],
       providers: [
         { provide: IssuesService, useValue: { getDetail: async (id: string) => ({ id }) } },
+        { provide: MergeService, useValue: { merge: async () => ({ ok: true, canonicalIssueId: 'x' }) } },
         { provide: AttachmentsService, useValue: {} },
         ScopeService,
         PlatformAccessGuard,
@@ -93,6 +95,35 @@ describe('PlatformAccessGuard (e2e)', () => {
     await request(app.getHttpServer())
       .get('/api/staff/issues/33333333-3333-3333-3333-333333333333')
       .expect(404);
+  });
+
+  describe('merge (duplicate flow)', () => {
+    const MERGE_BODY = { canonicalIssueId: ISSUE_A, version: 1 };
+
+    it('a Portal A focal point can merge a Portal A issue (2xx)', async () => {
+      currentStaff = staff([{ role: Role.FOCAL_POINT, platformId: PORTAL_A }]);
+      await request(app.getHttpServer())
+        .post(`/api/staff/issues/${ISSUE_A}/merge`)
+        .send(MERGE_BODY)
+        .expect(201);
+    });
+
+    it('a Portal A focal point gets 404 (not 403) merging a Portal B issue — no oracle', async () => {
+      currentStaff = staff([{ role: Role.FOCAL_POINT, platformId: PORTAL_A }]);
+      const res = await request(app.getHttpServer())
+        .post(`/api/staff/issues/${ISSUE_B}/merge`)
+        .send(MERGE_BODY)
+        .expect(404);
+      expect(res.body.message).toBe('Issue not found');
+    });
+
+    it('a watcher gets a truthful 403 merging an in-scope issue (read-only role)', async () => {
+      currentStaff = staff([{ role: Role.WATCHER, platformId: PORTAL_A }]);
+      await request(app.getHttpServer())
+        .post(`/api/staff/issues/${ISSUE_A}/merge`)
+        .send(MERGE_BODY)
+        .expect(403);
+    });
   });
 
   describe('WATCHER (read-only role)', () => {

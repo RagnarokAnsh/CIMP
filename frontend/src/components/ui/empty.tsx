@@ -7,7 +7,10 @@ function Empty({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="empty"
       className={cn(
-        "flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border-dashed p-6 text-center text-balance md:p-12",
+        // `border-dashed` alone sets only border-style; with no width the border
+        // never rendered, so seven of eight call sites drew nothing and the one
+        // that added `border` by hand looked like a different component.
+        "flex min-w-0 flex-1 flex-col items-center justify-center gap-6 rounded-lg border border-dashed border-border p-6 text-center text-balance md:p-12",
         className
       )}
       {...props}
@@ -58,9 +61,15 @@ function EmptyMedia({
   )
 }
 
-function EmptyTitle({ className, ...props }: React.ComponentProps<"div">) {
+/** A real heading, for the same reason as CardTitle — an empty state is often
+ *  the only thing on screen, so its title is the page's most useful landmark. */
+function EmptyTitle({
+  className,
+  as: Comp = "h3",
+  ...props
+}: React.HTMLAttributes<HTMLElement> & { as?: "h1" | "h2" | "h3" | "h4" }) {
   return (
-    <div
+    <Comp
       data-slot="empty-title"
       className={cn("text-lg font-medium tracking-tight", className)}
       {...props}

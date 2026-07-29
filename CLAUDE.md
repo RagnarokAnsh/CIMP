@@ -30,7 +30,7 @@ folder to its note. After a meaningful change, update the affected module note +
 **Backend** (run from repo root):
 
 ```bash
-docker compose up -d postgres   # Postgres on :5432
+docker compose up -d postgres   # Postgres on :5433
 npm run start:dev               # watch mode; API on :3000 under /api
 npm run build                   # nest build
 npm run typecheck               # tsc --noEmit

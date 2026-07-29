@@ -1,5 +1,5 @@
 import { JiraListener } from './jira.listener';
-import { ScanStatus } from '../common/enums';
+import { JiraSyncStatus, ScanStatus } from '../common/enums';
 
 // A1 regression: attachments are pushed to Jira once scanning completes, exactly
 // once (the atomic claim dedupes the create-path vs scan-complete-path), and
@@ -49,5 +49,90 @@ describe('JiraListener attachment sync', () => {
     await listener.onAttachmentsScanned({ issueId: 'i1' });
 
     expect(jira.addAttachment).not.toHaveBeenCalled();
+  });
+});
+
+// The create path claims the issue with jiraSyncStatus=PENDING before calling
+// Jira. That claim must stay idempotent while a call is genuinely in flight, but
+// must NOT survive a crash — nothing else ever revisits a wedged PENDING row.
+describe('JiraListener create-path claim', () => {
+  const CREATED = { issueId: 'i1', platformId: 'p1' };
+
+  function issueWith(over: Record<string, unknown>) {
+    return {
+      id: 'i1',
+      referenceNo: 'SUP-1',
+      jiraIssueKey: null,
+      jiraSyncStatus: JiraSyncStatus.NOT_SYNCED,
+      platform: { jiraEnabled: true, jiraProjectKey: 'SUP' },
+      updatedAt: new Date(),
+      ...over,
+    };
+  }
+
+  function make(issue: any) {
+    const issues = {
+      findOne: jest.fn().mockResolvedValue(issue),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const attachments = { find: jest.fn().mockResolvedValue([]), update: jest.fn() };
+    const jira = { isConfigured: () => true, createIssue: jest.fn().mockResolvedValue('JIRA-9') };
+    const storage = { read: jest.fn() };
+    const listener = new JiraListener(issues as any, attachments as any, jira as any, storage as any);
+    return { listener, issues, jira };
+  }
+
+  it('skips an issue whose PENDING claim is still fresh', async () => {
+    const { listener, jira } = make(issueWith({
+      jiraSyncStatus: JiraSyncStatus.PENDING,
+      updatedAt: new Date(Date.now() - 30_000),
+    }));
+
+    await listener.onIssueCreated(CREATED);
+
+    expect(jira.createIssue).not.toHaveBeenCalled();
+  });
+
+  it('retries a PENDING claim left behind by a dead process', async () => {
+    const { listener, issues, jira } = make(issueWith({
+      jiraSyncStatus: JiraSyncStatus.PENDING,
+      updatedAt: new Date(Date.now() - 60 * 60_000),
+    }));
+
+    await listener.onIssueCreated(CREATED);
+
+    expect(jira.createIssue).toHaveBeenCalledTimes(1);
+    expect(issues.update).toHaveBeenCalledWith('i1', {
+      jiraIssueKey: 'JIRA-9',
+      jiraSyncStatus: JiraSyncStatus.SYNCED,
+    });
+  });
+
+  it('never re-creates once a key exists, however stale the claim', async () => {
+    const { listener, jira } = make(issueWith({
+      jiraIssueKey: 'JIRA-1',
+      jiraSyncStatus: JiraSyncStatus.PENDING,
+      updatedAt: new Date(0),
+    }));
+
+    await listener.onIssueCreated(CREATED);
+
+    expect(jira.createIssue).not.toHaveBeenCalled();
+  });
+
+  it('gives up after the last attempt without a trailing backoff', async () => {
+    const { listener, issues, jira } = make(issueWith({}));
+    jira.createIssue.mockRejectedValue(new Error('jira down'));
+    const delay = jest.spyOn(listener as any, 'delay').mockResolvedValue(undefined);
+
+    await listener.onIssueCreated(CREATED);
+
+    expect(jira.createIssue).toHaveBeenCalledTimes(3);
+    // Two gaps between three attempts — none after the one that gives up.
+    expect(delay).toHaveBeenCalledTimes(2);
+    expect(delay).toHaveBeenLastCalledWith(1000);
+    expect(issues.update).toHaveBeenLastCalledWith('i1', {
+      jiraSyncStatus: JiraSyncStatus.FAILED,
+    });
   });
 });

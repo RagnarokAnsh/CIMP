@@ -25,4 +25,14 @@ export class LocalDiskStorageService extends StorageService {
   async read(storageKey: string): Promise<Buffer> {
     return fs.readFile(join(this.dir, storageKey));
   }
+
+  async delete(storageKey: string): Promise<void> {
+    try {
+      await fs.unlink(join(this.dir, storageKey));
+    } catch (err) {
+      // Already gone is the outcome we wanted, so ENOENT is not an error here —
+      // only a genuine I/O failure is worth surfacing.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+  }
 }

@@ -17,8 +17,15 @@ import {
 } from '@/components/ui/empty';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { relativeTime } from '@/lib/format';
+import { useT } from '@/i18n';
+import { useDocumentTitle } from '@/lib/use-document-title';
+import { usePriorityLabel, useStatusLabel } from '@/i18n/useStatusLabel';
 
 export function MyIssuesPage() {
+  const { t } = useT();
+  useDocumentTitle(t('list.title'));
+  const statusLabel = useStatusLabel();
+  const priorityLabel = usePriorityLabel();
   const hasToken = Boolean(getHandoffToken());
   const { data, isLoading, isError } = useQuery({
     queryKey: ['reporter', 'issues'],
@@ -29,8 +36,8 @@ export function MyIssuesPage() {
   if (!hasToken) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>No portal session</AlertTitle>
-        <AlertDescription>Open this page from your portal to see your issues.</AlertDescription>
+        <AlertTitle>{t('new.noSession.title')}</AlertTitle>
+        <AlertDescription>{t('new.noSession.body')}</AlertDescription>
       </Alert>
     );
   }
@@ -38,11 +45,11 @@ export function MyIssuesPage() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>My issues</CardTitle>
+        <CardTitle as="h1" className="text-xl">{t('list.title')}</CardTitle>
         <Button asChild size="sm">
           <Link to="/reporter/new">
             <PlusCircle className="h-4 w-4" />
-            Raise an issue
+            {t('nav.raiseIssue')}
           </Link>
         </Button>
       </CardHeader>
@@ -55,7 +62,7 @@ export function MyIssuesPage() {
 
         {isError && (
           <Alert variant="destructive">
-            <AlertDescription>Could not load your issues. Please try again.</AlertDescription>
+            <AlertDescription>{t('list.loadError')}</AlertDescription>
           </Alert>
         )}
 
@@ -63,14 +70,12 @@ export function MyIssuesPage() {
           <Empty className="py-10">
             <EmptyHeader>
               <EmptyMedia variant="icon"><Inbox /></EmptyMedia>
-              <EmptyTitle>No issues yet</EmptyTitle>
-              <EmptyDescription>
-                When you raise an issue it appears here so you can follow its progress and replies.
-              </EmptyDescription>
+              <EmptyTitle>{t('list.empty.title')}</EmptyTitle>
+              <EmptyDescription>{t('list.empty.body')}</EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button asChild>
-                <Link to="/reporter/new"><PlusCircle className="h-4 w-4" /> Raise your first issue</Link>
+                <Link to="/reporter/new"><PlusCircle className="h-4 w-4" /> {t('list.empty.cta')}</Link>
               </Button>
             </EmptyContent>
           </Empty>
@@ -80,10 +85,14 @@ export function MyIssuesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Reference</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead className="text-right">Updated</TableHead>
+                {/* These were English literals on the one fully localized
+                    surface in the product — a Spanish reporter saw Spanish
+                    navigation, Spanish empty states and Spanish status badges
+                    under four English column headers. */}
+                <TableHead>{t('list.col.reference')}</TableHead>
+                <TableHead>{t('list.col.status')}</TableHead>
+                <TableHead>{t('list.col.priority')}</TableHead>
+                <TableHead className="text-right">{t('list.col.updated')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -96,12 +105,12 @@ export function MyIssuesPage() {
                     >
                       {i.referenceNo}
                       {i.hasUpdates && (
-                        <Badge className="h-5 px-1.5 text-[10px]">New update</Badge>
+                        <Badge className="h-5 px-1.5 text-2xs">{t('list.newUpdates')}</Badge>
                       )}
                     </Link>
                   </TableCell>
-                  <TableCell><StatusBadge status={i.status} /></TableCell>
-                  <TableCell><PriorityBadge priority={i.priority} /></TableCell>
+                  <TableCell><StatusBadge status={i.status} label={statusLabel(i.status)} /></TableCell>
+                  <TableCell><PriorityBadge priority={i.priority} label={priorityLabel(i.priority)} /></TableCell>
                   <TableCell className="text-right text-sm text-muted-foreground">
                     {relativeTime(i.updatedAt)}
                   </TableCell>

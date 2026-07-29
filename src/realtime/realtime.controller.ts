@@ -1,11 +1,15 @@
 import {
-  Controller, MessageEvent, Post, Sse, UnauthorizedException, UseGuards,
+  Controller, HttpException, HttpStatus, Logger, MessageEvent, Post, Sse,
+  UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
-import { Observable, filter, interval, map, merge } from 'rxjs';
+import {
+  Observable, Subject, concatMap, filter, finalize, interval, map, merge, takeUntil,
+} from 'rxjs';
 import { CurrentStaff } from '../auth/current-staff.decorator';
 import { AuthenticatedStaff } from '../auth/auth.types';
+import { AuthService } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { LocalAuthService } from '../auth/local-auth.service';
 import { ScopeService } from '../authz/scope.service';
@@ -18,10 +22,13 @@ import { SseAuthGuard } from './sse-auth.guard';
 @ApiTags('staff-realtime')
 @Controller('staff')
 export class RealtimeController {
+  private readonly logger = new Logger(RealtimeController.name);
+
   constructor(
     private readonly realtime: RealtimeService,
     private readonly scope: ScopeService,
     private readonly localAuth: LocalAuthService,
+    private readonly auth: AuthService,
   ) {}
 
   // Bearer-authenticated (header, not URL): exchange the session token for a
@@ -42,10 +49,25 @@ export class RealtimeController {
   @UseGuards(SseAuthGuard)
   @ApiOperation({ summary: 'Live event stream (SSE). Auth via a ?ticket= from /events/ticket.' })
   events(@CurrentStaff() staff: AuthenticatedStaff): Observable<MessageEvent> {
-    const allowed = this.scope.scopedPlatformIds(staff);
+    // Bound concurrent streams per account. This route skips the global
+    // throttler because a held connection is not a request — which left nothing
+    // capping it, so any staff principal (a zero-grant user or a read-only
+    // watcher included) could pin unbounded sockets, each costing a
+    // re-authorization query every 25s.
+    if (!this.realtime.acquireStream(staff.id)) {
+      throw new HttpException(
+        'Too many open event streams for this account. Close an existing tab and retry.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // Mutable on purpose: this connection outlives role changes, so the scope
+    // resolved at connect time goes stale. Re-resolved on every heartbeat tick.
+    let allowed = this.scope.scopedPlatformIds(staff);
     const inScope = (e: RealtimeEvent): boolean =>
-      allowed === 'ALL' ||
-      allowed.includes(e.platformId) ||
+      this.scope.scopeAllows(allowed, e.platformId) ||
+      // Escape hatch: an @mention or assignment reaches its target regardless
+      // of platform scope.
       (e.targetStaffIds?.includes(staff.id) ?? false);
 
     const live = this.realtime.events$.pipe(
@@ -53,11 +75,56 @@ export class RealtimeController {
       map((e) => ({ data: e }) as MessageEvent),
     );
 
-    // Keep-alive so idle SSE connections aren't dropped by proxies.
+    // Revocation must not wait for the connection to end. Every ordinary request
+    // re-checks status + grants (AuthService.upsertFromClaims), but this stream is
+    // authenticated once and held open for hours — without this it would keep
+    // pushing events for platforms the caller has since lost access to.
+    const revoked = new Subject<void>();
+
+    // Captured on the first heartbeat (the stream handler is synchronous, so it
+    // cannot read the DB before returning the Observable) and enforced after.
+    let pinnedTokenVersion: number | null = null;
+
+    // Keep-alive so idle SSE connections aren't dropped by proxies — and the tick
+    // we piggyback the re-authorization on.
     const heartbeat = interval(25_000).pipe(
+      concatMap(async () => {
+        try {
+          const fresh = await this.auth.refreshAuthenticated(staff.id);
+          // Account deleted or no longer ACTIVE: complete the stream. The browser
+          // reconnects and that attempt fails cleanly at /events/ticket.
+          if (!fresh) {
+            revoked.next();
+            return;
+          }
+          // Pin the tokenVersion seen on the first tick, then drop the stream if
+          // it ever moves. A password reset bumps it, and that is the product's
+          // forced-logout lever — without this it stopped nothing that was
+          // already connected.
+          if (pinnedTokenVersion === null) pinnedTokenVersion = fresh.tokenVersion;
+          else if (fresh.tokenVersion !== pinnedTokenVersion) {
+            revoked.next();
+            return;
+          }
+          allowed = this.scope.scopedPlatformIds(fresh.staff);
+        } catch (err) {
+          // A DB hiccup must not silently kill a healthy stream: keep the scope we
+          // already have and retry next tick, but never fail closed in silence.
+          this.logger.warn(
+            `SSE re-authorization failed for staff ${staff.id}, keeping previous scope: `
+            + `${(err as Error).message}`,
+          );
+        }
+      }),
       map(() => ({ data: { type: 'ping' } }) as MessageEvent),
     );
 
-    return merge(live, heartbeat);
+    // finalize() runs on unsubscribe, completion AND error, so the slot is
+    // returned however the connection ends — including a browser that just goes
+    // away. Without it the cap would ratchet down to zero over a long uptime.
+    return merge(live, heartbeat).pipe(
+      takeUntil(revoked),
+      finalize(() => this.realtime.releaseStream(staff.id)),
+    );
   }
 }

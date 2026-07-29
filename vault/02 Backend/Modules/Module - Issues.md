@@ -20,6 +20,7 @@ updated: 2026-07-06
 | `attachments.controller.ts` | `staff/attachments/:id/download` — scan-gated, access-checked file download. |
 | `attachments.service.ts` | Loads attachment, checks platform scope + scan status, reads bytes from `StorageService`. |
 | `status-machine.ts` | `STATUS_TRANSITIONS` table + `canTransition(from,to)`. Pure. |
+| `status-side-effects.ts` | `applyStatusSideEffects(issue, to)` — the resolvedAt/closedAt/REOPENED-reset side-effects, extracted so the Jira inbound path ([[Module - Jira]]) reuses the exact same logic. Pure (mutates the entity in place). |
 | `sla.ts` | `SLA_TARGET_HOURS` (per-priority, env-overridable), `computeSla()` (JS) and `slaDueSql()` (SQL) kept in sync. |
 | `issues.csv.ts` | `toCsv(issues)` — RFC-4180-ish CSV with spreadsheet formula-injection neutralisation. |
 | `dto/list-issues.dto.ts` | `ListIssuesDto` (filters, paging, sort) + `IssueSortField`/`SortOrder` enums. |
@@ -70,15 +71,15 @@ Injects `Issue/StaffUser/UserPlatformRole/Platform` repos, `DataSource`, [[Auth 
 **Mutations** — public handlers (`changeStatus/changeAssignment/changePriority`) `loadForWrite` then delegate to private `apply*` cores and return refreshed `getDetail`. The `apply*` cores do the write/audit/emit so `bulkUpdate` can reuse them on an already-loaded issue (no per-issue detail round-trip).
 - `applyStatus` — `assertVersion` → `assertCanTransition` (OD-09) → rejects no-op (`422 UnprocessableEntity`) and illegal transitions (`422`, via `canTransition`) → sets status + `applyStatusSideEffects` → saves + audits in one transaction → emits `STATUS_CHANGED`.
 - `applyAssignment` — `assertVersion`; if `assigneeId` set, loads staff, requires `ACTIVE`, and verifies (via `AuthService.loadRoles` + `ScopeService.canAccessPlatform([DEVELOPER])`) the target is a developer on this platform (else `400`); saves + audits; emits `ASSIGNED` (assigneeId may be null = unassign).
-- `applyPriority` — `assertVersion`; no-op returns early (no event); saves + audits; emits `PRIORITY_CHANGED`.
-- `bulkUpdate(staff, dto)` — validates target value up front (bulk writes bypass the request `ValidationPipe`), then loops ids: `loadForWrite`, `scopeAllows` check, dispatch to the matching `apply*` with `version: issue.version` (per-issue current version, so no 409s within the batch). Per-issue failures are caught and recorded in `skipped[]` with the error message; never aborts the batch. Returns `{ updated, skipped[] }`.
+- `applyPriority` — `assertVersion`; **no-op now throws `422 UnprocessableEntity`** (`'Issue is already at that priority.'`), matching `applyStatus` (was a silent early return); saves + audits; emits `PRIORITY_CHANGED`.
+- `bulkUpdate(staff, dto)` — validates target value up front (bulk writes bypass the request `ValidationPipe`), then loops ids: `loadForWrite`, **write-role** `canAccessPlatform(...STAFF_WRITE_ROLES)` check, dispatch to the matching `apply*` with `version: issue.version` (per-issue current version, so no `assertVersion` 409s within the batch — but the `@VersionColumn` still guards concurrent writes, surfacing as 409 via the filter). Per-issue failures are caught into `skipped[]`; a not-found id and an out-of-scope id both report the **single indistinguishable reason** `'Not found or out of scope'` (closing the same enumeration oracle `PlatformAccessGuard` defends — see [[Module - Authz]]), while genuine 422/409 messages pass through. Never aborts the batch. Returns `{ updated, skipped[] }`.
 
 **Helpers / invariants**
 - `buildListQuery` — left-joins platform/reporter/assignee; applies scope (`platform.id IN (:...scopeIds)` unless `'ALL'`), plus optional platform/status/priority/assignee/date filters, plus search (see FTS below).
 - `searchParams(q)` — lowercases, splits on whitespace, strips non-alphanumerics per term, builds a **prefix** tsquery (`term:* & term:*`) and a LIKE-escaped reference-no pattern (`%…%`, escaping `\ % _`).
 - `assertVersion` — throws `409 Conflict` if the supplied `version` ≠ current (optimistic lock on `Issue.version`). When `version` is `undefined` the check is skipped — but all three mutation DTOs make `version` required, so the guard always runs from HTTP.
 - `assertCanTransition` — **OD-09 seam**: base roles `[DEVELOPER, ADMIN]`; adds `FOCAL_POINT` only when config `focalPointCanTransition` (`FOCAL_POINT_CAN_TRANSITION`, default false) is on. Else `403`.
-- `applyStatusSideEffects` — RESOLVED sets `resolvedAt`; CLOSED sets `closedAt` (once); REOPENED clears both.
+- `applyStatusSideEffects` (now in `status-side-effects.ts`, imported here and by the Jira inbound path) — RESOLVED sets `resolvedAt`; CLOSED sets `closedAt` (once); REOPENED clears `resolvedAt`/`closedAt`/`duplicateOf` **and resets the SLA clock** (`slaStartedAt = now`, `slaBreachedAt = null`, the L8 fix so a reopened old issue doesn't instantly re-breach).
 
 ### `status-machine.ts`
 `STATUS_TRANSITIONS` (Section 8 of the build spec): NEW→{IN_PROGRESS, ON_HOLD, CLOSED}; IN_PROGRESS→{ON_HOLD, RESOLVED}; ON_HOLD→{IN_PROGRESS, CLOSED}; RESOLVED→{CLOSED, REOPENED}; CLOSED→{REOPENED}; REOPENED→{IN_PROGRESS}. Anything else → `422`. See [[Domain Events and Issue Lifecycle]].
@@ -111,8 +112,9 @@ This module **consumes** no events. (The colocated `automation.listener.ts` cons
 `Issue` (read/write; optimistic `version`, `status`, `priority`, `assignee`, `resolvedAt`/`closedAt`, `searchVector`), `StaffUser`, `UserPlatformRole`, `Platform`, `Attachment`, plus `Comment` (read in detail) and audit records. See [[Data Model]].
 
 ## Gotchas / invariants
-- **Bulk bypasses the request pipe.** `bulkUpdate` validates status/priority target values manually before the loop — don't remove those checks. It passes each issue's own `version`, so intra-batch optimistic-lock conflicts can't happen; concurrency conflicts still surface per-id as skips.
-- **No-op writes:** status no-op → `422`; priority no-op → silent early return (no event). Assignment doesn't special-case no-op.
+- **Bulk bypasses the request pipe.** `bulkUpdate` validates status/priority target values manually before the loop — don't remove those checks. It passes each issue's own freshly-read `version`, so `assertVersion` can't fire intra-batch — this is deliberate (documented at the call site), **not** a missing optimistic-lock: the `@VersionColumn` still emits `UPDATE ... WHERE version = X`, so a truly concurrent write raises `OptimisticLockVersionMismatchError` → 409 via the filter.
+- **Bulk skip reasons are oracle-safe:** not-found and out-of-scope collapse to one identical reason so the endpoint can't enumerate another platform's issue ids (it carries no `:id`, so `PlatformAccessGuard` never runs on it).
+- **No-op writes:** status no-op → `422`; **priority no-op → `422`** (aligned 2026-07-24). Assignment doesn't special-case no-op.
 - **FTS:** the search branch relies on the stored, GIN-indexed `issue.search_vector` (populated by a DB trigger over description + comment bodies) — see the `*AddIssueSearchVector*` migration. Prefix tsquery matches as the user types. Reference-number match is a separate `ILIKE` branch with escaped LIKE metacharacters.
 - **Export cap:** exports silently truncate at 50k rows — narrow filters to get everything.
 - **Detail never leaks storage keys**, only attachment scan status; downloads go through the scan gate.

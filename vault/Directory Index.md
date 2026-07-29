@@ -29,7 +29,10 @@ updated: 2026-07-06
 | `src/issues` | Core issue management (status, assign, priority, bulk, CSV, FTS) + feature sub-modules | [[Module - Issues]] |
 | `src/comments` | Comments + visibility + scoped mentions | [[Module - Comments]] |
 | `src/notifications` | Email + in-app notifications, NotificationLog | [[Module - Notifications]] |
-| `src/dashboard` | Scoped dashboard aggregates | [[Module - Dashboard]] |
+| `src/dashboard` | Scoped dashboard aggregates + per-platform tenant report | [[Module - Dashboard]] |
+| `src/canned-responses` | Per-platform reply templates ("macros") | [[Module - Canned Responses]] |
+| `src/status` | Public status page: components + incidents | [[Module - Status Page]] |
+| `src/translation` | Machine-translation seam (default off) | [[Module - Translation]] |
 | `src/admin` | Admin-only platform/staff/role/audit management | [[Module - Admin]] |
 | `src/jira` | One-way Jira push + inbound webhook | [[Module - Jira]] |
 | `src/realtime` | SSE live stream (ticket auth, scope-filtered) | [[Module - Realtime]] |
@@ -39,14 +42,16 @@ updated: 2026-07-06
 | `src/storage` + `src/scanning` | Swappable storage + malware-scan seams | [[Module - Storage and Scanning]] |
 | `src/audit` + `src/events` + `src/health` | Immutable audit trail, domain events, health checks | [[Module - Audit, Events and Health]] |
 | `src/common` + `src/config` | Enums/constants/filters + fail-closed config | [[Module - Common and Config]] |
-| `src/entities` | All 18 TypeORM entities | [[Entity Reference]] · [[Data Model]] |
-| `src/migrations` | 10 SQL migrations | [[Migrations Log]] |
+| `src/entities` | All 24 TypeORM entities | [[Entity Reference]] · [[Data Model]] |
+| `src/migrations` | 20 SQL migrations | [[Migrations Log]] |
 
 ## Frontend (`frontend/src/*`)
 | Dir | Purpose | Note |
 |---|---|---|
-| `frontend/src/staff` | Staff workspace (board, issues, dashboard, admin, detail) | [[Frontend - Staff Workspace]] |
-| `frontend/src/reporter` | Reporter surface (new/my issues, detail) | [[Frontend - Reporter Surface]] |
+| `frontend/src/staff` | Staff workspace (board, issues, dashboard, reports, admin, detail) | [[Frontend - Staff Workspace]] |
+| `frontend/src/reporter` | Reporter surface (new/my issues, detail) — localized | [[Frontend - Reporter Surface]] |
+| `frontend/src/status` | Public status page (`/status/:key`, unauthenticated) | [[Module - Status Page]] · [[Frontend Overview]] |
+| `frontend/src/i18n` | Reporter-portal translations (EN/ES/FR/DE) + `useT()` | [[Frontend - Reporter Surface]] |
 | `frontend/src/components` + `lib` + `api` | Shared UI, hooks (realtime SSE), API clients, types | [[Frontend - Components, Lib and API]] |
 
 Related: [[Backend Modules and API]] · [[Architecture Overview]] · [[LLM Guide]]

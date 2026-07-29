@@ -2,7 +2,7 @@ import {
   ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { OptimisticLockVersionMismatchError } from 'typeorm';
+import { OptimisticLockVersionMismatchError, QueryFailedError } from 'typeorm';
 
 // Produces a consistent error body for every failure:
 // { statusCode, message, error, timestamp, path }.
@@ -37,6 +37,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = HttpStatus.CONFLICT;
       message = 'This issue was changed by someone else. Reload and try again.';
       error = 'Conflict';
+    } else if (
+      exception instanceof QueryFailedError &&
+      (exception.driverError as { code?: string } | undefined)?.code === '22P02'
+    ) {
+      // Postgres 22P02 (invalid_text_representation) means a request value reached a
+      // query in a shape the column type can't parse — typically a malformed uuid read
+      // by a guard, which runs before ParseUUIDPipe. The caller sent bad input, so this
+      // is a 400, not a server fault. Deliberately narrow to 22P02: every other
+      // QueryFailedError is our bug and must stay a logged 500 below.
+      status = HttpStatus.BAD_REQUEST;
+      message = 'Malformed request parameter.';
+      error = 'Bad Request';
     } else if (exception instanceof Error) {
       // Don't leak internals to the client, but log them for ops.
       this.logger.error(exception.message, exception.stack);
@@ -44,6 +56,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // Non-Error throw (string / POJO / third-party value). Log it so no 500 is
       // ever silent, while the client body stays generic.
       this.logger.error(`Non-error exception: ${safeStringify(exception)}`);
+    }
+
+    // Rate-limit responses arrive as ThrottlerException, whose default message is
+    // the class-name-prefixed "ThrottlerException: Too Many Requests" — meaningless
+    // to a user and never something we want on the wire. Normalise every 429 to one
+    // friendly, actionable line so any client (staff UI, reporter portal, SDK,
+    // integrations) can show it verbatim.
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      message = 'You are making requests too quickly. Please wait a moment and try again.';
+      error = 'Too Many Requests';
     }
 
     // Log security-relevant denials so an on-call/SIEM can see authz probing

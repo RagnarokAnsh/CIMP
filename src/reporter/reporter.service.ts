@@ -5,26 +5,25 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
-import { fromBuffer } from 'file-type';
 import {
   CommentAddedEvent, IssueCreatedEvent, IssueEvents,
 } from '../events/issue-events';
 import {
-  ALLOWED_MIME_TYPES, MAX_FILES, MAX_FILE_BYTES,
+  ALLOWED_MIME_TYPES, MAX_FILES, MAX_FILE_BYTES, SERVABLE_SCAN_STATUSES,
 } from '../common/constants';
+import { sniffAllowedMime } from '../common/magic-bytes';
 import {
   ActorType, CommentVisibility, ScanStatus,
 } from '../common/enums';
 import {
-  Attachment, AuditEvent, Comment, Issue, Reporter, ReporterIssueView,
+  Attachment, AuditEvent, Comment, CsatResponse, Issue, Reporter, ReporterIssueView,
 } from '../entities';
 import { HandoffContext } from '../handoff/handoff.types';
 import { StorageService } from '../storage/storage.service';
 import { CreateIssueDto } from './dto/create-issue.dto';
 import { ReporterCommentDto } from './dto/reporter-comment.dto';
-
-// Attachments that have cleared (or skipped) scanning may be downloaded.
-const SERVABLE_SCAN = new Set([ScanStatus.CLEAN, ScanStatus.SKIPPED]);
+import { sanitizeContext } from './context-sanitizer';
+import { upsertReporter } from './reporter-upsert';
 
 @Injectable()
 export class ReporterService {
@@ -36,37 +35,15 @@ export class ReporterService {
     private readonly storage: StorageService,
     private readonly dataSource: DataSource,
     private readonly events: EventEmitter2,
+    @InjectRepository(CsatResponse) private readonly csatResponses?: Repository<CsatResponse>,
   ) {}
 
-  // Auto-provision (or refresh) the reporter identity from the verified token.
+  // Auto-provision (or refresh) the reporter identity from the verified token
+  // (shared with deflection subscriptions — see reporter-upsert.ts).
   private async upsertReporter(ctx: HandoffContext): Promise<Reporter> {
-    let reporter = await this.reporters.findOne({
-      where: { platform: { id: ctx.platformId }, portalUserId: ctx.reporter.portalUserId },
-    });
-    if (!reporter) {
-      reporter = this.reporters.create({
-        platform: { id: ctx.platformId } as any,
-        portalUserId: ctx.reporter.portalUserId,
-        name: ctx.reporter.name,
-        email: ctx.reporter.email,
-      });
-    } else {
-      reporter.name = ctx.reporter.name;
-      reporter.email = ctx.reporter.email;
-    }
-
-    try {
-      return await this.reporters.save(reporter);
-    } catch (e) {
-      // Concurrent first-time submit: another request inserted this reporter
-      // between our findOne and save (unique on platform + portalUserId). Re-read
-      // and use the existing row instead of surfacing a 500.
-      if (this.isUniqueViolation(e)) {
-        const existing = await this.findReporter(ctx);
-        if (existing) return existing;
-      }
-      throw e;
-    }
+    const reporter = await upsertReporter(this.reporters, ctx);
+    if (!reporter) throw new Error('Reporter upsert race could not be resolved.');
+    return reporter;
   }
 
   // Validates count/size and sniffs each file's REAL content type from its magic
@@ -81,13 +58,16 @@ export class ReporterService {
       if (f.size > MAX_FILE_BYTES) {
         throw new BadRequestException(`"${f.originalname}" exceeds the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
       }
-      const sniffed = await fromBuffer(f.buffer);
-      if (!sniffed || !ALLOWED_MIME_TYPES.includes(sniffed.mime)) {
+      // Signature check runs against our own table rather than `file-type`: that
+      // library hangs the event loop synchronously on a crafted container, and a
+      // timeout cannot rescue a synchronous hang. See common/magic-bytes.ts.
+      const sniffed = sniffAllowedMime(f.buffer);
+      if (!sniffed || !ALLOWED_MIME_TYPES.includes(sniffed)) {
         throw new BadRequestException(
           `"${f.originalname}" content is not a supported file type (PNG, JPEG, WEBP, PDF).`,
         );
       }
-      detectedTypes.push(sniffed.mime);
+      detectedTypes.push(sniffed);
     }
     return detectedTypes;
   }
@@ -98,7 +78,13 @@ export class ReporterService {
     const reporter = await this.upsertReporter(ctx);
 
     // Persist files to storage first (outside the transaction).
-    const stored = await Promise.all(
+    //
+    // allSettled, not all: with Promise.all a rejection anywhere abandons the
+    // writes that already succeeded — `stored` is never assigned, so the cleanup
+    // below never runs and those blobs sit in storage forever with nothing
+    // pointing at them. The 5-file limit makes a partial failure cheap to hit
+    // (one flaky S3 PUT) and impossible to notice.
+    const results = await Promise.allSettled(
       files.map(async (f, i) => ({
         ...(await this.storage.save(f.buffer, f.originalname, detectedTypes[i])),
         filename: f.originalname,
@@ -106,8 +92,33 @@ export class ReporterService {
         sizeBytes: f.size,
       })),
     );
+    const firstFailure = results.find((r) => r.status === 'rejected');
+    if (firstFailure) {
+      const written = results
+        .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof this.storage.save>> & {
+          filename: string; contentType: string; sizeBytes: number;
+        }> => r.status === 'fulfilled')
+        .map((r) => r.value.storageKey);
+      await Promise.allSettled(written.map((key) => this.storage.delete(key)));
+      throw (firstFailure as PromiseRejectedResult).reason;
+    }
+    const stored = results.map(
+      (r) => (r as PromiseFulfilledResult<{
+        storageKey: string; filename: string; contentType: string; sizeBytes: number;
+      }>).value,
+    );
 
-    const issueId = await this.createIssueWithUniqueReference(ctx, dto, reporter, stored);
+    // The blobs are written before the row exists, so if persistence ultimately
+    // fails (exhausted reference retries, or any other DB error) they would be
+    // orphaned in storage with nothing pointing at them. Best-effort clean them
+    // up before rethrowing; a failed delete must not mask the original error.
+    let issueId: string;
+    try {
+      issueId = await this.createIssueWithUniqueReference(ctx, dto, reporter, stored);
+    } catch (err) {
+      await Promise.allSettled(stored.map((s) => this.storage.delete(s.storageKey)));
+      throw err;
+    }
 
     // Notify the platform's focal points (FR-NOT-01) and trigger Jira sync,
     // decoupled from the intake request.
@@ -159,6 +170,7 @@ export class ReporterService {
         platform: { id: ctx.platformId } as any,
         reporter: { id: reporter.id } as any,
         description: dto.description,
+        context: sanitizeContext(dto.context),
       });
       const saved = await em.save(issue);
 
@@ -171,7 +183,11 @@ export class ReporterService {
               filename: s.filename,
               contentType: s.contentType,
               sizeBytes: s.sizeBytes,
-              scanStatus: ScanStatus.PENDING, // AV scan wired in Phase 2
+              // PENDING is the safe default: ScanningListener picks the file up
+              // off IssueEvents.CREATED and writes the real verdict, and PENDING
+              // files are never served (SERVABLE_SCAN_STATUSES). A scanner outage
+              // therefore leaves the file un-downloadable, not wrongly trusted.
+              scanStatus: ScanStatus.PENDING,
             }),
           ),
         );
@@ -231,17 +247,32 @@ export class ReporterService {
     });
     if (!issue) throw new NotFoundException('Issue not found');
 
+    // Existing CSAT rating, so the portal widget can show submitted state.
+    // (Optional dep: legacy specs construct this service without it.)
+    const csat = this.csatResponses
+      ? await this.csatResponses.findOne({ where: { issue: { id: issueId } } })
+      : null;
+
     // Only reporter-visible comments are exposed; internal notes stay hidden.
     // The reporter's own replies are labelled "You"; staff replies "Support".
+    // Each is served in the reporter's own language when a cached translation
+    // exists (see TranslationListener); `originalBody` is carried alongside so
+    // the portal can offer "show original" and never hides what was written.
+    const locale = ctx.reporter.locale ?? null;
     const visibleComments = (issue.comments ?? [])
       .filter((c) => c.visibility === CommentVisibility.REPORTER_VISIBLE)
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-      .map((c) => ({
-        body: c.body,
-        createdAt: c.createdAt,
-        fromReporter: c.authorType === ActorType.REPORTER,
-        author: c.authorType === ActorType.REPORTER ? (c.authorName ?? 'You') : 'Support',
-      }));
+      .map((c) => {
+        const translated = locale ? c.translations?.[locale] : undefined;
+        return {
+          body: translated ?? c.body,
+          originalBody: translated ? c.body : null,
+          translated: Boolean(translated),
+          createdAt: c.createdAt,
+          fromReporter: c.authorType === ActorType.REPORTER,
+          author: c.authorType === ActorType.REPORTER ? (c.authorName ?? 'You') : 'Support',
+        };
+      });
 
     return {
       id: issue.id,
@@ -249,6 +280,9 @@ export class ReporterService {
       status: issue.status,
       priority: issue.priority,
       description: issue.description,
+      // The reporter's own diagnostics — shown back so they know what was sent.
+      context: issue.context ?? null,
+      csat: csat ? { score: csat.score, comment: csat.comment } : null,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       attachments: (issue.attachments ?? []).map((a) => ({
@@ -256,7 +290,7 @@ export class ReporterService {
         filename: a.filename,
         contentType: a.contentType,
         sizeBytes: a.sizeBytes,
-        downloadable: SERVABLE_SCAN.has(a.scanStatus),
+        downloadable: SERVABLE_SCAN_STATUSES.has(a.scanStatus),
       })),
       updates: visibleComments,
     };
@@ -284,6 +318,9 @@ export class ReporterService {
           authorName: reporter.name,
           body: dto.body,
           visibility: CommentVisibility.REPORTER_VISIBLE,
+          // The portal told us what language this user writes in, so record it
+          // rather than paying for provider-side detection.
+          sourceLocale: ctx.reporter.locale ?? null,
         }),
       );
       // Bump updatedAt (without touching version) so staff see it as activity.
@@ -328,7 +365,7 @@ export class ReporterService {
       where: { id: attachmentId, issue: { id: issueId, reporter: { id: reporter.id } } },
     });
     if (!attachment) throw new NotFoundException('Attachment not found');
-    if (!SERVABLE_SCAN.has(attachment.scanStatus)) {
+    if (!SERVABLE_SCAN_STATUSES.has(attachment.scanStatus)) {
       throw new ForbiddenException(
         `Attachment is not available (scan status: ${attachment.scanStatus}).`,
       );

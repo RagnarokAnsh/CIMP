@@ -18,6 +18,13 @@ import * as crypto from 'crypto';
 //   WATCHER_EMAIL="observer@yourdomain.com" WATCHER_PASSWORD="Str0ng!Too" \
 //   [WATCHER_NAME="Observer"] [WATCHER_GLOBAL=true]   # global = all platforms;
 //                                                     # default scopes to PLATFORM_KEY
+//
+// DESTRUCTIVE reset (fresh start for real testing): wipe ALL data first, then
+// seed the admin + platform. Requires the exact sentinel value — anything else
+// aborts. The schema (from migrations) is kept; only rows are deleted.
+//   WIPE_DATA="YES_DELETE_ALL_DATA" ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run seed:prod
+// Tip: pass HANDOFF_SECRET=<existing secret> to recreate a platform with the
+// same secret a connected portal already has in its .env.
 
 function required(key: string): string {
   const val = process.env[key];
@@ -65,12 +72,36 @@ async function main() {
     process.exit(1);
   }
 
+  // ── Optional destructive wipe — demands the exact sentinel ────────
+  const wipe = process.env.WIPE_DATA;
+  if (wipe && wipe !== 'YES_DELETE_ALL_DATA') {
+    console.error('\n  ✗ WIPE_DATA is set but not to the exact sentinel.');
+    console.error('    To really delete ALL rows in every table, set:');
+    console.error('      WIPE_DATA="YES_DELETE_ALL_DATA"\n');
+    process.exit(1);
+  }
+
   // ── Connect (never auto-sync — tables were created by migrations) ──
   AppDataSource.setOptions({ synchronize: false });
   await AppDataSource.initialize();
   console.log('\n  Connected to database.\n');
 
   try {
+    if (wipe === 'YES_DELETE_ALL_DATA') {
+      // Discover every app table dynamically (future entities included) so a
+      // stale hardcoded list can't silently leave rows behind. The migrations
+      // ledger is preserved — the schema itself is untouched.
+      const rows: { tablename: string }[] = await AppDataSource.query(
+        `SELECT tablename FROM pg_tables
+         WHERE schemaname = 'public' AND tablename <> 'migrations'`,
+      );
+      if (rows.length > 0) {
+        const tables = rows.map((r) => `"${r.tablename}"`).join(', ');
+        await AppDataSource.query(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`);
+        console.log(`  ✓ Wiped all data (${rows.length} tables truncated; schema + migrations kept).\n`);
+      }
+    }
+
     // ── Platform ──────────────────────────────────────────────────
     const platformRepo = AppDataSource.getRepository(Platform);
     let platform = await platformRepo.findOne({ where: { key: platformKey } });

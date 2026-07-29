@@ -18,11 +18,28 @@ const allowedOrigins = new Set(
   ],
 );
 
-export function captureHandoffToken(): void {
+// Notified whenever the stored token is replaced by a *different* one, or
+// dropped. Wired to queryClient.clear() in main.tsx.
+type IdentityChangeHandler = () => void;
+let onIdentityChange: IdentityChangeHandler | null = null;
+
+// Single write path for the token, so every route in (query param, postMessage,
+// direct set) reports an identity change the same way. This matters because the
+// postMessage hand-off swaps the token in place with no page load: without it,
+// the previous reporter's cached issue list stays on screen for the next one.
+function storeToken(token: string): void {
+  const previous = sessionStorage.getItem(KEY);
+  sessionStorage.setItem(KEY, token);
+  if (previous !== null && previous !== token) onIdentityChange?.();
+}
+
+export function captureHandoffToken(handleIdentityChange?: IdentityChangeHandler): void {
+  onIdentityChange = handleIdentityChange ?? null;
+
   const url = new URL(window.location.href);
   const fromQuery = url.searchParams.get('handoff');
   if (fromQuery) {
-    sessionStorage.setItem(KEY, fromQuery);
+    storeToken(fromQuery);
     url.searchParams.delete('handoff');
     window.history.replaceState({}, '', url.toString());
   }
@@ -33,7 +50,7 @@ export function captureHandoffToken(): void {
   window.addEventListener('message', (e) => {
     if (!allowedOrigins.has(e.origin)) return;
     if (e.data?.type === 'handoff' && typeof e.data.token === 'string') {
-      sessionStorage.setItem(KEY, e.data.token);
+      storeToken(e.data.token);
     }
   });
 }
@@ -43,9 +60,12 @@ export function getHandoffToken(): string | null {
 }
 
 export function setHandoffToken(token: string): void {
-  sessionStorage.setItem(KEY, token);
+  storeToken(token);
 }
 
 export function clearHandoffToken(): void {
+  const had = sessionStorage.getItem(KEY) !== null;
   sessionStorage.removeItem(KEY);
+  // An expired session must not leave the previous reporter's data readable.
+  if (had) onIdentityChange?.();
 }

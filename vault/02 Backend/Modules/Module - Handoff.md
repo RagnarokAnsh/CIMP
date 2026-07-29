@@ -1,7 +1,7 @@
 ---
 title: Module - Handoff
 tags: [cimp, backend, auth, security]
-updated: 2026-07-06
+updated: 2026-07-27
 ---
 # Module - Handoff (`src/handoff`)
 ← [[Backend Modules and API]] · [[CIMP - Home]]
@@ -34,7 +34,8 @@ The **only** thing standing between a portal-minted token and another tenant's i
 4. **Signature verify** — `jwt.verify(token, platform.handoffSecret, { algorithms: ['HS256'], maxAge: HANDOFF_MAX_AGE })`. Any failure (bad signature, wrong secret, `alg:none`, expired, older than maxAge) is caught and turned into `401 'Invalid or expired hand-off token'`.
 5. **exp required** — after verify, `typeof claims.exp !== 'number'` → `401 'Hand-off token must have an expiry (exp).'` Necessary because `jsonwebtoken` only enforces `exp` when present; a portal minting a token without `exp` would otherwise be accepted up to `maxAge`.
 6. **Required reporter claims** — missing `portalUserId` / `email` / `name` → `401 'Token missing required reporter claims'`.
-7. **Build context** — returns `{ platformId, platformKey, reporter: { portalUserId, name, email } }`. **`platformId` and `platformKey` come from the DB row, not the decoded claims** — the claims cannot forge tenancy.
+7. **Build context** — returns `{ platformId, platformKey, reporter: { portalUserId, name, email, locale } }`. **`platformId` and `platformKey` come from the DB row, not the decoded claims** — the claims cannot forge tenancy.
+8. **Optional `locale` claim** — normalized through `baseLocale()` (`'fr-CA'` → `'fr'`); anything malformed becomes `null` rather than rejecting the token. It only selects which cached translation the reporter is served, so the worst case of a bad value is an untranslated message, never a failed hand-off. → [[Module - Translation]]
 
 Invariants:
 - **Algorithm pinning:** only `HS256` accepted → `alg:none` and asymmetric-confusion attacks are rejected.
@@ -51,8 +52,8 @@ Invariants:
 `createParamDecorator` returning `req.handoff as HandoffContext`. Must be paired with `HandoffGuard` on the same route, otherwise `req.handoff` is undefined.
 
 ## Types
-- **`HandoffClaims`** — `platformKey`, `portalUserId`, `name`, `email`, optional `iat`, `exp`. The signed payload minted by a portal backend.
-- **`HandoffContext`** — `platformId`, `platformKey`, `reporter: { portalUserId, name, email }`. The verified, DB-anchored identity attached to the request.
+- **`HandoffClaims`** — `platformKey`, `portalUserId`, `name`, `email`, optional `locale`, `iat`, `exp`. The signed payload minted by a portal backend.
+- **`HandoffContext`** — `platformId`, `platformKey`, `reporter: { portalUserId, name, email, locale }`. The verified, DB-anchored identity attached to the request.
 
 ## Guards & auth
 Provides the reporter path of the two independent auth paths (the other is staff `JwtAuthGuard`; see [[Auth and Authorization]]). Reporters never log in. This module performs authentication only; **authorization scoping** for reporters happens downstream (the reporter controller filters by `ctx.platformId`) — see [[Module - Reporter]] and `ScopeService`.

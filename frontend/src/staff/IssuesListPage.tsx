@@ -2,19 +2,24 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import {
-  Bookmark, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown,
+  Bookmark, ChevronDown, ChevronUp, ChevronsUpDown,
   Columns2, Download, List, Maximize2, Search, SearchX, Trash2, UserCheck, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
   BulkResult, IssueStatus, Paginated, PlatformItem, Priority, SavedViewDto,
-  StaffIssueSummary, StaffMe,
+  StaffIssueSummary,
 } from '@/api/types';
 import { StatusBadge, PriorityBadge } from '@/components/StatusBadge';
 import { STATUS_META, PRIORITY_META } from '@/lib/issue-meta';
 import { canWriteAnywhere } from '@/lib/permissions';
+import { downloadFile } from '@/lib/download';
+import { toastApiError } from '@/lib/toast-error';
+import { useMe } from '@/lib/use-me';
 import { SlaBadge } from '@/components/SlaBadge';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { Pager } from '@/components/Pager';
 import { IssueDetailPanel } from './IssueDetailPanel';
 import { relativeTime, initials } from '@/lib/format';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -41,8 +46,10 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 const STATUSES: IssueStatus[] = ['NEW', 'IN_PROGRESS', 'ON_HOLD', 'RESOLVED', 'CLOSED', 'REOPENED'];
 const PRIORITIES: Priority[] = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -57,6 +64,11 @@ interface Filters {
   status: string;
   priority: string;
   q: string;
+  // No control writes this any more — the raw query bar read as clutter sitting
+  // under the dropdowns that people actually reach for. Everything else stays
+  // wired (backend grammar in src/issues/jql.ts, the `jql` query param, saved
+  // views that already persist one), so re-adding a query bar is UI-only work.
+  jql: string;
   assignedToMe: boolean;
   platformId: string;
   from: string;
@@ -65,15 +77,37 @@ interface Filters {
   order: Order;
 }
 const DEFAULT_FILTERS: Filters = {
-  status: '', priority: '', q: '', assignedToMe: false,
+  status: '', priority: '', q: '', jql: '', assignedToMe: false,
   platformId: '', from: '', to: '', sort: 'createdAt', order: 'DESC',
 };
 
+// One mapping from filter state to query params, shared by the list and the CSV
+// export — the export used to build its own string carrying only status and
+// priority, so the downloaded file silently disagreed with the rows on screen.
+// `page` is deliberately not here: the list appends it, and the export endpoint
+// ignores it (it returns every match up to the server's row cap).
+function listParams(filters: Filters, meId: string | undefined) {
+  return {
+    status: filters.status || undefined,
+    priority: filters.priority || undefined,
+    q: filters.q || undefined,
+    jql: filters.jql || undefined,
+    assigneeId: filters.assignedToMe ? meId : undefined,
+    platformId: filters.platformId || undefined,
+    from: filters.from ? new Date(filters.from).toISOString() : undefined,
+    to: filters.to ? new Date(`${filters.to}T23:59:59`).toISOString() : undefined,
+    sort: filters.sort,
+    order: filters.order,
+  };
+}
+
 export function IssuesListPage() {
+  useDocumentTitle('Issues');
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [qInput, setQInput] = useState('');
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saveOpen, setSaveOpen] = useState(false);
   const [viewName, setViewName] = useState('');
@@ -111,11 +145,7 @@ export function IssuesListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [qInput, filters.q]);
 
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
   const { data: platforms } = useQuery({
     queryKey: ['staff', 'platforms'],
     queryFn: async () => (await staffApi.get<PlatformItem[]>('/staff/platforms')).data,
@@ -127,18 +157,7 @@ export function IssuesListPage() {
     placeholderData: keepPreviousData,
     queryFn: async () =>
       (await staffApi.get<Paginated<StaffIssueSummary>>('/staff/issues', {
-        params: {
-          status: filters.status || undefined,
-          priority: filters.priority || undefined,
-          q: filters.q || undefined,
-          assigneeId: filters.assignedToMe ? me?.id : undefined,
-          platformId: filters.platformId || undefined,
-          from: filters.from ? new Date(filters.from).toISOString() : undefined,
-          to: filters.to ? new Date(`${filters.to}T23:59:59`).toISOString() : undefined,
-          sort: filters.sort,
-          order: filters.order,
-          page,
-        },
+        params: { ...listParams(filters, me?.id), page },
       })).data,
   });
 
@@ -159,10 +178,24 @@ export function IssuesListPage() {
     if (!selectedId || !rows.some((r) => r.id === selectedId)) setSelectedId(rows[0].id);
   }, [view, rows, selectedId]);
 
-  const exportUrl = `/api/staff/issues/export?${new URLSearchParams({
-    ...(filters.status ? { status: filters.status } : {}),
-    ...(filters.priority ? { priority: filters.priority } : {}),
-  }).toString()}`;
+  // The staff bearer token lives in memory and is attached by the axios request
+  // interceptor, so a plain <a href> export always came back 401. Pull the CSV
+  // through the authenticated instance instead (see lib/download.ts).
+  async function exportCsv() {
+    const query = new URLSearchParams(
+      Object.entries(listParams(filters, me?.id))
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    );
+    setExporting(true);
+    try {
+      await downloadFile(staffApi, `/staff/issues/export?${query.toString()}`, 'issues.csv');
+    } catch (e) {
+      toastApiError(e);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const bulk = useMutation({
     mutationFn: (body: { ids: string[]; op: 'status' | 'priority' | 'assignee'; value: string }) =>
@@ -185,7 +218,7 @@ export function IssuesListPage() {
       queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
       queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Bulk update failed.'),
+    onError: toastApiError,
   });
 
   const ids = [...selected];
@@ -193,14 +226,18 @@ export function IssuesListPage() {
     bulk.mutate({ ids, op, value });
 
   function toggleRow(id: string) {
-    setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
   }
   function toggleAll() {
     setSelected(allOnPageSelected ? new Set() : new Set(rows.map((r) => r.id)));
   }
 
   function applyView(v: SavedViewDto) {
-    const f = v.filters as unknown as Filters;
+    const f = { ...DEFAULT_FILTERS, ...(v.filters as unknown as Filters) };
     setFilters(f); setQInput(f.q ?? ''); setPage(1);
   }
   function saveView() {
@@ -220,6 +257,7 @@ export function IssuesListPage() {
 
   const activeFilterCount =
     (filters.status ? 1 : 0) + (filters.priority ? 1 : 0) + (filters.q ? 1 : 0) +
+    (filters.jql ? 1 : 0) +
     (filters.assignedToMe ? 1 : 0) + (filters.platformId ? 1 : 0) + (filters.from || filters.to ? 1 : 0);
 
   const selectedIdx = rows.findIndex((r) => r.id === selectedId);
@@ -240,14 +278,16 @@ export function IssuesListPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      {/* Wraps below sm: the action cluster is ~300px and pushed the page into
+          horizontal scroll on a phone, clipping Export CSV. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Issues</h1>
           <p className="text-sm text-muted-foreground">
             {data ? `${data.total} issue${data.total === 1 ? '' : 's'} in your scope` : 'Loading…'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <SavedViewsMenu
             views={views}
             onApply={applyView}
@@ -266,8 +306,12 @@ export function IssuesListPage() {
             <ToggleGroupItem value="list" aria-label="List view"><List className="h-4 w-4" /></ToggleGroupItem>
             <ToggleGroupItem value="split" aria-label="Detail view"><Columns2 className="h-4 w-4" /></ToggleGroupItem>
           </ToggleGroup>
-          <Button asChild variant="outline">
-            <a href={exportUrl}><Download className="h-4 w-4" /> Export CSV</a>
+          {/* size="sm" to match Views and the view toggle beside it — this was
+              the one default-height control in an h-8 cluster, so it stood 1px
+              proud top and bottom. */}
+          <Button variant="outline" size="sm" onClick={exportCsv} disabled={exporting}>
+            {exporting ? <Spinner className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+            Export CSV
           </Button>
         </div>
       </div>
@@ -283,12 +327,13 @@ export function IssuesListPage() {
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
               placeholder="Search reference, description and comments…"
+              aria-label="Search issues"
               className="pl-9"
             />
           </form>
 
           <Select value={filters.status || ALL} onValueChange={(v) => patch({ status: v === ALL ? '' : v })}>
-            <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-40" aria-label="Filter by status"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All statuses</SelectItem>
               {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>)}
@@ -296,7 +341,7 @@ export function IssuesListPage() {
           </Select>
 
           <Select value={filters.priority || ALL} onValueChange={(v) => patch({ priority: v === ALL ? '' : v })}>
-            <SelectTrigger className="w-36"><SelectValue placeholder="Priority" /></SelectTrigger>
+            <SelectTrigger className="w-36" aria-label="Filter by priority"><SelectValue placeholder="Priority" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All priorities</SelectItem>
               {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>)}
@@ -305,7 +350,7 @@ export function IssuesListPage() {
 
           {(platforms?.length ?? 0) > 1 && (
             <Select value={filters.platformId || ALL} onValueChange={(v) => patch({ platformId: v === ALL ? '' : v })}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="Platform" /></SelectTrigger>
+              <SelectTrigger className="w-40" aria-label="Filter by platform"><SelectValue placeholder="Platform" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All platforms</SelectItem>
                 {platforms!.map((p) => <SelectItem key={p.id} value={p.id}>{p.key}</SelectItem>)}
@@ -313,27 +358,20 @@ export function IssuesListPage() {
             </Select>
           )}
 
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="date"
-              value={filters.from}
-              onChange={(e) => patch({ from: e.target.value })}
-              className="w-[8.5rem]"
-              aria-label="Created from"
-            />
-            <span className="text-xs text-muted-foreground">→</span>
-            <Input
-              type="date"
-              value={filters.to}
-              onChange={(e) => patch({ to: e.target.value })}
-              className="w-[8.5rem]"
-              aria-label="Created to"
-            />
-          </div>
+          <DateRangeFilter
+            from={filters.from}
+            to={filters.to}
+            onChange={(range) => patch(range)}
+            className="w-[13rem]"
+          />
 
+          {/* Default height (h-9), not sm: this row is built around text inputs
+              and selects, so the two buttons at the end were the odd ones out
+              and broke the baseline the eye tracks across the filter bar.
+              aria-pressed because this is a toggle, not a command. */}
           <Button
             variant={filters.assignedToMe ? 'default' : 'outline'}
-            size="sm"
+            aria-pressed={filters.assignedToMe}
             onClick={() => patch({ assignedToMe: !filters.assignedToMe })}
           >
             <UserCheck className="h-4 w-4" /> Assigned to me
@@ -342,7 +380,6 @@ export function IssuesListPage() {
           {activeFilterCount > 0 && (
             <Button
               variant="ghost"
-              size="sm"
               className="text-muted-foreground"
               onClick={() => { setFilters(DEFAULT_FILTERS); setQInput(''); setPage(1); }}
             >
@@ -357,13 +394,13 @@ export function IssuesListPage() {
           <span className="text-sm font-medium">{selected.size} selected</span>
           <div className="flex flex-wrap items-center gap-2">
             <Select onValueChange={(v) => runBulk('status', v)}>
-              <SelectTrigger size="sm" className="w-36"><SelectValue placeholder="Set status…" /></SelectTrigger>
+              <SelectTrigger size="sm" className="w-36" aria-label="Set status on selected issues"><SelectValue placeholder="Set status…" /></SelectTrigger>
               <SelectContent>
                 {STATUSES.map((s) => <SelectItem key={s} value={s}>{STATUS_META[s].label}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select onValueChange={(v) => runBulk('priority', v)}>
-              <SelectTrigger size="sm" className="w-36"><SelectValue placeholder="Set priority…" /></SelectTrigger>
+              <SelectTrigger size="sm" className="w-36" aria-label="Set priority on selected issues"><SelectValue placeholder="Set priority…" /></SelectTrigger>
               <SelectContent>
                 {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{PRIORITY_META[p].label}</SelectItem>)}
               </SelectContent>
@@ -438,7 +475,7 @@ export function IssuesListPage() {
                     )}
                     <TableCell className="max-w-md">
                       <Link to={`/staff/issues/${r.id}`} className="group block">
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="font-mono text-2xs text-muted-foreground">
                           {r.referenceNo}{r.platform?.key ? ` · ${r.platform.key}` : ''}
                         </span>
                         <span className="block truncate font-medium text-foreground group-hover:text-primary group-hover:underline">
@@ -448,10 +485,10 @@ export function IssuesListPage() {
                     </TableCell>
                     <TableCell><StatusBadge status={r.status} /></TableCell>
                     <TableCell><PriorityBadge priority={r.priority} /></TableCell>
-                    <TableCell><SlaBadge slaState={r.slaState} dueAt={r.dueAt} /></TableCell>
+                    <TableCell><SlaBadge slaState={r.slaState} dueAt={r.dueAt} showOnTrack /></TableCell>
                     <TableCell>
                       <span className="flex items-center gap-2 text-sm">
-                        <Avatar className="size-6"><AvatarFallback className="text-[10px]">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
+                        <Avatar className="size-6"><AvatarFallback className="text-2xs">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
                         <span className="truncate text-muted-foreground">{r.assignee?.name ?? 'Unassigned'}</span>
                       </span>
                     </TableCell>
@@ -463,7 +500,13 @@ export function IssuesListPage() {
           </CardContent>
           {totalPages > 1 && (
             <div className="border-t border-border px-4 py-3">
-              <Pager page={page} totalPages={totalPages} onPage={setPage} />
+              <Pager
+                page={page}
+                totalPages={totalPages}
+                total={data?.total ?? 0}
+                pageSize={data?.pageSize ?? rows.length}
+                onPage={setPage}
+              />
             </div>
           )}
         </Card>
@@ -473,7 +516,7 @@ export function IssuesListPage() {
           Fixed height at lg+ so both panes are equal height and scroll
           independently (master–detail), instead of one column running long. */}
       {view === 'split' && (
-        <div className="grid gap-4 lg:h-[calc(100vh-15rem)] lg:min-h-[28rem] lg:grid-cols-[clamp(300px,30%,400px)_1fr]">
+        <div className="grid gap-4 lg:h-[calc(100vh-var(--workspace-chrome))] lg:min-h-[28rem] lg:grid-cols-[clamp(300px,30%,400px)_1fr]">
           <Card className="flex flex-col overflow-hidden">
             <CardContent className="flex min-h-0 flex-1 flex-col p-0">
               <div className="min-h-0 flex-1 divide-y divide-border/60 overflow-y-auto">
@@ -492,8 +535,10 @@ export function IssuesListPage() {
                       r.id === selectedId ? 'bg-primary/[0.06]' : 'hover:bg-accent/50',
                     )}
                   >
+                    {/* w-1 to match the sidebar's active marker — same idiom,
+                        same measure. It was w-0.5 here and w-1 there. */}
                     {r.id === selectedId && (
-                      <span className="absolute inset-y-0 left-0 w-0.5 bg-primary" aria-hidden />
+                      <span className="absolute inset-y-0 left-0 w-1 rounded-r-full bg-primary" aria-hidden />
                     )}
                     <div className="flex items-start gap-2">
                       <p className={cn('line-clamp-2 flex-1 text-sm leading-snug', r.id === selectedId ? 'font-semibold' : 'font-medium')}>
@@ -502,13 +547,13 @@ export function IssuesListPage() {
                       <SlaBadge slaState={r.slaState} dueAt={r.dueAt} />
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-mono text-[11px] text-muted-foreground">{r.referenceNo}</span>
+                      <span className="font-mono text-2xs text-muted-foreground">{r.referenceNo}</span>
                       <StatusBadge status={r.status} />
                       <PriorityBadge priority={r.priority} />
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <Avatar className="size-5"><AvatarFallback className="text-[9px]">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
+                        <Avatar className="size-5"><AvatarFallback className="text-2xs">{initials(r.assignee?.name)}</AvatarFallback></Avatar>
                         <span className="truncate">{r.assignee?.name ?? 'Unassigned'}</span>
                       </span>
                       <span className="shrink-0">{relativeTime(r.updatedAt)}</span>
@@ -518,7 +563,14 @@ export function IssuesListPage() {
               </div>
               {totalPages > 1 && (
                 <div className="border-t border-border px-3 py-2.5">
-                  <Pager page={page} totalPages={totalPages} onPage={setPage} compact />
+                  <Pager
+                    page={page}
+                    totalPages={totalPages}
+                    total={data?.total ?? 0}
+                    pageSize={data?.pageSize ?? rows.length}
+                    onPage={setPage}
+                    compact
+                  />
                 </div>
               )}
             </CardContent>
@@ -582,59 +634,6 @@ export function IssuesListPage() {
   );
 }
 
-// Numbered pager with first/last + current window and ellipses.
-function pageRange(page: number, total: number): (number | '…')[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const out: (number | '…')[] = [1];
-  const start = Math.max(2, page - 1);
-  const end = Math.min(total - 1, page + 1);
-  if (start > 2) out.push('…');
-  for (let p = start; p <= end; p += 1) out.push(p);
-  if (end < total - 1) out.push('…');
-  out.push(total);
-  return out;
-}
-
-function Pager({
-  page, totalPages, onPage, compact,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (p: number) => void;
-  compact?: boolean;
-}) {
-  if (totalPages <= 1) return null;
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-xs text-muted-foreground">Page {page} of {totalPages}</span>
-      <div className="flex items-center gap-1">
-        <Button variant="outline" size="icon-sm" disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Previous page">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        {!compact && pageRange(page, totalPages).map((p, i) =>
-          p === '…' ? (
-            <span key={`e${i}`} className="px-1 text-xs text-muted-foreground">…</span>
-          ) : (
-            <Button
-              key={p}
-              variant={p === page ? 'default' : 'ghost'}
-              size="icon-sm"
-              className="min-w-8 tabular-nums"
-              aria-current={p === page ? 'page' : undefined}
-              onClick={() => onPage(p)}
-            >
-              {p}
-            </Button>
-          ),
-        )}
-        <Button variant="outline" size="icon-sm" disabled={page >= totalPages} onClick={() => onPage(page + 1)} aria-label="Next page">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function SortableHead({
   label, field, filters, onSort,
 }: {
@@ -646,10 +645,21 @@ function SortableHead({
   const active = filters.sort === field;
   const Icon = !active ? ChevronsUpDown : filters.order === 'ASC' ? ChevronUp : ChevronDown;
   return (
-    <TableHead>
+    // aria-sort belongs on the header cell, not the control: it is how a screen
+    // reader announces which column the table is ordered by and in which
+    // direction. The arrow icon conveyed that visually only.
+    <TableHead aria-sort={active ? (filters.order === 'ASC' ? 'ascending' : 'descending') : 'none'}>
+      {/* -mx-1.5 px-1.5 py-1: keeps the label optically aligned with the column
+          while giving the sort control a 24px-tall target and a visible focus
+          ring — it was a bare 20px text run. */}
       <button
         type="button"
-        className={cn('flex items-center gap-1 transition-colors hover:text-foreground', active && 'text-foreground')}
+        aria-label={`Sort by ${label}`}
+        className={cn(
+          '-mx-1.5 flex items-center gap-1 rounded px-1.5 py-1 transition-colors hover:text-foreground',
+          'focus-ring',
+          active && 'text-foreground',
+        )}
         onClick={() => onSort({ sort: field, order: active && filters.order === 'DESC' ? 'ASC' : 'DESC' })}
       >
         {label}
@@ -685,8 +695,10 @@ function SavedViewsMenu({
             className="group flex items-center justify-between gap-2"
           >
             <span className="truncate">{v.name}</span>
+            {/* focus-visible:opacity-100 — the button is tabbable, so revealing
+                it on hover alone left it invisible to keyboard users. */}
             <button
-              className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+              className="rounded text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 focus-ring group-hover:opacity-100"
               aria-label={`Delete ${v.name}`}
               onClick={(e) => { e.stopPropagation(); onDelete(v.id); }}
             >

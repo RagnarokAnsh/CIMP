@@ -34,6 +34,17 @@ export class Comment {
   @Column({ type: 'enum', enum: CommentVisibility, default: CommentVisibility.INTERNAL })
   visibility: CommentVisibility;
 
+  // Language `body` was written in (base code, e.g. 'es'), when known. Declared
+  // by the reporter's portal or detected by the translation provider.
+  @Column({ name: 'source_locale', type: 'varchar', length: 8, nullable: true })
+  sourceLocale: string | null;
+
+  // Cached machine translations keyed by base locale: { es: '…', fr: '…' }.
+  // A cache, never the source of truth — `body` is always the original, and an
+  // empty/missing entry simply means "show the original".
+  @Column({ type: 'jsonb', nullable: true })
+  translations: Record<string, string> | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

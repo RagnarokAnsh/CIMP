@@ -1,16 +1,19 @@
 import 'reflect-metadata';
 import 'dotenv/config';
+import * as crypto from 'crypto';
 import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcryptjs';
 import { AppDataSource } from '../src/data-source';
 import {
-  Attachment, AuditEvent, Comment, Issue, NotificationLog, Platform, Reporter,
-  ReporterIssueView, SavedView, StaffUser, UserPlatformRole,
+  ApiToken, Attachment, AuditEvent, AutomationRule, Comment, CsatResponse, Issue,
+  IssueLabel, IssueLink, IssueWatcher, Label, NotificationLog, Platform, Reporter,
+  ReporterIssueView, ReporterSubscription, SavedView, StaffUser, UserPlatformRole,
+  WebhookEndpoint,
 } from '../src/entities';
 import {
-  AccountStatus, ActorType, CommentVisibility, IssueStatus, JiraSyncStatus,
-  NotificationChannel, NotificationStatus, Priority, PlatformStatus,
-  RecipientType, Role, ScanStatus,
+  AccountStatus, ActorType, AutomationAction, AutomationTrigger, CommentVisibility,
+  IssueLinkType, IssueStatus, JiraSyncStatus, NotificationChannel, NotificationStatus,
+  Priority, PlatformStatus, RecipientType, Role, ScanStatus,
 } from '../src/common/enums';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -21,12 +24,17 @@ import {
 // What it does:
 //   • Connects with synchronize=false (safe for a migrated production DB — it
 //     never touches the schema; the migrations must already be applied).
-//   • WIPES every data table, then inserts a curated, internally-consistent
-//     dataset: 4 portals, 10 staff covering the full RBAC matrix, 12 reporters,
-//     ~32 issues across every status & priority, threaded comments (internal +
-//     reporter-visible + reporter replies), attachments, a full audit trail,
-//     notifications (so the staff bell shows unread), reporter "new update"
-//     indicators, saved views, Jira-linked issues, and SLA overdue/at-risk work.
+//   • WIPES every data table (discovered dynamically), then inserts a curated,
+//     internally-consistent dataset: 4 portals (one with a per-platform SLA
+//     policy), 12 staff covering the full RBAC matrix, 12 reporters, ~33 issues
+//     across every status & priority, threaded comments, attachments, a full
+//     audit trail, notifications (bell unread), reporter "new update" markers,
+//     saved views (incl. a JQL one), Jira-linked issues, and SLA overdue/at-risk
+//     work (sla_started_at is back-dated — without it nothing shows overdue).
+//   • Plus the differentiator features: CSAT ratings (👍/👎 + a comment), a
+//     published known-issue with a reporter subscription (deflection), a
+//     duplicate merge (linked + closed), SDK diagnostics context, labels +
+//     issue watchers, and one automation rule / API token / webhook endpoint.
 //   • Prints all login credentials and a ready-to-open reporter portal link.
 //
 // Everything is tuned to the real queries: notification recipient = staff id
@@ -60,12 +68,30 @@ const byIdx = <T>(arr: T[], i: number): T => arr[i % arr.length];
 
 // ---- static data: platforms ------------------------------------------------
 
-const PLATFORMS = [
-  { key: 'nimbus-crm', name: 'Nimbus CRM', domain: 'nimbus.example.com', jira: false, jiraKey: null as string | null },
-  { key: 'vault-pay', name: 'Vault Pay', domain: 'vaultpay.example.com', jira: true, jiraKey: 'VAULT' },
+const PLATFORMS: {
+  key: string; name: string; domain: string; jira: boolean;
+  jiraKey: string | null; slaPolicy?: Record<string, number>;
+}[] = [
+  { key: 'nimbus-crm', name: 'Nimbus CRM', domain: 'nimbus.example.com', jira: false, jiraKey: null },
+  // Vault Pay is finance-critical — tighter per-platform SLA overrides.
+  { key: 'vault-pay', name: 'Vault Pay', domain: 'vaultpay.example.com', jira: true, jiraKey: 'VAULT', slaPolicy: { CRITICAL: 4, HIGH: 24, MEDIUM: 48 } },
   { key: 'shiftbridge-hr', name: 'ShiftBridge HR', domain: 'shiftbridge.example.com', jira: false, jiraKey: null },
   { key: 'cargopilot', name: 'CargoPilot Logistics', domain: 'cargopilot.example.com', jira: false, jiraKey: null },
 ];
+
+// Per-platform label catalog (deflection/triage tagging).
+const LABELS: Record<string, { name: string; color: string }[]> = {
+  'nimbus-crm': [
+    { name: 'bug', color: '#ef4444' }, { name: 'regression', color: '#f97316' },
+    { name: 'import', color: '#8b5cf6' }, { name: 'ux', color: '#06b6d4' },
+  ],
+  'vault-pay': [
+    { name: 'bug', color: '#ef4444' }, { name: 'finance-impacting', color: '#dc2626' },
+    { name: 'api', color: '#6366f1' },
+  ],
+  'shiftbridge-hr': [{ name: 'bug', color: '#ef4444' }, { name: 'performance', color: '#eab308' }],
+  'cargopilot': [{ name: 'bug', color: '#ef4444' }, { name: 'timezone', color: '#14b8a6' }],
+};
 
 // ---- static data: staff (the RBAC story) -----------------------------------
 
@@ -150,6 +176,7 @@ const REOPEN_NOTE = [
 type ThreadMsg = { by: string; body: string; visibility?: CommentVisibility; daysAgo?: number };
 type AttachSpec = { filename: string; contentType: string; sizeBytes: number; scan?: ScanStatus };
 type IssueSpec = {
+  key?: string; // stable id so another issue can point at it as its canonical
   platform: string;
   reporter: string;
   description: string;
@@ -165,6 +192,12 @@ type IssueSpec = {
   attachments?: AttachSpec[];
   notifyAdmin?: boolean; // raises an @mention notification to the admin (bell)
   seen?: boolean; // has the reporter seen the latest update?
+  csat?: { score: 0 | 1; comment?: string }; // reporter rating (RESOLVED/CLOSED only)
+  publicTitle?: string; // publish as a known issue (deflection feed)
+  context?: Record<string, unknown>; // SDK diagnostics (issue.context jsonb)
+  labels?: string[]; // label names to tag (must be in the platform catalog)
+  watchers?: string[]; // staff keys watching this issue
+  duplicateOf?: string; // spec `key` of the canonical this duplicates (same platform)
 };
 
 const rv = CommentVisibility.REPORTER_VISIBLE;
@@ -175,6 +208,14 @@ const ISSUES: IssueSpec[] = [
   {
     platform: 'nimbus-crm', reporter: 'priya', priority: Priority.HIGH, status: IssueStatus.RESOLVED,
     createdDaysAgo: 9, resolvedDaysAgo: 5, assignee: 'hannah', seen: true,
+    csat: { score: 1 }, labels: ['bug', 'import'],
+    context: {
+      sdkVersion: '0.7.0', appVersion: '4.12.1', url: '/contacts/import', browser: 'Chrome 120',
+      os: 'Windows 11', viewport: { w: 1920, h: 1080 },
+      consoleErrors: ['RangeError: invalid code point at CsvRow.parse (import.js:214)'],
+      failedRequests: [{ method: 'POST', url: '/api/contacts/import', status: 500, ts: '2026-07-05T09:12:00Z' }],
+      breadcrumbs: [{ path: '/contacts' }, { path: '/contacts/import' }],
+    },
     description:
       'CSV import of contacts silently drops every row where the name contains accented characters (e.g. José, Müller). About 1 in 5 contacts never imports.',
     attachments: [{ filename: 'contacts-export.csv', contentType: 'text/csv', sizeBytes: 184_320, scan: ScanStatus.CLEAN }],
@@ -215,6 +256,8 @@ const ISSUES: IssueSpec[] = [
   {
     platform: 'nimbus-crm', reporter: 'priya', priority: Priority.CRITICAL, status: IssueStatus.IN_PROGRESS,
     createdDaysAgo: 2, assignee: 'hannah', notifyAdmin: true, seen: false,
+    key: 'nimbus-dup-leads', publicTitle: 'Duplicate leads created on double-submit',
+    labels: ['bug', 'regression'], watchers: ['raj', 'wei'],
     description: 'New lead web-form submissions are duplicated when the user double-clicks Submit — duplicates are polluting the sales queue.',
     thread: [
       { by: 'priya', body: 'This is creating duplicate leads in production — fairly urgent for us.', visibility: rv, daysAgo: 1.9 },
@@ -228,11 +271,22 @@ const ISSUES: IssueSpec[] = [
     createdDaysAgo: 11, reopenedDaysAgo: 1, assignee: 'hannah', seen: false,
     description: 'Mobile app crashes when opening a contact that has no email address on file.',
   },
+  {
+    // Filed separately, then merged into the canonical dup-leads issue above.
+    platform: 'nimbus-crm', reporter: 'tom', priority: Priority.HIGH, status: IssueStatus.NEW,
+    createdDaysAgo: 1.6, seen: false, duplicateOf: 'nimbus-dup-leads',
+    description: 'Submitting the "New Lead" form twice in quick succession creates two identical leads in the queue.',
+  },
 
   // ── Vault Pay (Jira-linked) ──────────────────────────────────────────────
   {
     platform: 'vault-pay', reporter: 'daniel', priority: Priority.CRITICAL, status: IssueStatus.IN_PROGRESS,
     createdDaysAgo: 1.5, assignee: 'diego', jira: 'VAULT-204', notifyAdmin: true, seen: false,
+    publicTitle: 'Refund webhook double-firing on partial refunds', labels: ['bug', 'finance-impacting'], watchers: ['sofia'],
+    context: {
+      sdkVersion: '0.7.0', appVersion: '2.3.0', url: '/ledger/refunds', browser: 'Firefox 121', os: 'macOS 14',
+      failedRequests: [{ method: 'POST', url: '/api/webhooks/refund', status: 200, ts: '2026-07-13T10:00:00Z' }],
+    },
     description: 'Refund webhook fires twice for partially-refunded transactions, double-counting refunds in our ledger.',
     thread: [
       { by: 'daniel', body: "We're double-counting refunds in our ledger — this needs urgent attention.", visibility: rv, daysAgo: 1.4 },
@@ -244,6 +298,7 @@ const ISSUES: IssueSpec[] = [
   {
     platform: 'vault-pay', reporter: 'mei', priority: Priority.MEDIUM, status: IssueStatus.RESOLVED,
     createdDaysAgo: 7, resolvedDaysAgo: 2, assignee: 'diego', jira: 'VAULT-198', seen: true,
+    csat: { score: 0, comment: 'Better, but one legacy report still shows the rounding.' }, labels: ['bug'],
     description: 'Settlement report total is off by one cent due to rounding of the final line item.',
   },
   {
@@ -324,6 +379,7 @@ const ISSUES: IssueSpec[] = [
   {
     platform: 'cargopilot', reporter: 'yuki', priority: Priority.HIGH, status: IssueStatus.RESOLVED,
     createdDaysAgo: 8, resolvedDaysAgo: 4, assignee: 'mateo', seen: true,
+    csat: { score: 1 }, labels: ['bug', 'timezone'],
     description: 'Shipment ETA is off by exactly one hour for all routes since the daylight-saving change.',
     thread: [
       { by: 'yuki', body: 'Every route ETA has been exactly one hour early since Sunday.', visibility: rv, daysAgo: 7.8 },
@@ -420,13 +476,16 @@ async function main() {
   console.log('\n  Connected to database.');
 
   console.log('  Wiping existing data…');
-  await ds.query(
-    `TRUNCATE TABLE
-      notification_logs, reporter_issue_views, audit_events, comments,
-      attachments, issues, reporters, user_platform_roles, saved_views,
-      staff_users, platforms
-     RESTART IDENTITY CASCADE`,
+  // Discover every app table dynamically so new entities are always covered —
+  // the old hard-coded list silently skipped csat/webhooks/subscriptions/labels/…
+  const tables: { tablename: string }[] = await ds.query(
+    `SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'migrations'`,
   );
+  if (tables.length > 0) {
+    await ds.query(
+      `TRUNCATE TABLE ${tables.map((t) => `"${t.tablename}"`).join(', ')} RESTART IDENTITY CASCADE`,
+    );
+  }
 
   const platformRepo = ds.getRepository(Platform);
   const staffRepo = ds.getRepository(StaffUser);
@@ -439,6 +498,15 @@ async function main() {
   const viewRepo = ds.getRepository(ReporterIssueView);
   const attachRepo = ds.getRepository(Attachment);
   const savedRepo = ds.getRepository(SavedView);
+  const labelRepo = ds.getRepository(Label);
+  const issueLabelRepo = ds.getRepository(IssueLabel);
+  const watcherRepo = ds.getRepository(IssueWatcher);
+  const csatRepo = ds.getRepository(CsatResponse);
+  const linkRepo = ds.getRepository(IssueLink);
+  const subRepo = ds.getRepository(ReporterSubscription);
+  const automationRepo = ds.getRepository(AutomationRule);
+  const tokenRepo = ds.getRepository(ApiToken);
+  const webhookRepo = ds.getRepository(WebhookEndpoint);
 
   // ── Platforms ──────────────────────────────────────────────────────────
   const platformByKey = new Map<string, Platform>();
@@ -451,11 +519,27 @@ async function main() {
         handoffSecret: `demo-secret-${p.key}`,
         jiraEnabled: p.jira,
         jiraProjectKey: p.jiraKey,
+        slaPolicy: p.slaPolicy ?? null,
       }),
     );
     platformByKey.set(p.key, saved);
   }
   console.log(`  ✓ ${PLATFORMS.length} platforms`);
+
+  // ── Label catalog (per platform) ───────────────────────────────────────
+  const labelByKey = new Map<string, Label>();
+  let labelCount = 0;
+  for (const [pKey, defs] of Object.entries(LABELS)) {
+    const platform = platformByKey.get(pKey)!;
+    for (const d of defs) {
+      const l = await labelRepo.save(
+        labelRepo.create({ platform: { id: platform.id } as any, name: d.name, color: d.color }),
+      );
+      labelByKey.set(`${pKey}::${d.name}`, l);
+      labelCount++;
+    }
+  }
+  console.log(`  ✓ ${labelCount} labels`);
 
   // ── Staff + role grants ────────────────────────────────────────────────
   const adminHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
@@ -507,9 +591,14 @@ async function main() {
   // ── Issues + all child records ──────────────────────────────────────────
   const repFirstSeen = new Map<string, Date>();
   const repLastSeen = new Map<string, Date>();
+  const issueByKey = new Map<string, Issue>();
+  const issueByIdx = new Map<number, Issue>();
   let issueCount = 0;
   let commentCount = 0;
   let notifCount = 0;
+  let csatCount = 0;
+  let labelTagCount = 0;
+  let watcherCount = 0;
   let seq = 1000;
 
   for (let idx = 0; idx < ISSUES.length; idx++) {
@@ -554,11 +643,19 @@ async function main() {
         priority: spec.priority,
         resolvedAt,
         closedAt,
+        // SLA clock baseline (L8): reopen restarts it, everything else = created.
+        // Without this it defaults to now() and NOTHING shows overdue/at-risk.
+        slaStartedAt: spec.status === IssueStatus.REOPENED ? finalAt : created,
+        context: spec.context ?? null,
+        publiclyVisible: !!spec.publicTitle,
+        publicTitle: spec.publicTitle ?? null,
         jiraIssueKey: spec.jira ?? null,
         jiraSyncStatus: spec.jira ? JiraSyncStatus.SYNCED : JiraSyncStatus.NOT_SYNCED,
       }),
     );
     issueCount++;
+    if (spec.key) issueByKey.set(spec.key, issue);
+    issueByIdx.set(idx, issue);
     let lastActivity = created;
 
     // Small helpers (close over `issue`/repos) that also back-date the row.
@@ -702,6 +799,40 @@ async function main() {
       );
     }
 
+    // Labels (tag from the platform catalog).
+    for (const name of spec.labels ?? []) {
+      const label = labelByKey.get(`${spec.platform}::${name}`);
+      if (!label) continue;
+      await issueLabelRepo.save(
+        issueLabelRepo.create({ issue: { id: issue.id } as any, label: { id: label.id } as any }),
+      );
+      labelTagCount++;
+    }
+
+    // Watchers (staff subscribed to this specific issue).
+    for (const wKey of spec.watchers ?? []) {
+      const w = staffByKey.get(wKey);
+      if (!w) continue;
+      await watcherRepo.save(
+        watcherRepo.create({ issue: { id: issue.id } as any, staffUser: { id: w.id } as any }),
+      );
+      watcherCount++;
+    }
+
+    // CSAT — reporter's 👍/👎 on a resolved/closed issue (drives the badge + KPI).
+    if (spec.csat && (spec.status === IssueStatus.RESOLVED || spec.status === IssueStatus.CLOSED)) {
+      const c = await csatRepo.save(
+        csatRepo.create({
+          issue: { id: issue.id } as any,
+          reporter: { id: reporter.id } as any,
+          score: spec.csat.score,
+          comment: spec.csat.comment ?? null,
+        }),
+      );
+      await ds.query('UPDATE csat_responses SET created_at=$1, updated_at=$1 WHERE id=$2', [finalAt, c.id]);
+      csatCount++;
+    }
+
     // Reporter "has new updates" indicator: seen → viewed after last activity;
     // unseen → viewed right after creation, so later updates light the dot.
     const seen = spec.seen ?? (idx % 2 === 0);
@@ -732,6 +863,98 @@ async function main() {
     await ds.query('UPDATE reporters SET first_seen_at=$1, last_seen_at=$2 WHERE id=$3', [first, last, id]);
   }
   console.log(`  ✓ ${issueCount} issues, ${commentCount} comments, ${notifCount} notifications`);
+  console.log(`  ✓ ${csatCount} CSAT ratings, ${labelTagCount} label tags, ${watcherCount} issue watchers`);
+
+  // ── Duplicate merges (close-the-loop) ────────────────────────────────────
+  // Mark flagged issues as duplicates of their canonical: close them, link the
+  // pair (DUPLICATES), and drop the reporter-visible + internal system comments
+  // the real merge flow writes.
+  let mergeCount = 0;
+  for (let idx = 0; idx < ISSUES.length; idx++) {
+    const spec = ISSUES[idx];
+    if (!spec.duplicateOf) continue;
+    const dup = issueByIdx.get(idx);
+    const canonical = issueByKey.get(spec.duplicateOf);
+    if (!dup || !canonical) continue;
+    const actor = staffByKey.get(spec.assignee ?? focalPointByPlatform.get(spec.platform) ?? 'raj')!;
+    await issueRepo.update(dup.id, {
+      duplicateOf: { id: canonical.id } as any,
+      status: IssueStatus.CLOSED,
+      closedAt: daysAgo(1.3),
+    } as any);
+    await linkRepo.save(
+      linkRepo.create({
+        sourceIssue: { id: dup.id } as any,
+        targetIssue: { id: canonical.id } as any,
+        type: IssueLinkType.DUPLICATES,
+        createdBy: actor.id,
+      }),
+    );
+    await commentRepo.save(
+      commentRepo.create({
+        issue: { id: dup.id } as any, author: { id: actor.id } as any, authorType: ActorType.STAFF,
+        body: 'This issue was identified as a duplicate of an already-tracked problem. It has been closed here, and you\'ll be notified on this issue when the underlying problem is resolved.',
+        visibility: rv,
+      }),
+    );
+    await commentRepo.save(
+      commentRepo.create({
+        issue: { id: canonical.id } as any, author: { id: actor.id } as any, authorType: ActorType.STAFF,
+        body: `${dup.referenceNo} was merged into this issue as a duplicate.`,
+        visibility: internal,
+      }),
+    );
+    mergeCount++;
+  }
+  if (mergeCount) console.log(`  ✓ ${mergeCount} duplicate merge(s)`);
+
+  // ── Reporter subscription ("notify me instead" — deflection) ─────────────
+  const knownIssue = issueByKey.get('nimbus-dup-leads');
+  if (knownIssue) {
+    const s = await subRepo.save(
+      subRepo.create({
+        issue: { id: knownIssue.id } as any,
+        reporter: { id: reporterByKey.get('lucia')!.id } as any,
+      }),
+    );
+    await ds.query('UPDATE reporter_subscriptions SET created_at=$1 WHERE id=$2', [daysAgo(1), s.id]);
+    console.log('  ✓ 1 reporter subscription (deflection)');
+  }
+
+  // ── Automation rule + API token + webhook (Admin → Integrations/Webhooks) ─
+  await automationRepo.save(
+    automationRepo.create({
+      platform: { id: platformByKey.get('vault-pay')!.id } as any,
+      name: 'Bump reopened issues to High',
+      enabled: true,
+      trigger: AutomationTrigger.STATUS_CHANGED,
+      triggerStatus: IssueStatus.REOPENED,
+      action: AutomationAction.SET_PRIORITY,
+      actionValue: Priority.HIGH,
+      createdBy: staffByKey.get('admin')!.id,
+    }),
+  );
+  const rawToken = `cimp_${crypto.randomBytes(24).toString('hex')}`;
+  await tokenRepo.save(
+    tokenRepo.create({
+      platform: { id: platformByKey.get('nimbus-crm')!.id } as any,
+      name: 'status-page',
+      tokenHash: crypto.createHash('sha256').update(rawToken).digest('hex'),
+      lastFour: rawToken.slice(-4),
+      createdBy: staffByKey.get('admin')!.id,
+    }),
+  );
+  await webhookRepo.save(
+    webhookRepo.create({
+      platform: null, // all platforms
+      url: 'https://ops.example.com/hooks/cimp',
+      secret: crypto.randomBytes(32).toString('hex'),
+      events: ['issue.created', 'issue.status_changed', 'issue.sla_breached'],
+      enabled: true,
+      createdBy: staffByKey.get('admin')!.id,
+    }),
+  );
+  console.log('  ✓ 1 automation rule, 1 API token, 1 webhook endpoint');
 
   // ── Saved views (per-staff issue-list filters) ───────────────────────────
   const base = { status: '', priority: '', q: '', assignedToMe: false, platformId: '', from: '', to: '', sort: 'createdAt', order: 'DESC' };
@@ -743,6 +966,7 @@ async function main() {
     { staff: 'admin', name: 'Recently resolved', filters: { ...base, status: IssueStatus.RESOLVED, sort: 'updatedAt' } },
     { staff: 'wei', name: 'Nimbus · In progress', filters: { ...base, status: IssueStatus.IN_PROGRESS, platformId: nimbusId } },
     { staff: 'sofia', name: 'Vault · High priority', filters: { ...base, priority: Priority.HIGH, platformId: vaultId } },
+    { staff: 'sofia', name: 'My open criticals (JQL)', filters: { ...base, jql: 'status IN (NEW, IN_PROGRESS) AND priority = CRITICAL AND assignee = me' } },
     { staff: 'raj', name: 'Assigned to me', filters: { ...base, assignedToMe: true } },
   ];
   for (const v of SAVED_VIEWS) {

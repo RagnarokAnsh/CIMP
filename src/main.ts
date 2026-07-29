@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
@@ -13,8 +14,24 @@ import { isProductionEnv } from './config/is-production';
 // verbose output are never exposed by an omitted env var.
 const isProduction = isProductionEnv();
 
+// Translate TRUST_PROXY into the shape Express expects. Returns null for "off".
+function resolveTrustProxy(raw: string): number | string | boolean | null {
+  const value = raw.trim();
+  // Express throws on the strings 'true'/'false' (proxy-addr tries to parse them
+  // as IPs), so map them here rather than dying at boot on an obvious value.
+  if (!value || value === 'false') return null;
+  if (value === 'true') return true;
+  // Numeric strings MUST be coerced: Express reads a number as a hop count, but
+  // '1' goes to proxy-addr, which reads it as the IPv4 literal 0.0.0.1 — no
+  // error, just a trust list that matches nothing. Silent, so easy to miss.
+  if (/^\d+$/.test(value)) return Number(value);
+  // 'loopback' | 'linklocal' | 'uniquelocal' | comma-separated IPs/CIDRs;
+  // Express splits and compiles those itself.
+  return value;
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.setGlobalPrefix('api');
 
   // Security headers (CSP/HSTS/X-Frame-Options/etc.).
@@ -32,6 +49,19 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const config = app.get(ConfigService);
+
+  // ThrottlerGuard keys its buckets on req.ip, which Express only derives from
+  // X-Forwarded-For when 'trust proxy' is set. Behind an LB/ingress with it
+  // unset, req.ip is the proxy for every client, so the login (10/min) and
+  // intake (10/min) limits become 10/min for the whole world combined.
+  // Deliberately OFF by default: trusting X-Forwarded-For when nothing in front
+  // rewrites it lets any client forge a fresh IP per request and evade rate
+  // limiting entirely — strictly worse than one shared bucket. Turning this on
+  // must be a conscious statement that a proxy really is in front.
+  const trustProxy = resolveTrustProxy(config.get<string>('trustProxy') ?? '');
+  if (trustProxy !== null) {
+    app.set('trust proxy', trustProxy);
+  }
 
   // CORS: '*' in dev, restrict to known origins in production.
   const origins = config.get<string>('corsOrigins') ?? '*';

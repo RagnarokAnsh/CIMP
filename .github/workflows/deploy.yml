@@ -1,11 +1,34 @@
 name: Deploy to production
 
 # Push to main → run the full build/test gate, then deploy to the EC2 box over
-# SSH. Also runnable manually from the Actions tab (workflow_dispatch).
+# SSH. Also runnable manually from the Actions tab (workflow_dispatch), where
+# the "Run database migrations" checkbox controls `migration:run` on the server.
+#
+# Migrations:
+#   - Manual runs: decided by the checkbox (per-deploy, visible in the UI).
+#   - Push-triggered runs: decided by the repo *variable* RUN_MIGRATIONS
+#     (Settings → Secrets and variables → Actions → Variables), default false.
+#     Setting it to "true" is safe as a standing default: `migration:run` is a
+#     no-op when nothing is pending, and it removes the footgun of a push
+#     deploy shipping code whose schema never arrived.
+#
+# SSH_KNOWN_HOSTS (secret, required): the server's public host key line(s), so
+# the connection is verified against a pinned key instead of trusting whatever
+# key the network presents at deploy time. One-time setup from a trusted
+# machine that has already connected to the box:
+#   ssh-keyscan -t ed25519 <SSH_HOST>
+# and verify the fingerprint matches the server's own:
+#   ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub   (run on the server)
+# Paste the full output line(s) into the SSH_KNOWN_HOSTS secret.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: Run database migrations during this deploy
+        type: boolean
+        default: false
 
 # Never run two production deploys at once, and don't cancel an in-flight one.
 concurrency:
@@ -28,11 +51,14 @@ jobs:
             package-lock.json
             frontend/package-lock.json
 
-      - name: Backend — install, typecheck, test, build
+      # The e2e suite stubs all external boundaries (no database needed), so it
+      # runs here too — the gate covers the full backend suite, not just unit.
+      - name: Backend — install, typecheck, test (unit + e2e), build
         run: |
           npm ci
           npm run typecheck
           npm test
+          npm run test:e2e
           npm run build
 
       - name: Frontend — install, typecheck, build
@@ -55,15 +81,32 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           APP_DIR: ${{ secrets.APP_DIR }}
           PM2_APP: ${{ secrets.PM2_APP }}
-          RUN_MIGRATIONS: ${{ secrets.RUN_MIGRATIONS }}
+          INPUT_RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+          VAR_RUN_MIGRATIONS: ${{ vars.RUN_MIGRATIONS }}
         run: |
+          # Pinned host key — refuse to deploy without one (see header comment).
+          if [ -z "$SSH_KNOWN_HOSTS" ]; then
+            echo "::error::SSH_KNOWN_HOSTS secret is not set. Pin the server's host key: run 'ssh-keyscan -t ed25519 <SSH_HOST>' from a trusted machine, verify the fingerprint against the server's /etc/ssh/ssh_host_ed25519_key.pub, and store the output as the SSH_KNOWN_HOSTS secret."
+            exit 1
+          fi
           mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Migrations: checkbox on manual runs, RUN_MIGRATIONS repo variable
+          # on push-triggered runs (default: false).
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            RUN_MIGRATIONS="${INPUT_RUN_MIGRATIONS:-false}"
+          else
+            RUN_MIGRATIONS="${VAR_RUN_MIGRATIONS:-false}"
+          fi
+          echo "Deploying with RUN_MIGRATIONS=$RUN_MIGRATIONS (event: $GITHUB_EVENT_NAME)"
+
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
             "$SSH_USER@$SSH_HOST" \
-            "APP_DIR='$APP_DIR' PM2_APP='${PM2_APP:-cimp-api}' RUN_MIGRATIONS='${RUN_MIGRATIONS:-false}' bash -s" \
+            "APP_DIR='$APP_DIR' PM2_APP='${PM2_APP:-cimp-api}' RUN_MIGRATIONS='$RUN_MIGRATIONS' bash -s" \
             < scripts/deploy.sh

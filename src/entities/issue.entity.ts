@@ -21,6 +21,7 @@ import { ReporterIssueView } from './reporter-issue-view.entity';
 @Index('idx_issues_created_at', ['createdAt'])
 @Index('idx_issues_platform_status', ['platform', 'status'])
 @Index('idx_issues_platform_created', ['platform', 'createdAt'])
+@Index('idx_issues_duplicate_of', ['duplicateOf'])
 export class Issue {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -44,11 +45,33 @@ export class Issue {
   @Column({ type: 'text' })
   description: string;
 
+  // Known-issue publication (deflection): staff opt-in per issue with a
+  // curated public title. Only these two fields ever leave via the
+  // unauthenticated known-issues endpoint.
+  @Column({ name: 'publicly_visible', default: false })
+  publiclyVisible: boolean;
+
+  @Column({ name: 'public_title', type: 'varchar', length: 140, nullable: true })
+  publicTitle: string | null;
+
+  // Client diagnostics attached at intake by the cimp-connect SDK (environment,
+  // console errors, failed requests, breadcrumbs). UNTRUSTED reporter input:
+  // sanitized/size-clamped by the reporter service, rendered as text only.
+  @Column({ type: 'jsonb', nullable: true })
+  context: Record<string, unknown> | null;
+
   @Column({ type: 'enum', enum: IssueStatus, default: IssueStatus.NEW })
   status: IssueStatus;
 
   @Column({ type: 'enum', enum: Priority, default: Priority.MEDIUM })
   priority: Priority;
+
+  // Set when this issue was merged as a duplicate of another (same-platform)
+  // issue. Source of truth for resolution fan-out to duplicate reporters — the
+  // DUPLICATES issue_link row created alongside is presentation only.
+  @ManyToOne(() => Issue, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'duplicate_of_id' })
+  duplicateOf: Issue | null;
 
   @Column({ name: 'jira_issue_key', type: 'varchar', nullable: true })
   jiraIssueKey: string | null;
@@ -74,6 +97,17 @@ export class Issue {
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
+
+  // SLA clock baseline (L8): equals created_at until the issue is REOPENED,
+  // which resets it to the reopen time so old issues don't instantly re-breach.
+  @Column({ name: 'sla_started_at', type: 'timestamptz', default: () => 'now()' })
+  slaStartedAt: Date;
+
+  // Set once by the breach sweep when it first observes the SLA blown —
+  // idempotence marker so escalation fires exactly once per SLA cycle.
+  // Cleared on REOPENED (new cycle).
+  @Column({ name: 'sla_breached_at', type: 'timestamptz', nullable: true })
+  slaBreachedAt: Date | null;
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;

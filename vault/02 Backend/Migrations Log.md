@@ -1,7 +1,7 @@
 ---
 title: Migrations Log
 tags: [cimp, backend, database, migrations]
-updated: 2026-07-07
+updated: 2026-07-13
 ---
 # Migrations Log (`src/migrations/`)
 ← [[Backend Modules and API]] · [[CIMP - Home]]
@@ -21,10 +21,20 @@ updated: 2026-07-07
 | 9 | `1719300000000-AddAutomationRules.ts` | `automation_rules` + trigger/action enums. |
 | 10 | `1719400000000-AddApiTokens.ts` | `api_tokens` (hash unique, platform FK). |
 | 11 | `1719500000000-AddWatcherRole.ts` | `ALTER TYPE role_enum ADD VALUE IF NOT EXISTS 'WATCHER'` (read-only staff role). Down is a no-op — Postgres can't drop enum values. |
+| 12 | `1719600000000-AddIssueDuplicateOf.ts` | `issues.duplicate_of_id` (self-FK `ON DELETE SET NULL`) + index. Duplicate merge flow → [[Features - Shipped|Duplicate merge]]. |
+| 13 | `1719700000000-AddWebhookEndpoints.ts` | `webhook_endpoints` (url/secret/events jsonb/enabled/platform FK CASCADE, platform-nullable = global) + platform index. → [[Features - Shipped|Outbound webhooks]]. |
+| 14 | `1719800000000-AddIssueContext.ts` | `issues.context` jsonb (unindexed) — SDK diagnostics, sanitized before write. → [[Features - Shipped|SDK context capture]]. |
+| 15 | `1719900000000-AddCsatResponses.ts` | `csat_responses` (issue FK **unique** + reporter FK, smallint score, comment, CASCADE). → [[Features - Shipped|CSAT]]. |
+| 16 | `1720000000000-AddDeflection.ts` | `issues.publicly_visible`/`public_title` + `reporter_subscriptions` (issue+reporter unique, CASCADE, index). → [[Features - Shipped|Known-issues deflection]]. |
+| 17 | `1720100000000-AddSlaPolicy.ts` | `platforms.sla_policy` jsonb + `issues.sla_started_at` (backfilled from `created_at`) + `sla_breached_at` + partial index `WHERE sla_breached_at IS NULL`. → [[Features - Shipped|SLA policies + escalations]]. |
+| 18 | `1720200000000-AddCannedResponses.ts` | `canned_responses` (platform FK CASCADE, `UQ(platform_id, title)`, body text, `created_by` plain uuid, platform index). → [[Module - Canned Responses]]. |
+| 19 | `1720300000000-AddStatusPage.ts` | Public status page: `status_components`, `status_incidents`, `status_incident_updates`, `status_incident_components` (M2M) + **four enum types** (`status_components_status_enum`, `status_incidents_status_enum`, `status_incidents_impact_enum`, `status_incident_updates_status_enum`), created via `DO $$ … EXCEPTION WHEN duplicate_object` so re-runs are safe. → [[Module - Status Page]]. |
+| 20 | `1720400000000-AddCommentTranslations.ts` | `comments.source_locale` (varchar 8) + `comments.translations` (jsonb). Both nullable — an unconfigured deployment never writes them. → [[Module - Translation]]. |
 
 ## Gotchas
 - **`search_vector` FTS only works where migration #2 ran (prod).** Under dev `synchronize` the column is NULL → description search returns nothing (reference-number search still works). See [[Session Handoff]].
 - Deploy runs migrations only when `RUN_MIGRATIONS=true`. Migrations #4 (tokenVersion) logs out all staff once on deploy.
+- Migration #19 creates enum **types** as well as tables; its `down` drops both. Postgres cannot drop an enum still referenced by a column, so the table drops must come first (they do).
 
 ## Related
 [[Data Model]] · [[Entity Reference]] · [[Security Audit and Hardening]]

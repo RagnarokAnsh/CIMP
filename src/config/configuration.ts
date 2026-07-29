@@ -3,6 +3,12 @@ export default () => ({
   // Comma-separated list of allowed frontend origins. '*' (default) allows all
   // — restrict this in production.
   corsOrigins: process.env.CORS_ORIGINS ?? '*',
+  // Express `trust proxy`. Empty (default) = OFF, so req.ip is the socket peer.
+  // Behind a load balancer that peer is the PROXY, and every client then shares
+  // one rate-limit bucket. Set to a hop count ('1'), 'loopback', or a
+  // comma-separated IP/CIDR list of trusted proxies. See main.ts for why this
+  // must be an explicit operator decision rather than on by default.
+  trustProxy: process.env.TRUST_PROXY ?? '',
   database: {
     host: process.env.DB_HOST ?? 'localhost',
     port: parseInt(process.env.DB_PORT ?? '5432', 10),
@@ -42,7 +48,12 @@ export default () => ({
   throttle: {
     ttl: parseInt(process.env.THROTTLE_TTL ?? '60', 10),
     limit: parseInt(process.env.THROTTLE_LIMIT ?? '120', 10),
-    intakeLimit: parseInt(process.env.THROTTLE_INTAKE_LIMIT ?? '10', 10),
+    // No `intakeLimit` here on purpose. The per-route limits (reporter intake,
+    // login, SSE tickets) are @Throttle decorator arguments, which are evaluated
+    // at class-definition time and cannot read runtime config. A key here that
+    // nothing consumes is worse than none: an operator sets
+    // THROTTLE_INTAKE_LIMIT, sees it accepted, and believes the limit changed.
+    // Change the decorator in reporter.controller.ts instead.
   },
   mail: {
     host: process.env.SMTP_HOST,
@@ -61,6 +72,22 @@ export default () => ({
     // Shared secret for the inbound status webhook. Leave blank to disable
     // inbound sync (the endpoint then rejects everything).
     webhookSecret: process.env.JIRA_WEBHOOK_SECRET,
+  },
+  // Machine translation of reporter↔staff messages. 'none' (default) disables
+  // it entirely; 'libretranslate' posts to a LibreTranslate-compatible API.
+  // TRANSLATE_STAFF_LOCALE is the language your support team reads — inbound
+  // reporter messages are translated into it. Reporter-facing replies are
+  // translated into the reporter's own locale (from the hand-off token, or
+  // TRANSLATE_REPORTER_LOCALES as a fallback set to pre-warm).
+  translation: {
+    driver: process.env.TRANSLATE_DRIVER ?? 'none',
+    apiUrl: process.env.TRANSLATE_API_URL,
+    apiKey: process.env.TRANSLATE_API_KEY,
+    staffLocale: process.env.TRANSLATE_STAFF_LOCALE ?? 'en',
+    reporterLocales: (process.env.TRANSLATE_REPORTER_LOCALES ?? '')
+      .split(',')
+      .map((l) => l.trim())
+      .filter(Boolean),
   },
   // Authorization policy seam for OD-09: may focal points change issue status?
   focalPointCanTransition:

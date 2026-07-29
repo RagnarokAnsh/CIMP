@@ -30,12 +30,7 @@ export class NotificationsService {
     const issue = await this.loadIssue(issueId);
     if (!issue) return;
 
-    // Focal points scoped to this platform (global focal points don't exist).
-    const grants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: platformId } },
-      relations: { staffUser: true },
-    });
-    const recipients = this.activeRecipients(grants.map((g) => g.staffUser));
+    const recipients = this.activeRecipients(await this.focalPointsFor(platformId));
 
     const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
     for (const r of recipients) {
@@ -82,17 +77,14 @@ export class NotificationsService {
     });
     if (!issue) return;
 
-    const focalGrants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
-      relations: { staffUser: true },
-    });
+    const focalPoints = await this.focalPointsFor(issue.platform.id);
     const watcherRows = await this.watchers.find({
       where: { issue: { id: issueId } },
       relations: { staffUser: true },
     });
     const candidates = [
       issue.assignee,
-      ...focalGrants.map((g) => g.staffUser),
+      ...focalPoints,
       ...watcherRows.map((w) => w.staffUser),
     ];
     const recipients = this.activeRecipients(candidates).filter((r) => r.id !== actorStaffId);
@@ -109,6 +101,40 @@ export class NotificationsService {
     }
   }
 
+  // SLA escalation: the breach sweep found an open issue past its window.
+  // Louder audience than a normal status change: assignee + focal points +
+  // watchers, and it lands in the bell via the NotificationLog rows.
+  async notifySlaBreach(issueId: string): Promise<void> {
+    const issue = await this.issues.findOne({
+      where: { id: issueId },
+      relations: { platform: true, assignee: true },
+    });
+    if (!issue) return;
+
+    const focalPoints = await this.focalPointsFor(issue.platform.id);
+    const watcherRows = await this.watchers.find({
+      where: { issue: { id: issueId } },
+      relations: { staffUser: true },
+    });
+    const recipients = this.activeRecipients([
+      issue.assignee,
+      ...focalPoints,
+      ...watcherRows.map((w) => w.staffUser),
+    ]);
+
+    const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
+    for (const r of recipients) {
+      await this.dispatch(issueId, r, 'issue.sla_breached', {
+        subject: `[${issue.platform.key}] SLA BREACHED: ${issue.referenceNo}`,
+        text:
+          `Issue ${issue.referenceNo} on ${issue.platform.name} has exceeded its `
+          + `${issue.priority} SLA window and needs attention.\n\n`
+          + `Status: ${issue.status}\nAssignee: ${issue.assignee?.name ?? 'Unassigned'}\n\n`
+          + `Open it: ${url}`,
+      });
+    }
+  }
+
   // Notify the assignee and focal points when a reporter replies on their issue.
   async notifyReporterReply(issueId: string): Promise<void> {
     const issue = await this.issues.findOne({
@@ -117,11 +143,8 @@ export class NotificationsService {
     });
     if (!issue) return;
 
-    const focalGrants = await this.roles.find({
-      where: { role: Role.FOCAL_POINT, platform: { id: issue.platform.id } },
-      relations: { staffUser: true },
-    });
-    const recipients = this.activeRecipients([issue.assignee, ...focalGrants.map((g) => g.staffUser)]);
+    const focalPoints = await this.focalPointsFor(issue.platform.id);
+    const recipients = this.activeRecipients([issue.assignee, ...focalPoints]);
     if (recipients.length === 0) return;
 
     const url = `${this.mail.appUrl()}/staff/issues/${issueId}`;
@@ -197,6 +220,22 @@ export class NotificationsService {
     return { unread: 0 };
   }
 
+  // Focal points scoped to a platform (global focal points don't exist).
+  // Disabled accounts are excluded at the query level so an offboarded focal
+  // point's row never loads at all — same `su.status = :active` rule
+  // IssuesService.listAssignees applies when offering people to assign to.
+  private async focalPointsFor(platformId: string): Promise<StaffUser[]> {
+    const grants = await this.roles.find({
+      where: {
+        role: Role.FOCAL_POINT,
+        platform: { id: platformId },
+        staffUser: { status: AccountStatus.ACTIVE },
+      },
+      relations: { staffUser: true },
+    });
+    return grants.map((g) => g.staffUser);
+  }
+
   private async dispatch(
     issueId: string,
     recipient: StaffUser,
@@ -223,11 +262,17 @@ export class NotificationsService {
     );
   }
 
+  // Deduped, emailable, still-employed recipients. Offboarding has to stop
+  // notification delivery, not just login: until the status check below existed
+  // this method only deduped and checked for an address — so a DISABLED account
+  // kept getting issue descriptions and reference numbers by email and kept
+  // accruing bell rows. Matters most for someone disabled *after* being assigned:
+  // notifyAssignee loads them by id and has no other filter in front of it.
   private activeRecipients(users: (StaffUser | undefined | null)[]): StaffUser[] {
     const seen = new Set<string>();
     const out: StaffUser[] = [];
     for (const u of users) {
-      if (u && u.email && !seen.has(u.id)) {
+      if (u && u.email && u.status === AccountStatus.ACTIVE && !seen.has(u.id)) {
         seen.add(u.id);
         out.push(u);
       }

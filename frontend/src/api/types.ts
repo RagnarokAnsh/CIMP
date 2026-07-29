@@ -24,12 +24,36 @@ export interface ReporterIssueDetail {
   status: IssueStatus;
   priority: Priority;
   description: string;
+  context: Record<string, unknown> | null;
+  csat: { score: number; comment: string | null } | null;
   createdAt: string;
   updatedAt: string;
   attachments: {
     id: string; filename: string; contentType: string; sizeBytes: number; downloadable: boolean;
   }[];
-  updates: { body: string; createdAt: string; author: string; fromReporter: boolean }[];
+  updates: {
+    body: string;
+    createdAt: string;
+    author: string;
+    fromReporter: boolean;
+    /** True when `body` is a machine translation into the reporter's locale. */
+    translated?: boolean;
+    /** The text as originally written — present only when `translated`. */
+    originalBody?: string | null;
+  }[];
+}
+
+export interface SimilarIssue {
+  /**
+   * Staff-curated public title, present only for an explicitly published
+   * known issue. Null keeps an unpublished issue anonymous — the similar-issue
+   * search never discloses another reporter's own words.
+   */
+  title: string | null;
+  status: IssueStatus;
+  firstReportedAt: string;
+  reportCount: number;
+  subscribeToken: string;
 }
 
 export interface StaffMe {
@@ -37,6 +61,22 @@ export interface StaffMe {
   name: string;
   email: string;
   roles: { role: Role; platformId: string | null }[];
+  /**
+   * Mirrors the server's FOCAL_POINT_CAN_TRANSITION seam (OD-09) so the UI can
+   * hide controls the server would 403. Gating only — the server still decides.
+   * Optional: absent on older responses, and absence must read as "off".
+   */
+  policy?: { focalPointCanTransition: boolean };
+}
+
+/** A row from GET /admin/staff — the account plus its role grants. */
+export interface StaffWithRoles {
+  id: string;
+  name: string;
+  email: string;
+  /** AccountStatus: 'ACTIVE' | 'DISABLED'. DISABLED blocks login and revokes live tokens. */
+  status: string;
+  roles: { id: string; role: Role; platformId: string | null; platformKey: string | null }[];
 }
 
 export type SlaState = 'on_track' | 'at_risk' | 'breached' | null;
@@ -70,6 +110,17 @@ export interface StaffIssueDetail extends StaffIssueSummary {
   closedAt: string | null;
   jiraIssueKey: string | null;
   jiraSyncStatus: string;
+  /** SDK-captured diagnostics attached at intake (untrusted reporter input). */
+  context: Record<string, unknown> | null;
+  /** Reporter's resolution rating (1 = 👍, 0 = 👎). */
+  csat: { score: number; comment: string | null; createdAt: string } | null;
+  /** Known-issue publication state (deflection). */
+  publiclyVisible?: boolean;
+  publicTitle?: string | null;
+  /** Set when this issue was merged into a canonical issue as a duplicate. */
+  duplicateOf: { id: string; referenceNo: string } | null;
+  /** Issues merged into this one as duplicates. */
+  duplicates: { id: string; referenceNo: string; status: IssueStatus }[];
   comments: {
     id: string;
     body: string;
@@ -96,6 +147,30 @@ export interface DashboardSummary {
   byAssignee: { assigneeId: string; name: string; count: number }[];
   trend: { created: { day: string; count: number }[]; resolved: { day: string; count: number }[] };
   sla: { overdue: number; atRisk: number };
+  csat: { count: number; positiveRate: number | null };
+  ops: {
+    ttfrHours: { p50: number | null; p90: number | null };
+    resolutionHours: { p50: number | null; p90: number | null };
+    reopenRate: number | null;
+    deflected: number;
+    deflectionRate: number | null;
+  };
+}
+
+/**
+ * Single-platform support-health report (GET /staff/platforms/:id/report).
+ * Same metric payload as the cross-scope dashboard, narrowed to one platform,
+ * plus that platform's published known issues.
+ */
+export interface PlatformReport extends DashboardSummary {
+  platform: { id: string; key: string; name: string };
+  knownIssues: {
+    id: string;
+    referenceNo: string;
+    status: IssueStatus;
+    title: string | null;
+    updatedAt: string;
+  }[];
 }
 
 export interface AssigneeOption {
@@ -129,13 +204,101 @@ export interface PlatformItem {
   status: string;
   jiraProjectKey: string | null;
   jiraEnabled: boolean;
+  /** Per-priority SLA hour overrides; null = env defaults. */
+  slaPolicy: Partial<Record<Priority, number>> | null;
   createdAt: string;
+}
+
+export interface AutomationRuleView {
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: 'ISSUE_CREATED' | 'STATUS_CHANGED';
+  triggerStatus: IssueStatus | null;
+  action: 'SET_PRIORITY' | 'ASSIGN' | 'ADD_LABEL';
+  actionValue: string;
+  createdAt: string;
+}
+
+export interface ApiTokenView {
+  id: string;
+  name: string;
+  lastFour: string;
+  revoked: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+  /** Present ONLY in the create response. */
+  token?: string;
+}
+
+export interface WebhookView {
+  id: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  platformId: string | null;
+  createdAt: string;
+  /** Present ONLY in the create response. */
+  secret?: string;
 }
 
 export interface SavedViewDto {
   id: string;
   name: string;
   filters: Record<string, unknown>;
+  updatedAt: string;
+}
+
+export interface CannedResponseView {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Public status page ──────────────────────────────────────────────────────
+export type ComponentStatus =
+  | 'OPERATIONAL' | 'MAINTENANCE' | 'DEGRADED' | 'PARTIAL_OUTAGE' | 'MAJOR_OUTAGE';
+export type IncidentStatus = 'INVESTIGATING' | 'IDENTIFIED' | 'MONITORING' | 'RESOLVED';
+export type IncidentImpact = 'MINOR' | 'MAJOR' | 'CRITICAL' | 'MAINTENANCE';
+
+export interface StatusComponentView {
+  id: string;
+  name: string;
+  description: string | null;
+  status: ComponentStatus;
+  /** Staff view only — the public payload omits ordering/timestamps. */
+  position?: number;
+  updatedAt?: string;
+}
+
+export interface IncidentUpdateView {
+  id: string;
+  status: IncidentStatus;
+  body: string;
+  createdAt: string;
+}
+
+export interface IncidentView {
+  id: string;
+  title: string;
+  status: IncidentStatus;
+  impact: IncidentImpact;
+  startedAt: string;
+  resolvedAt: string | null;
+  components: { id: string; name: string }[];
+  /** Newest first. */
+  updates: IncidentUpdateView[];
+}
+
+/** GET /api/public/platforms/:key/status — unauthenticated, staff-curated only. */
+export interface PublicStatusPage {
+  platform: { key: string; name: string };
+  overall: ComponentStatus;
+  components: StatusComponentView[];
+  activeIncidents: IncidentView[];
+  recentIncidents: IncidentView[];
   updatedAt: string;
 }
 

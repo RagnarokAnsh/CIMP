@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Link2, Plus, Tag, X } from 'lucide-react';
+import { Eye, GitMerge, Link2, Plus, Tag, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
 import type {
@@ -10,15 +11,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/StatusBadge';
 import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
+} from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
-const onError = (e: any) => {
-  const msg = e?.response?.data?.message ?? 'Action failed.';
-  toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
-};
+import { toastApiError as onError } from '@/lib/toast-error';
 
 // ── Watch toggle ──────────────────────────────────────────────────────────
 export function IssueWatch({ issueId }: { issueId: string }) {
@@ -126,7 +130,13 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
               <span className="h-2 w-2 rounded-full" style={{ background: l.color }} />
               {l.name}
               {!readOnly && (
-                <button type="button" className="ml-0.5 text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
+                <button
+                  type="button"
+                  className="ml-0.5 grid size-5 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-ring"
+                  title="Remove"
+                  aria-label={`Remove label ${l.name}`}
+                  onClick={() => remove.mutate(l.id)}
+                >
                   <X className="h-3 w-3" />
                 </button>
               )}
@@ -136,7 +146,7 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
 
         {!readOnly && addable.length > 0 && (
           <Select value="" onValueChange={(v) => add.mutate(v)}>
-            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Add existing label…" /></SelectTrigger>
+            <SelectTrigger className="h-8 text-sm" aria-label="Add an existing label"><SelectValue placeholder="Add existing label…" /></SelectTrigger>
             <SelectContent>
               {addable.map((l) => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
             </SelectContent>
@@ -150,15 +160,137 @@ export function IssueLabels({ issueId, platformId, readOnly = false }: { issueId
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') submitNew(); }}
               placeholder="New label…"
+              aria-label="New label name"
               className="h-8 text-sm"
             />
-            <Button size="sm" variant="secondary" disabled={!newName.trim() || create.isPending} onClick={submitNew}>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label="Add label"
+              disabled={!newName.trim() || create.isPending}
+              onClick={submitNew}
+            >
               {create.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             </Button>
           </div>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ── Merge (duplicate flow) ────────────────────────────────────────────────
+// Search-and-confirm dialog that merges the current issue into a canonical
+// same-platform issue. The server closes this issue, links the pair, copies
+// watchers, and notifies this issue's reporter when the canonical resolves.
+export function MergeIssueButton({
+  issueId, platformId, version, onMerged,
+}: {
+  issueId: string;
+  platformId?: string;
+  version: number;
+  onMerged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [selected, setSelected] = useState<StaffIssueSummary | null>(null);
+
+  // Debounce the search so we don't hit the list endpoint per keystroke.
+  const [debouncedQ, setDebouncedQ] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const { data: results, isFetching } = useQuery({
+    queryKey: ['staff', 'issue', issueId, 'merge-search', debouncedQ, platformId],
+    queryFn: async () =>
+      (await staffApi.get<Paginated<StaffIssueSummary>>(
+        `/staff/issues?q=${encodeURIComponent(debouncedQ)}&pageSize=6${platformId ? `&platformId=${platformId}` : ''}`,
+      )).data,
+    enabled: open && debouncedQ.length >= 2,
+  });
+  const candidates = (results?.data ?? []).filter((i) => i.id !== issueId && i.status !== 'CLOSED');
+
+  const merge = useMutation({
+    mutationFn: () =>
+      staffApi.post(`/staff/issues/${issueId}/merge`, {
+        canonicalIssueId: selected!.id,
+        version,
+      }),
+    onSuccess: () => {
+      setOpen(false); setQ(''); setSelected(null);
+      toast.success('Merged as duplicate.');
+      onMerged();
+    },
+    onError,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setQ(''); setSelected(null); } }}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="gap-1.5">
+          <GitMerge className="h-3.5 w-3.5" /> Merge into…
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Merge as duplicate</DialogTitle>
+          <DialogDescription>
+            This issue will be closed and linked to the issue you pick. Its reporter is
+            told it's being tracked centrally and gets notified when that issue resolves.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Input
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setSelected(null); }}
+            placeholder="Search by reference or words in the description…"
+            aria-label="Search issues to link"
+            autoFocus
+          />
+          {debouncedQ.length >= 2 && (
+            <div className="max-h-56 space-y-1 overflow-y-auto">
+              {isFetching && candidates.length === 0 && <Skeleton className="h-10 w-full" />}
+              {!isFetching && candidates.length === 0 && (
+                <p className="px-1 py-2 text-sm text-muted-foreground">No matching open issues on this platform.</p>
+              )}
+              {candidates.map((i) => (
+                <button
+                  key={i.id}
+                  type="button"
+                  onClick={() => setSelected(i)}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm',
+                    selected?.id === i.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border/60 hover:bg-accent/60',
+                  )}
+                >
+                  <span className="shrink-0 font-mono text-xs">{i.referenceNo}</span>
+                  {/* min-w-0 is what makes `truncate` work here. Without it the
+                      flex item keeps its full text width (min-width:auto), which
+                      pushed the whole result list — and the search box above it —
+                      out past the dialog's max-w-lg box and onto the page. */}
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{i.descriptionPreview}</span>
+                  <StatusBadge status={i.status} className="shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button
+            variant="destructive"
+            disabled={!selected || merge.isPending}
+            onClick={() => merge.mutate()}
+          >
+            {merge.isPending && <Spinner />}
+            Merge into {selected?.referenceNo ?? '…'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -190,26 +322,49 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
       const q = ref.trim();
       const res = (await staffApi.get<Paginated<StaffIssueSummary>>(`/staff/issues?q=${encodeURIComponent(q)}&pageSize=5`)).data;
       const match = res.data.find((i) => i.referenceNo.toLowerCase() === q.toLowerCase());
-      if (!match) throw { response: { data: { message: `No issue "${q}" you can access.` } } };
+      // `status` is required, not decorative: the shared error formatter reads
+      // it to decide between a domain message and "Can't reach the server". A
+      // status-less synthetic error looked like a network failure, so the common
+      // case — a mistyped reference — told staff the app was down.
+      if (!match) {
+        throw {
+          response: { status: 404, data: { message: `No issue "${q}" you can access.` } },
+        };
+      }
       await staffApi.post(`/staff/issues/${issueId}/links`, { targetIssueId: match.id, type });
     },
     onSuccess: () => { setRef(''); refresh(); },
     onError,
   });
 
+  const count = (links ?? []).length;
+
   return (
+    // Full card again, not a <details>: it was collapsed only to shorten an
+    // over-long sidebar, and it now lives in the main column where there is room.
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" /> Linked issues</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Link2 className="h-4 w-4" /> Linked issues
+          {count > 0 && <Badge variant="secondary" className="text-2xs tabular-nums">{count}</Badge>}
+        </CardTitle>
+      </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1.5">
-          {(links ?? []).length === 0 && <span className="text-sm text-muted-foreground">No links.</span>}
+          {count === 0 && <span className="text-sm text-muted-foreground">No links.</span>}
           {(links ?? []).map((l) => (
             <div key={l.id} className="flex items-center gap-2 text-sm">
               <span className="w-24 shrink-0 text-xs text-muted-foreground">{LINK_LABEL[l.type][l.direction]}</span>
-              <a href={`/staff/issues/${l.issue.id}`} className="font-mono text-primary hover:underline">{l.issue.referenceNo}</a>
-              <Badge variant="outline" className="text-[10px]">{l.issue.status}</Badge>
+              <Link to={`/staff/issues/${l.issue.id}`} className="font-mono text-primary hover:underline">{l.issue.referenceNo}</Link>
+              <StatusBadge status={l.issue.status} />
               {!readOnly && (
-                <button type="button" className="ml-auto text-muted-foreground hover:text-destructive" title="Remove" onClick={() => remove.mutate(l.id)}>
+                <button
+                  type="button"
+                  className="ml-auto grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-ring"
+                  title="Remove"
+                  aria-label={`Remove link to ${l.issue.referenceNo}`}
+                  onClick={() => remove.mutate(l.id)}
+                >
                   <X className="h-3.5 w-3.5" />
                 </button>
               )}
@@ -232,9 +387,16 @@ export function IssueLinks({ issueId, readOnly = false }: { issueId: string; rea
             onChange={(e) => setRef(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') create.mutate(); }}
             placeholder="SUP-XXXXXXXX"
+            aria-label="Issue reference to link"
             className="h-8 font-mono text-sm"
           />
-          <Button size="sm" variant="secondary" disabled={!ref.trim() || create.isPending} onClick={() => create.mutate()}>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label="Add link"
+            disabled={!ref.trim() || create.isPending}
+            onClick={() => create.mutate()}
+          >
             {create.isPending ? <Spinner className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
           </Button>
         </div>

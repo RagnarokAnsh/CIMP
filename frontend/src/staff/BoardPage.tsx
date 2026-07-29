@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, pointerWithin,
@@ -9,11 +9,16 @@ import {
 import { Inbox, MoveRight, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { staffApi } from '@/api/client';
-import type { IssueStatus, Paginated, StaffIssueSummary, StaffMe } from '@/api/types';
+import type { IssueStatus, Paginated, Priority, StaffIssueSummary } from '@/api/types';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { BOARD_STATUS_ORDER, STATUS_TRANSITIONS, canTransition } from '@/lib/issue-status';
 import { STATUS_META } from '@/lib/issue-meta';
-import { canWriteOn } from '@/lib/permissions';
+import { canDevelopOn, canWriteOn } from '@/lib/permissions';
 import { relativeTime, initials } from '@/lib/format';
+import { toastApiError } from '@/lib/toast-error';
+import { useMe } from '@/lib/use-me';
 import { PriorityBadge } from '@/components/StatusBadge';
 import { SlaBadge } from '@/components/SlaBadge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -29,8 +34,16 @@ import {
   Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
+import { useDocumentTitle } from '@/lib/use-document-title';
 
 const BOARD_PAGE_SIZE = 100; // backend caps pageSize at 100.
+
+// Swimlane grouping. In a grouped board dragging is disabled (status columns
+// repeat per lane, so droppable ids would collide) - cards move via the same
+// per-card menu the keyboard path uses.
+type GroupBy = 'none' | 'assignee' | 'priority';
+const GROUP_KEY = 'cimp_board_group';
+const PRIORITY_LANES: Priority[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
 // Soft work-in-progress limits: the column badge turns red once a column is at
 // or over its limit, nudging the team to finish work before pulling in more.
@@ -39,7 +52,14 @@ const WIP_LIMITS: Partial<Record<IssueStatus, number>> = {
   ON_HOLD: 4,
 };
 
+// One horizontally-scrolling track. Columns keep a readable floor (issue titles
+// need it) and only stretch once there is room for all six — so a wide monitor
+// fills the width, and anything narrower scrolls instead of crushing the text.
+// `pb-2` leaves room for the scrollbar so it never overlaps the last card.
+const BOARD_TRACK = 'flex gap-3 overflow-x-auto pb-2 [&>*]:w-[17rem] [&>*]:shrink-0 xl:[&>*]:w-auto xl:[&>*]:min-w-[17rem] xl:[&>*]:flex-1';
+
 export function BoardPage() {
+  useDocumentTitle('Board');
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -51,11 +71,7 @@ export function BoardPage() {
       })).data,
   });
 
-  const { data: me } = useQuery({
-    queryKey: ['staff', 'me'],
-    queryFn: async () => (await staffApi.get<StaffMe>('/staff/me')).data,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: me } = useMe();
 
   // Local working copy so a drag updates the board instantly; re-synced whenever
   // the server query settles (which also refreshes optimistic-lock versions).
@@ -66,6 +82,39 @@ export function BoardPage() {
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIssue = items.find((i) => i.id === activeId) ?? null;
+
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    () => (localStorage.getItem(GROUP_KEY) as GroupBy) || 'none',
+  );
+  useEffect(() => { localStorage.setItem(GROUP_KEY, groupBy); }, [groupBy]);
+
+  // Swimlanes: a lane per assignee (plus Unassigned) or per priority, each
+  // holding its own status-grouped card map. Empty lanes are skipped.
+  const lanes = useMemo(() => {
+    if (groupBy === 'none') return null;
+    const emptyGroups = (): Record<IssueStatus, StaffIssueSummary[]> => ({
+      NEW: [], REOPENED: [], IN_PROGRESS: [], ON_HOLD: [], RESOLVED: [], CLOSED: [],
+    });
+    const byLane = new Map<string, { label: string; groups: Record<IssueStatus, StaffIssueSummary[]>; count: number }>();
+    const laneOf = (it: StaffIssueSummary): { key: string; label: string } =>
+      groupBy === 'priority'
+        ? { key: it.priority, label: it.priority }
+        : { key: it.assignee?.id ?? '__none__', label: it.assignee?.name ?? 'Unassigned' };
+    for (const it of items) {
+      const { key, label } = laneOf(it);
+      let lane = byLane.get(key);
+      if (!lane) { lane = { label, groups: emptyGroups(), count: 0 }; byLane.set(key, lane); }
+      lane.groups[it.status].push(it);
+      lane.count += 1;
+    }
+    const entries = [...byLane.entries()];
+    if (groupBy === 'priority') {
+      entries.sort((a, b) => PRIORITY_LANES.indexOf(a[0] as Priority) - PRIORITY_LANES.indexOf(b[0] as Priority));
+    } else {
+      entries.sort((a, b) => (a[0] === '__none__' ? 1 : b[0] === '__none__' ? -1 : a[1].label.localeCompare(b[1].label)));
+    }
+    return entries.map(([key, lane]) => ({ key, ...lane }));
+  }, [groupBy, items]);
 
   const sensors = useSensors(
     // A small distance threshold so a plain click still opens the issue.
@@ -91,6 +140,30 @@ export function BoardPage() {
     },
   });
 
+  // Assignment goes through the same TanStack path as every other mutation in the
+  // app (it was the one hand-rolled `.then/.catch` promise chain). The optimistic
+  // update + rollback live in the caller, exactly like moveIssue, so the drag and
+  // the "assign to me" button share one write path.
+  const assign = useMutation({
+    mutationFn: (v: { id: string; assigneeId: string; version: number }) =>
+      staffApi.patch(`/staff/issues/${v.id}/assignment`, { assigneeId: v.assigneeId, version: v.version }),
+  });
+
+  // Both board writes fail the same two ways. A 409 means our optimistic-lock
+  // version is stale, so refetch before the user retries or the retry conflicts
+  // on the same version forever. The message names the card on purpose: the
+  // shared `toastMutationError` wording can't, and on a board of up to 100 cards
+  // "this changed elsewhere" doesn't tell you which one just snapped back.
+  // Everything else is an ordinary API error — that part is the shared helper.
+  function handleMutationError(err: unknown, issue: StaffIssueSummary) {
+    if ((err as any)?.response?.status === 409) {
+      queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
+      toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
+      return;
+    }
+    toastApiError(err);
+  }
+
   // Shared by drag-and-drop and the per-card quick-move menu: optimistically
   // move the card, then persist with the optimistic-lock version.
   function moveIssue(issue: StaffIssueSummary, target: IssueStatus) {
@@ -111,17 +184,10 @@ export function BoardPage() {
       { id: issue.id, status: target, version: issue.version },
       {
         onSuccess: () => toast.success(`${issue.referenceNo} → ${STATUS_META[target].label}.`),
-        onError: (err: any) => {
+        onError: (err) => {
           // Roll back the optimistic move and explain.
           setItems((prev) => prev.map((i) => (i.id === issue.id ? { ...i, status: from } : i)));
-          if (err?.response?.status === 409) {
-            // Pull fresh rows + versions so the retry doesn't conflict again.
-            queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
-            toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
-            return;
-          }
-          const msg = err?.response?.data?.message ?? 'Move failed.';
-          toast.error(Array.isArray(msg) ? msg.join(' ') : msg);
+          handleMutationError(err, issue);
         },
       },
     );
@@ -136,15 +202,13 @@ export function BoardPage() {
     moveIssue(issue, target);
   }
 
-  // Can the current user take this issue? True only if they hold a DEVELOPER
-  // grant globally or for the issue's platform — mirrors the server's check, so
-  // we only show the action when it will actually succeed.
+  // Can the current user take this issue? Only if the server would accept them
+  // as the assignee (canDevelopOn mirrors that check) and it isn't already
+  // theirs — "Assign to me" on your own card is a no-op the menu shouldn't offer.
   function canAssignToMe(issue: StaffIssueSummary): boolean {
-    if (!me || !issue.platform) return false;
+    if (!me) return false;
     if (issue.assignee?.id === me.id) return false;
-    return me.roles.some(
-      (r) => r.role === 'DEVELOPER' && (r.platformId === null || r.platformId === issue.platform!.id),
-    );
+    return canDevelopOn(me, issue.platform?.id);
   }
 
   // Read-only watchers see the card but can't drag it or open the move menu.
@@ -156,22 +220,22 @@ export function BoardPage() {
     if (!me) return;
     const prev = issue.assignee;
     setItems((list) => list.map((i) => (i.id === issue.id ? { ...i, assignee: { id: me.id, name: me.name } } : i)));
-    staffApi
-      .patch(`/staff/issues/${issue.id}/assignment`, { assigneeId: me.id, version: issue.version })
-      .then(() => {
-        toast.success(`${issue.referenceNo} assigned to you.`);
-        queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
-        queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
-      })
-      .catch((err: any) => {
-        setItems((list) => list.map((i) => (i.id === issue.id ? { ...i, assignee: prev } : i)));
-        if (err?.response?.status === 409) {
+    assign.mutate(
+      { id: issue.id, assigneeId: me.id, version: issue.version },
+      {
+        onSuccess: () => {
+          toast.success(`${issue.referenceNo} assigned to you.`);
           queryClient.invalidateQueries({ queryKey: ['staff', 'board'] });
-          toast.error(`${issue.referenceNo} changed elsewhere — reloaded, try again.`);
-          return;
-        }
-        toast.error(err?.response?.data?.message ?? 'Could not assign.');
-      });
+          queryClient.invalidateQueries({ queryKey: ['staff', 'issues'] });
+        },
+        onError: (err) => {
+          // Roll back the optimistic assignment, then the shared handler (which
+          // keeps the card-specific 409 wording).
+          setItems((list) => list.map((i) => (i.id === issue.id ? { ...i, assignee: prev } : i)));
+          handleMutationError(err, issue);
+        },
+      },
+    );
   }
 
   if (isError) {
@@ -182,17 +246,34 @@ export function BoardPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Board</h1>
-        <p className="text-sm text-muted-foreground">
-          {isLoading
-            ? 'Loading…'
-            : `Drag a card between columns to change its status.${capped ? ` Showing the ${items.length} most recently updated of ${data!.total}.` : ''}`}
-        </p>
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Board</h1>
+          <p className="text-sm text-muted-foreground">
+            {isLoading
+              ? 'Loading…'
+              : `${groupBy === 'none'
+                  ? 'Drag a card between columns to change its status.'
+                  : 'Grouped board — move cards with each card’s menu.'}${capped ? ` Showing the ${items.length} most recently updated of ${data!.total}.` : ''}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Group by</span>
+          <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+            <SelectTrigger size="sm" className="w-36" aria-label="Group board by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None</SelectItem>
+              <SelectItem value="assignee">Assignee</SelectItem>
+              <SelectItem value="priority">Priority</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {!isLoading && items.length === 0 ? (
-        <Empty className="rounded-xl border border-dashed border-border py-16">
+        <Empty className="rounded-xl py-16">
           <EmptyHeader>
             <EmptyMedia variant="icon"><Inbox /></EmptyMedia>
             <EmptyTitle>No issues to triage</EmptyTitle>
@@ -209,7 +290,12 @@ export function BoardPage() {
         onDragEnd={onDragEnd}
         onDragCancel={() => setActiveId(null)}
       >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:h-[calc(100vh-13rem)] xl:grid-cols-6">
+        {lanes === null ? (
+        // Six equal columns squeezed the title to ~160px of text — two clamped
+        // lines held about 40 characters, so "API rate-limit headers (X-…" told
+        // you nothing. Columns now hold a readable floor and the track scrolls,
+        // which is how every Kanban handles more columns than fit.
+        <div className={cn(BOARD_TRACK, 'xl:h-[calc(100vh-var(--workspace-chrome))]')}>
           {BOARD_STATUS_ORDER.map((status) => (
             <Column
               key={status}
@@ -226,6 +312,41 @@ export function BoardPage() {
             />
           ))}
         </div>
+        ) : (
+        <div className="space-y-6">
+          {lanes.map((lane) => (
+            <section key={lane.key} className="space-y-2">
+              {/* text-base, not text-sm: this is a real section heading and it
+                  was rendering smaller than the card text beneath it, so the
+                  visual hierarchy pointed the opposite way to the semantic one. */}
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-semibold tracking-tight">{lane.label}</h2>
+                <Badge variant="secondary" className="tabular-nums">{lane.count}</Badge>
+              </div>
+              <div className={BOARD_TRACK}>
+                {BOARD_STATUS_ORDER.map((status) => (
+                  <Column
+                    key={status}
+                    droppableId={`${lane.key}::${status}`}
+                    status={status}
+                    issues={lane.groups[status]}
+                    loading={isLoading}
+                    compact
+                    dragDisabled
+                    onOpen={(id) => navigate(`/staff/issues/${id}`)}
+                    onMove={moveIssue}
+                    onAssignToMe={assignToMe}
+                    canAssignToMe={canAssignToMe}
+                    canMove={canMove}
+                    isDropTarget={false}
+                    isInvalidTarget={false}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+        )}
 
         <DragOverlay dropAnimation={null}>
           {activeIssue ? <div className="w-64"><IssueCard issue={activeIssue} dragging /></div> : null}
@@ -238,6 +359,7 @@ export function BoardPage() {
 
 function Column({
   status, issues, loading, onOpen, onMove, onAssignToMe, canAssignToMe, canMove, isDropTarget, isInvalidTarget,
+  droppableId, compact = false, dragDisabled = false,
 }: {
   status: IssueStatus;
   issues: StaffIssueSummary[];
@@ -249,23 +371,31 @@ function Column({
   canMove: (issue: StaffIssueSummary) => boolean;
   isDropTarget: boolean;
   isInvalidTarget: boolean;
+  /** Unique droppable id - status columns repeat per swimlane. */
+  droppableId?: string;
+  compact?: boolean;
+  dragDisabled?: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const { setNodeRef, isOver } = useDroppable({ id: droppableId ?? status, disabled: dragDisabled });
   const meta = STATUS_META[status];
 
   return (
-    <div className="flex min-w-0 flex-col rounded-xl border border-border bg-sidebar/40 xl:h-full xl:overflow-hidden">
+    <div className={cn('flex min-w-0 flex-col rounded-xl border border-border bg-sidebar/40', !compact && 'xl:h-full xl:overflow-hidden')}>
       <div className="flex items-center gap-2 rounded-t-xl border-b border-border bg-sidebar/80 px-3 py-2.5 backdrop-blur">
         <span className={cn('size-2 shrink-0 rounded-full', meta.dot)} aria-hidden />
         <span className="truncate text-sm font-semibold">{meta.label}</span>
         {(() => {
-          const limit = WIP_LIMITS[status];
+          const limit = compact ? undefined : WIP_LIMITS[status];
           const over = limit !== undefined && issues.length >= limit;
           return (
             <Badge
               variant={over ? 'destructive' : 'secondary'}
               className="ml-auto tabular-nums"
-              title={limit !== undefined ? `WIP limit ${limit}` : undefined}
+              // The count/limit is now written out for assistive tech rather
+              // than left to a `title` that never appears on touch or keyboard.
+              aria-label={limit !== undefined
+                ? `${issues.length} of a ${limit} work-in-progress limit${over ? ' — at or over the limit' : ''}`
+                : `${issues.length} issues`}
             >
               {issues.length}{limit !== undefined ? ` / ${limit}` : ''}
             </Badge>
@@ -276,7 +406,9 @@ function Column({
       <div
         ref={setNodeRef}
         className={cn(
-          'flex min-h-72 flex-col gap-2 rounded-b-xl p-2 transition-colors xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
+          compact
+            ? 'flex min-h-24 flex-col gap-2 rounded-b-xl p-2 transition-colors'
+            : 'flex min-h-72 flex-col gap-2 rounded-b-xl p-2 transition-colors xl:min-h-0 xl:flex-1 xl:overflow-y-auto',
           isOver && isDropTarget && 'bg-primary/5 ring-2 ring-inset ring-primary/40',
           isOver && isInvalidTarget && 'bg-destructive/5 ring-2 ring-inset ring-destructive/40',
         )}
@@ -284,9 +416,25 @@ function Column({
         {loading &&
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
 
-        {!loading && issues.length === 0 && (
+        {/* The drop cue was a 5%-opacity tint that differed from the invalid
+            cue only in hue, and the wording that carried the meaning appeared
+            on empty columns only — exactly where it was least needed. Now every
+            column says what will happen while a card is over it. */}
+        {isOver && (isDropTarget || isInvalidTarget) && (
+          <p
+            role="status"
+            className={cn(
+              'rounded-md px-2 py-1.5 text-center text-xs font-medium',
+              isDropTarget ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive',
+            )}
+          >
+            {isDropTarget ? 'Release to move here' : `Can’t move to ${meta.label}`}
+          </p>
+        )}
+
+        {!loading && issues.length === 0 && !isOver && (
           <div className="flex min-h-20 flex-1 items-center justify-center rounded-lg border border-dashed border-border/60 px-2 py-6 text-center text-xs text-muted-foreground">
-            {isOver && isDropTarget ? 'Release to move here' : 'No issues'}
+            No issues
           </div>
         )}
 
@@ -299,6 +447,7 @@ function Column({
             onAssignToMe={onAssignToMe}
             canAssignToMe={canAssignToMe(issue)}
             canMove={canMove(issue)}
+            dragDisabled={dragDisabled}
           />
         ))}
       </div>
@@ -307,7 +456,7 @@ function Column({
 }
 
 function DraggableCard({
-  issue, onOpen, onMove, onAssignToMe, canAssignToMe, canMove,
+  issue, onOpen, onMove, onAssignToMe, canAssignToMe, canMove, dragDisabled = false,
 }: {
   issue: StaffIssueSummary;
   onOpen: (id: string) => void;
@@ -315,21 +464,34 @@ function DraggableCard({
   onAssignToMe: (issue: StaffIssueSummary) => void;
   canAssignToMe: boolean;
   canMove: boolean;
+  /** Swimlane mode: the move-menu still works, only dragging is off. */
+  dragDisabled?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: issue.id, disabled: !canMove });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: issue.id, disabled: !canMove || dragDisabled,
+  });
   const targets = STATUS_TRANSITIONS[issue.status];
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
+    // The card is the DRAG surface only; the title inside it is a real link
+    // (see IssueCard). Previously this div was `role="button" tabIndex={0}` and
+    // contained the menu's <button> — a control nested inside a control — while
+    // its Enter handler and dnd-kit's KeyboardSensor both claimed Enter on the
+    // same node, and Space (which a role="button" must handle) did nothing.
+    // Splitting the two roles resolves all three at once: keyboard users tab to
+    // the link to open and to the drag handle to move, and a pointer click on
+    // the card body still opens the issue.
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      onClick={() => onOpen(issue.id)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') onOpen(issue.id); }}
-      className={cn(canMove && 'cursor-grab active:cursor-grabbing', 'touch-none', isDragging && 'opacity-40')}
+      onClick={(e) => {
+        // A click that landed on the link or the menu is already handled.
+        if ((e.target as HTMLElement).closest('a,button')) return;
+        onOpen(issue.id);
+      }}
+      className={cn(canMove && !dragDisabled && 'cursor-grab active:cursor-grabbing', 'touch-none', isDragging && 'opacity-40')}
     >
       <IssueCard
         issue={issue}
@@ -384,6 +546,7 @@ function IssueCard({
   dragging?: boolean;
   actions?: React.ReactNode;
 }) {
+  const title = issue.descriptionPreview || issue.referenceNo;
   return (
     <div
       className={cn(
@@ -392,13 +555,26 @@ function IssueCard({
       )}
     >
       <div className="flex items-start gap-2">
-        <p className="line-clamp-2 flex-1 text-sm font-medium leading-snug">
-          {issue.descriptionPreview || issue.referenceNo}
-        </p>
+        {/* A real link, not a <p> inside a role="button" div. This is what
+            carries "open the issue" for keyboard and assistive tech, and it
+            means the card itself no longer has to pretend to be a button.
+            `dragging` renders the drag overlay, which must not be focusable. */}
+        {dragging ? (
+          <p className="line-clamp-3 min-w-0 flex-1 text-sm font-medium leading-snug">{title}</p>
+        ) : (
+          <Link
+            to={`/staff/issues/${issue.id}`}
+            title={title}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="focus-ring-surface line-clamp-3 min-w-0 flex-1 rounded-sm text-sm font-medium leading-snug hover:underline"
+          >
+            {title}
+          </Link>
+        )}
         {actions}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="font-mono text-[11px] text-muted-foreground">
+        <span className="font-mono text-2xs text-muted-foreground">
           {issue.referenceNo}{issue.platform?.key ? ` · ${issue.platform.key}` : ''}
         </span>
         <PriorityBadge priority={issue.priority} />
@@ -406,7 +582,7 @@ function IssueCard({
       </div>
       <div className="mt-2.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex min-w-0 items-center gap-1.5">
-          <Avatar className="size-5"><AvatarFallback className="text-[9px]">{initials(issue.assignee?.name)}</AvatarFallback></Avatar>
+          <Avatar className="size-5"><AvatarFallback className="text-2xs">{initials(issue.assignee?.name)}</AvatarFallback></Avatar>
           <span className="truncate">{issue.assignee?.name ?? 'Unassigned'}</span>
         </span>
         <span className="shrink-0">{relativeTime(issue.updatedAt)}</span>

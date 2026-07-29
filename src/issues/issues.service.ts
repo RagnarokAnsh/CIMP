@@ -6,8 +6,9 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Brackets, DataSource, Repository } from 'typeorm';
+import { isUUID } from 'class-validator';
 import { AccountStatus, ActorType, IssueStatus, Priority, Role } from '../common/enums';
-import { Issue, Platform, StaffUser, UserPlatformRole } from '../entities';
+import { CsatResponse, Issue, Platform, StaffUser, UserPlatformRole } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
 import { AuthService } from '../auth/auth.service';
 import { ScopeService } from '../authz/scope.service';
@@ -22,10 +23,24 @@ import { UpdateAssignmentDto } from './dto/update-assignment.dto';
 import { UpdatePriorityDto } from './dto/update-priority.dto';
 import { BulkOp, BulkUpdateDto } from './dto/bulk-update.dto';
 import { canTransition } from './status-machine';
+import { applyStatusSideEffects } from './status-side-effects';
 import { computeSla } from './sla';
+import { buildPrefixTsQuery } from './search-terms';
+import { applyJqlFilters, parseJql } from './jql';
 
 // Upper bound on rows a single CSV export may materialize in memory.
 const EXPORT_MAX_ROWS = 50_000;
+
+// One skip reason for both "no such issue" and "exists, but not yours", so a
+// bulk call can't be used to tell the two apart. See the catch in bulkUpdate.
+const NOT_VISIBLE_REASON = 'Not found or out of scope';
+
+// Normalize 'en-GB' → 'en'; mirrors baseLocale() in the translation seam. Kept
+// local so IssuesService doesn't take a dependency on an optional feature.
+const toBaseLocale = (l: string | undefined): string | null => {
+  const base = l?.trim().toLowerCase().replace('_', '-').split('-')[0];
+  return base && /^[a-z]{2,3}$/.test(base) ? base : null;
+};
 
 @Injectable()
 export class IssuesService {
@@ -41,6 +56,12 @@ export class IssuesService {
     private readonly events: EventEmitter2,
     private readonly config: ConfigService,
   ) {}
+
+  // The language the support team reads, used to pick a cached translation of a
+  // reporter's message. Null when translation is unconfigured → originals only.
+  private get staffLocale(): string | null {
+    return toBaseLocale(this.config.get<string>('translation.staffLocale'));
+  }
 
   // ---- Queries -------------------------------------------------------------
 
@@ -68,6 +89,13 @@ export class IssuesService {
     } else {
       qb.orderBy(`issue.${dto.sort}`, dto.order);
     }
+    // Unique tiebreak. `sort` may be status/priority — massively non-unique — and
+    // Postgres gives no ordering guarantee between equal keys, so it is free to
+    // return a different arrangement per page request. Without this, paging a
+    // status-sorted list silently repeats some issues and skips others. `id` is
+    // the primary key, so this makes the total order deterministic; it is a no-op
+    // when `sort` is already unique.
+    qb.addOrderBy('issue.id', 'ASC');
 
     const [rows, total] = await qb.getManyAndCount();
     return {
@@ -100,11 +128,19 @@ export class IssuesService {
         assignee: true,
         attachments: true,
         comments: { author: true },
+        duplicateOf: true,
       },
     });
     if (!issue) throw new NotFoundException('Issue not found');
 
     const history = await this.audit.forIssue(issueId);
+    const duplicates = await this.issues.find({
+      where: { duplicateOf: { id: issueId } },
+      select: { id: true, referenceNo: true, status: true },
+    });
+    const csat = await this.issues.manager.getRepository(CsatResponse).findOne({
+      where: { issue: { id: issueId } },
+    });
     return {
       id: issue.id,
       referenceNo: issue.referenceNo,
@@ -113,12 +149,26 @@ export class IssuesService {
       version: issue.version,
       ...computeSla(issue),
       description: issue.description,
+      context: issue.context ?? null,
       createdAt: issue.createdAt,
       updatedAt: issue.updatedAt,
       resolvedAt: issue.resolvedAt,
       closedAt: issue.closedAt,
       jiraIssueKey: issue.jiraIssueKey,
       jiraSyncStatus: issue.jiraSyncStatus,
+      // Staff-only detail: reporter responses are shaped separately in
+      // reporter.service.ts and never expose canonical references.
+      duplicateOf: issue.duplicateOf
+        ? { id: issue.duplicateOf.id, referenceNo: issue.duplicateOf.referenceNo }
+        : null,
+      duplicates: duplicates.map((d) => ({
+        id: d.id,
+        referenceNo: d.referenceNo,
+        status: d.status,
+      })),
+      csat: csat ? { score: csat.score, comment: csat.comment, createdAt: csat.createdAt } : null,
+      publiclyVisible: issue.publiclyVisible,
+      publicTitle: issue.publicTitle,
       platform: { id: issue.platform.id, key: issue.platform.key, name: issue.platform.name },
       reporter: issue.reporter
         ? { id: issue.reporter.id, name: issue.reporter.name, email: issue.reporter.email }
@@ -137,7 +187,15 @@ export class IssuesService {
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
         .map((c) => ({
           id: c.id,
-          body: c.body,
+          // A reporter writing in another language is shown to staff in the
+          // team's language when a cached translation exists, with the original
+          // kept alongside so nothing is ever hidden behind a machine guess.
+          body: this.staffLocale && c.translations?.[this.staffLocale]
+            ? c.translations[this.staffLocale]
+            : c.body,
+          originalBody: this.staffLocale && c.translations?.[this.staffLocale] ? c.body : null,
+          translated: Boolean(this.staffLocale && c.translations?.[this.staffLocale]),
+          sourceLocale: c.sourceLocale,
           visibility: c.visibility,
           authorType: c.authorType,
           author: c.author
@@ -276,7 +334,7 @@ export class IssuesService {
 
     const from = issue.status;
     issue.status = dto.status;
-    this.applyStatusSideEffects(issue, dto.status);
+    applyStatusSideEffects(issue, dto.status);
 
     await this.dataSource.transaction(async (em) => {
       await em.save(issue);
@@ -361,7 +419,12 @@ export class IssuesService {
     this.assertVersion(issue, dto.version);
 
     const from = issue.priority;
-    if (from === dto.priority) return;
+    // Reject the no-op instead of silently succeeding, matching applyStatus: a
+    // 200 with no audit row and no PRIORITY_CHANGED event reads as "we changed
+    // it" to every caller, and bulk ops then count it as updated.
+    if (from === dto.priority) {
+      throw new UnprocessableEntityException('Issue is already at that priority.');
+    }
     issue.priority = dto.priority;
 
     await this.dataSource.transaction(async (em) => {
@@ -395,7 +458,7 @@ export class IssuesService {
   async bulkUpdate(staff: AuthenticatedStaff, dto: BulkUpdateDto) {
     const scope = this.scope.scopedPlatformIds(staff);
     if (Array.isArray(scope) && scope.length === 0) {
-      return { updated: 0, skipped: dto.ids.map((id) => ({ id, reason: 'Out of scope' })) };
+      return { updated: 0, skipped: dto.ids.map((id) => ({ id, reason: NOT_VISIBLE_REASON })) };
     }
 
     // Validate the target value up front (these writes bypass the request pipe).
@@ -404,6 +467,13 @@ export class IssuesService {
     }
     if (dto.op === BulkOp.PRIORITY && !Object.values(Priority).includes(dto.value as Priority)) {
       throw new BadRequestException('Invalid priority value.');
+    }
+    // The third case, previously missing. `value` is only @IsString on the DTO,
+    // so a non-uuid assignee reached the id comparison and made Postgres throw
+    // `invalid input syntax for type uuid` — a 500 per issue rather than one
+    // clean 400. Empty string is the documented "unassign" sentinel.
+    if (dto.op === BulkOp.ASSIGNEE && dto.value && !isUUID(dto.value)) {
+      throw new BadRequestException('Invalid assignee id.');
     }
 
     const skipped: { id: string; reason: string }[] = [];
@@ -416,11 +486,20 @@ export class IssuesService {
         // read scope, but bulk ops are mutations — require a write role on the
         // issue's platform (or globally), same as the single-issue routes.
         if (!this.scope.canAccessPlatform(staff, issue.platform.id, STAFF_WRITE_ROLES)) {
-          skipped.push({ id, reason: 'Out of scope' });
+          skipped.push({ id, reason: NOT_VISIBLE_REASON });
           continue;
         }
         // Reuse the loaded issue and skip the per-issue getDetail round-trip
         // that the public single-issue handlers do.
+        //
+        // Passing the version we just read means assertVersion can never fire
+        // here — that is deliberate, NOT a missing check. Issue.version is a
+        // @VersionColumn, so em.save() still emits `UPDATE ... WHERE version = X`
+        // and a concurrent writer makes TypeORM raise
+        // OptimisticLockVersionMismatchError, which AllExceptionsFilter maps to
+        // 409 and the catch below records as a per-id skip. Threading a
+        // caller-supplied version through instead would only reject the whole
+        // batch on the first stale id.
         if (dto.op === BulkOp.STATUS) {
           await this.applyStatus(staff, issue, { status: dto.value as IssueStatus, version: issue.version });
         } else if (dto.op === BulkOp.PRIORITY) {
@@ -430,7 +509,16 @@ export class IssuesService {
         }
         updated += 1;
       } catch (e) {
-        skipped.push({ id, reason: (e as Error)?.message ?? 'Update failed' });
+        // A missing id and an id on a platform the caller has no write role on
+        // must be indistinguishable, or this endpoint becomes the 403-vs-404
+        // oracle PlatformAccessGuard exists to close — 200 ids per call is a
+        // fast cross-tenant id scanner. Other failures (422 bad transition, 409
+        // version conflict) are on issues the caller can already see, so their
+        // real message is safe and useful.
+        const reason = e instanceof NotFoundException
+          ? NOT_VISIBLE_REASON
+          : (e as Error)?.message ?? 'Update failed';
+        skipped.push({ id, reason });
       }
     }
 
@@ -458,6 +546,11 @@ export class IssuesService {
     if (dto.from) qb.andWhere('issue.created_at >= :from', { from: dto.from });
     if (dto.to) qb.andWhere('issue.created_at <= :to', { to: dto.to });
 
+    // JQL rides ON TOP of the scope filter above — it can narrow, never widen.
+    if (dto.jql) {
+      applyJqlFilters(qb, parseJql(dto.jql), staff.id);
+    }
+
     if (dto.q) {
       // Match the reference number (prefix/substring, for "jump to issue") OR
       // full-text over description + comment bodies. The FTS uses a prefix
@@ -480,21 +573,15 @@ export class IssuesService {
     return qb;
   }
 
-  // Turns a raw search string into a prefix full-text query (`foo:* & bar:*`) and
-  // a reference-number LIKE pattern. Stripping non-alphanumerics keeps the
-  // to_tsquery input safe from syntax errors.
+  // Turns a raw search string into a prefix full-text query (shared with the
+  // deflection similar-search) and a reference-number LIKE pattern.
   private searchParams(q: string): { tsq: string; likeRef: string } {
     const raw = q.trim();
-    const terms = raw
-      .toLowerCase()
-      .split(/\s+/)
-      .map((t) => t.replace(/[^a-z0-9]/g, ''))
-      .filter(Boolean);
     // Escape LIKE metacharacters so a search of "%" or "_" matches literally
     // (Postgres' default ESCAPE is backslash) instead of acting as a wildcard
     // that scans the whole reference-number space.
     const likeEscaped = raw.replace(/[\\%_]/g, '\\$&');
-    return { tsq: terms.map((t) => `${t}:*`).join(' & '), likeRef: `%${likeEscaped}%` };
+    return { tsq: buildPrefixTsQuery(raw), likeRef: `%${likeEscaped}%` };
   }
 
   // A single-line snippet of the description so list rows read like a summary
@@ -546,17 +633,6 @@ export class IssuesService {
     }
     if (!this.scope.canAccessPlatform(staff, platformId, roles)) {
       throw new ForbiddenException('You may not change the status of this issue.');
-    }
-  }
-
-  private applyStatusSideEffects(issue: Issue, to: IssueStatus): void {
-    if (to === IssueStatus.RESOLVED) {
-      issue.resolvedAt = new Date();
-    } else if (to === IssueStatus.CLOSED) {
-      issue.closedAt = issue.closedAt ?? new Date();
-    } else if (to === IssueStatus.REOPENED) {
-      issue.resolvedAt = null;
-      issue.closedAt = null;
     }
   }
 

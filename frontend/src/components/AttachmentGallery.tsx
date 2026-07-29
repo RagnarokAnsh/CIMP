@@ -138,7 +138,11 @@ function InlineImage({
       className="group relative h-32 w-40 overflow-hidden rounded-md border border-border bg-muted transition-shadow hover:shadow-md"
     >
       <img src={src} alt={alt} className="h-full w-full object-cover" />
-      <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1.5 py-0.5 text-left text-[10px] text-white">
+      {/* black/78, not black/55: the caption sits over whatever the reporter
+          uploaded, so the scrim has to guarantee the contrast rather than hope
+          the photo is dark. Filenames are how you tell two screenshots apart,
+          so this is content, not decoration — it gets the 11px floor, not 10px. */}
+      <span className="absolute inset-x-0 bottom-0 truncate bg-black/78 px-1.5 py-1 text-left text-2xs font-medium text-white">
         {alt}
       </span>
     </button>

@@ -6,6 +6,7 @@ import { ScanService } from './scan.service';
 import { NoopScanService } from './noop-scan.service';
 import { ClamavScanService } from './clamav-scan.service';
 import { ScanningListener } from './scanning.listener';
+import { ScanRetryService } from './scan-retry.service';
 
 // Global so the ScanService seam is injectable anywhere (e.g. attachment
 // serving checks). Driver chosen by SCAN_DRIVER: 'clamav' for the real scanner,
@@ -24,6 +25,7 @@ import { ScanningListener } from './scanning.listener';
           : new NoopScanService(),
     },
     ScanningListener,
+    ScanRetryService,
   ],
   exports: [ScanService],
 })

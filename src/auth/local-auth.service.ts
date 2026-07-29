@@ -9,6 +9,13 @@ import { StaffUser } from '../entities';
 import { AuthService } from './auth.service';
 import { AuthenticatedStaff } from './auth.types';
 
+// A real bcrypt hash (cost 10) of a random string nobody holds, used only to
+// burn the same CPU on an unknown email as a known one. It is deliberately a
+// literal rather than a placeholder shape: `bcrypt.compare` short-circuits on a
+// malformed hash, so an "obviously fake" constant makes the comparison free and
+// re-opens the enumeration channel. See the call site.
+export const DUMMY_PASSWORD_HASH = '$2b$10$82wMrkjV.nAre/g4lc5ShO17AgB93b/683kSzby9t8SxeyAmEtgaa';
+
 // Self-issued JWT staff auth — no external IdP. We mint HS256 tokens signed with
 // JWT_SECRET on password login, and verify them the same way on each request.
 // The token proves IDENTITY only; authorization always comes from UserPlatformRole
@@ -46,7 +53,13 @@ export class LocalAuthService {
       .getOne();
 
     // Always run a compare to avoid leaking which emails exist (timing).
-    const hash = user?.passwordHash ?? '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidina';
+    // DUMMY_PASSWORD_HASH must be a STRUCTURALLY VALID bcrypt hash or this
+    // defence silently inverts into the oracle it exists to prevent: the
+    // previous placeholder was 59 characters (a real hash is 60), so bcryptjs
+    // rejected it as malformed and returned in ~0 ms, while a known email spent
+    // ~83 ms doing real work. That is not a subtle timing skew — it is a clean
+    // binary signal for "does this email exist". Measured, not theorised.
+    const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
     const ok = await bcrypt.compare(password, hash);
     if (!user || !user.passwordHash || !ok) {
       // Auditable auth event (A09): failed login. Never log the password.
@@ -82,7 +95,17 @@ export class LocalAuthService {
         name?: string;
         email?: string;
         tv?: number;
+        aud?: string | string[];
       };
+      // Single-purpose tokens share JWT_SECRET but differ in shape: SSE
+      // tickets are audience-scoped (and DO carry sub + a valid tv, so
+      // without this check a leaked 30s ticket would double as a session),
+      // and deflection subscribe tokens are sub-less (an undefined
+      // idpSubject lookup would match an arbitrary row - TypeORM drops
+      // undefined where-conditions). Session tokens are minted with a sub
+      // and no audience; accept exactly that shape.
+      if (claims.aud !== undefined) return null;
+      if (typeof claims.sub !== 'string' || claims.sub.length === 0) return null;
       return await this.auth.upsertFromClaims({
         sub: claims.sub,
         name: claims.name,

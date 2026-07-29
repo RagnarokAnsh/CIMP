@@ -30,6 +30,23 @@ async function main() {
     console.log(`Created platform "${key}" (${platform.id})`);
   } else {
     console.log(`Platform "${key}" already exists (${platform.id})`);
+    // Repair drift rather than just reporting it. The dev hand-off secret is
+    // hard-coded in the Playwright helpers and the printed curl below, so a
+    // rotation from the admin UI (or a disable) silently breaks every reporter
+    // flow locally until this is put back.
+    const repairs: string[] = [];
+    if (platform.handoffSecret !== secret) {
+      platform.handoffSecret = secret;
+      repairs.push('hand-off secret');
+    }
+    if (platform.status !== PlatformStatus.ACTIVE) {
+      platform.status = PlatformStatus.ACTIVE;
+      repairs.push('status → ACTIVE');
+    }
+    if (repairs.length) {
+      platform = await repo.save(platform);
+      console.log(`  reset ${repairs.join(' and ')} to the dev default`);
+    }
   }
 
   // A staff admin you can log into the workspace with (self-issued JWT).

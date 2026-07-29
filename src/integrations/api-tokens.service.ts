@@ -6,8 +6,10 @@ import { createHash, randomBytes } from 'crypto';
 import { IsNull, Repository } from 'typeorm';
 import { ApiToken, Issue } from '../entities';
 import { AuthenticatedStaff } from '../auth/auth.types';
+import { AuditService } from '../audit/audit.service';
 import { ScopeService } from '../authz/scope.service';
 import { STAFF_WRITE_ROLES } from '../authz/role-sets';
+import { ActorType, PlatformStatus } from '../common/enums';
 
 const sha256 = (v: string): string => createHash('sha256').update(v).digest('hex');
 
@@ -17,6 +19,7 @@ export class ApiTokensService {
     @InjectRepository(ApiToken) private readonly tokens: Repository<ApiToken>,
     @InjectRepository(Issue) private readonly issues: Repository<Issue>,
     private readonly scope: ScopeService,
+    private readonly audit: AuditService,
   ) {}
 
   // API tokens are platform config: write roles only, list included.
@@ -49,6 +52,19 @@ export class ApiTokensService {
         createdBy: staff.id,
       }),
     );
+    // Minting a long-lived platform credential is exactly the kind of act the
+    // audit trail exists for — every other credential operation (staff create,
+    // role grant, password reset) records one, and this was the gap. Never log
+    // the plaintext: lastFour is enough to identify the token later.
+    await this.audit.record({
+      issueId: null,
+      actorType: ActorType.STAFF,
+      actorId: staff.id,
+      action: 'API_TOKEN_CREATED',
+      field: 'apiToken',
+      newValue: saved.id,
+      metadata: { platformId, name, lastFour: saved.lastFour },
+    });
     return { ...this.toView(saved), token: plaintext };
   }
 
@@ -59,6 +75,15 @@ export class ApiTokensService {
     if (!token.revokedAt) {
       token.revokedAt = new Date();
       await this.tokens.save(token);
+      await this.audit.record({
+        issueId: null,
+        actorType: ActorType.STAFF,
+        actorId: staff.id,
+        action: 'API_TOKEN_REVOKED',
+        field: 'apiToken',
+        oldValue: token.id,
+        metadata: { platformId, name: token.name, lastFour: token.lastFour },
+      });
     }
     return { ok: true };
   }
@@ -70,6 +95,11 @@ export class ApiTokensService {
       relations: { platform: true },
     });
     if (!token) return null;
+    // Disabling a platform is the documented retirement path, and every other auth path
+    // already refuses a non-ACTIVE one (HandoffService.verify, SelfSupportService.mintForStaff).
+    // Without this the integration read API would keep serving issue descriptions for a
+    // platform that was switched off. Null becomes the guard's existing 401.
+    if (token.platform?.status !== PlatformStatus.ACTIVE) return null;
     // Best-effort last-used stamp; don't block the request on it.
     this.tokens.update({ id: token.id }, { lastUsedAt: new Date() }).catch(() => undefined);
     return token;

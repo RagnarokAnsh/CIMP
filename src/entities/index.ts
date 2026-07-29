@@ -15,6 +15,13 @@ export { IssueLabel } from './issue-label.entity';
 export { IssueWatcher } from './issue-watcher.entity';
 export { AutomationRule } from './automation-rule.entity';
 export { ApiToken } from './api-token.entity';
+export { WebhookEndpoint } from './webhook-endpoint.entity';
+export { CsatResponse } from './csat-response.entity';
+export { ReporterSubscription } from './reporter-subscription.entity';
+export { CannedResponse } from './canned-response.entity';
+export { StatusComponent } from './status-component.entity';
+export { StatusIncident } from './status-incident.entity';
+export { StatusIncidentUpdate } from './status-incident-update.entity';
 
 import { Platform } from './platform.entity';
 import { StaffUser } from './staff-user.entity';
@@ -33,9 +40,18 @@ import { IssueLabel } from './issue-label.entity';
 import { IssueWatcher } from './issue-watcher.entity';
 import { AutomationRule } from './automation-rule.entity';
 import { ApiToken } from './api-token.entity';
+import { WebhookEndpoint } from './webhook-endpoint.entity';
+import { CsatResponse } from './csat-response.entity';
+import { ReporterSubscription } from './reporter-subscription.entity';
+import { CannedResponse } from './canned-response.entity';
+import { StatusComponent } from './status-component.entity';
+import { StatusIncident } from './status-incident.entity';
+import { StatusIncidentUpdate } from './status-incident-update.entity';
 
 export const ALL_ENTITIES = [
   Platform, StaffUser, UserPlatformRole, Reporter, Issue,
   Attachment, Comment, AuditEvent, NotificationLog, ReporterIssueView,
   SavedView, IssueLink, Label, IssueLabel, IssueWatcher, AutomationRule, ApiToken,
+  WebhookEndpoint, CsatResponse, ReporterSubscription, CannedResponse,
+  StatusComponent, StatusIncident, StatusIncidentUpdate,
 ];
