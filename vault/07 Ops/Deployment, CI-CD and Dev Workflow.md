@@ -39,7 +39,23 @@ The EC2 instance also runs an unrelated project (`whoop-server`, `whoop-legacy`,
 Observed 2026-07-29 and **not caused by our deploys**: something restarts both whoop apps roughly every ~28 minutes (`Process N in a stopped status, starting it`), independent of whether a deploy ran, and `whoop-server` crash-loops on its own every ~93 s. Their watchdog, their bug — but it means **the box is under constant churn**, which matters when judging our own memory headroom.
 
 ## Resource headroom (small instance)
-911 MB RAM + 2 GB swap, 24 GB disk. The deploy builds **on the box** (`npm ci` twice, `nest build`, `vite build`), which is the tightest moment; the swap is what makes it survive. Logs are **not rotated** — `cimp-api-error.log` reached 24 MB and `-out.log` 21 MB, mostly from the crash loop above (`whoop-server-error.log` is another 25 MB). `pm2 flush cimp-api` clears ours. Installing `pm2-logrotate` would fix it permanently but is a **daemon-wide module that also affects the co-tenant**, so it is a decision for the box owner rather than something a CIMP deploy should do.
+911 MB RAM + 2 GB swap, 24 GB disk. The deploy builds **on the box** (`npm ci` twice, `nest build`, `vite build`), which is the tightest moment; the swap is what makes it survive.
+
+**Log rotation: `pm2-logrotate` installed 2026-07-29** (box owner's decision — it is a **daemon-wide module, so it rotates the co-tenant's logs too**, which is why it was not installed unilaterally). Before it, the crash loop above had left `cimp-api-error.log` at 24 MB and `-out.log` at 21 MB, and `whoop-server-error.log` at 25 MB.
+
+| setting | value | why |
+|---|---|---|
+| `max_size` | `10M` | large enough for a useful window, small enough that a crash loop cannot eat the disk between checks |
+| `retain` | `7` | bounds a chatty neighbour to 7 files per stream instead of the default 30 |
+| `compress` | `true` | crash-loop logs are one repeated stack trace, so they gzip to almost nothing |
+| `rotateInterval` | `0 0 * * *` | daily roll even for quiet apps that never reach 10 MB |
+| `workerInterval` | `30` | 30s checks catch a runaway log quickly |
+
+Verified working: `whoop-server-error.log` rotated 25 MB → 0 within the first worker pass. Config lives in `~/.pm2/module_conf.json`, **not** in the pm2 dump — `pm2 conf pm2-logrotate` only echoes the `set` commands, so read that file to confirm what is actually in force.
+
+Two gotchas worth knowing. Every `pm2 set pm2-logrotate:*` **restarts the module**, so a rotation firing mid-reconfigure uses whichever values were live at that instant — the first rotated file here came out uncompressed for exactly that reason (retention drops it in 7 days). And installing the module does **not** touch running apps: all three PIDs and restart counts were identical before and after, which is the check to repeat if it is ever reinstalled.
+
+`pm2 flush cimp-api` still clears ours on demand, scoped to one app.
 
 **GitHub Secrets:** `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` (dedicated deploy key), `SSH_KNOWN_HOSTS` (**required since 2026-07-15** — pinned host key; get it with `ssh-keyscan -t ed25519 <host>` from a trusted machine and verify the fingerprint against the server's `/etc/ssh/ssh_host_ed25519_key.pub`), `APP_DIR`, `PM2_APP`. **Variables:** `RUN_MIGRATIONS` (push-deploy default). Optional deploy-script env (defaults are sane, not passed by the workflow today): `DEPLOY_REF`, `HEALTH_URL`, `HEALTH_RETRIES`, `SKIP_PREFLIGHT`. Add swap on small instances (Vite build can OOM). `NODE_ENV=production` + prod env vars required or boot fails ([[Configuration and Env]]).
 
